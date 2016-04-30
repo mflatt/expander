@@ -3,6 +3,7 @@
 (provide
  (struct-out stx)
  empty-stx
+ syntax?
  syntax-e
  syntax->datum
  datum->syntax
@@ -21,6 +22,9 @@
 
 (define empty-stx
   (stx #f empty-scopes empty-shifted-multi-scopes #f empty-props))
+
+(define (syntax? s)
+  (stx? s))
 
 (define (syntax-e s)
   (stx-e s))
