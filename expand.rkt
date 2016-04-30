@@ -255,40 +255,60 @@
 
 ;; ----------------------------------------
 
+(define (make-lambda-expander s formals bodys ctx)
+  (define sc (new-scope))
+  (define ids (let loop ([formals formals])
+                (cond
+                 [(identifier? formals) (list (add-scope formals sc))]
+                 [(syntax? formals)
+                  (define p (syntax-e formals))
+                  (cond
+                   [(pair? p) (loop p)]
+                   [(null? p) null]
+                   [else (error "not an identifier:" p)])]
+                 [(pair? formals)
+                  (unless (identifier? (car formals))
+                    (error "not an identifier:" (car formals)))
+                  (cons (add-scope (car formals) sc)
+                        (loop (cdr formals)))]
+                 [(null? formals)
+                  null]
+                 [else (error "huh?" formals)])))
+  (define phase (expand-context-phase ctx))
+  (check-no-duplicate-ids ids phase s)
+  (define keys (for/list ([id (in-list ids)])
+                 (add-local-binding! id phase)))
+  (define body-env (for*/fold ([env (expand-context-env ctx)]) ([key (in-list keys)])
+                     (env-extend env key 'variable)))
+  (define body-ctx (struct-copy expand-context ctx [env body-env]))
+  (values (add-scope (datum->syntax #f formals s) sc)
+          (expand-body bodys sc s body-ctx)))
+
 (add-core-form!
  'lambda
  (lambda (s ctx)
    (define m (parse-syntax s '(lambda formals body ...+)))
-   (define sc (new-scope))
-   (define ids (let loop ([formals (m 'formals)])
-                 (cond
-                  [(identifier? formals) (list (add-scope formals sc))]
-                  [(syntax? formals)
-                   (define p (syntax-e formals))
-                   (cond
-                    [(pair? p) (loop p)]
-                    [(null? p) null]
-                    [else (error "not an identifier:" p)])]
-                  [(pair? formals)
-                   (unless (identifier? (car formals))
-                     (error "not an identifier:" (car formals)))
-                   (cons (add-scope (car formals) sc)
-                         (loop (cdr formals)))]
-                  [(null? formals)
-                   null]
-                  [else (error "huh?" formals)])))
-   (define phase (expand-context-phase ctx))
-   (check-no-duplicate-ids ids phase s)
-   (define keys (for/list ([id (in-list ids)])
-                  (add-local-binding! id phase)))
-   (define body-env (for*/fold ([env (expand-context-env ctx)]) ([key (in-list keys)])
-                      (env-extend env key 'variable)))
-   (define body-ctx (struct-copy expand-context ctx [env body-env]))
+   (define-values (formals body)
+     (make-lambda-expander s (m 'formals) (m 'body) ctx))
    (rebuild
     s
-    `(,(m 'lambda) ,(add-scope (datum->syntax #f (m 'formals) s) sc)
-      ,(expand-body (m 'body) sc s body-ctx)))))
+    `(,(m 'lambda) ,formals ,body))))
 
+(add-core-form!
+ 'case-lambda
+ (lambda (s ctx)
+   (define m (parse-syntax s '(case-lambda [formals body ...+] ...)))
+   (define cm (parse-syntax s '(case-lambda clause ...)))
+   (rebuild
+    s
+    `(,(m 'case-lambda)
+      ,@(for/list ([formals (in-list (m 'formals))]
+                   [bodys (in-list (m 'body))]
+                   [clause (in-list (cm 'clause))])
+          (define-values (exp-formals exp-body)
+            (make-lambda-expander s formals bodys ctx))
+          (rebuild clause `[,exp-formals ,exp-body]))))))
+   
 (define (make-let-values-form rec?)
  (lambda (s ctx)
    (define m (parse-syntax s '(let-values ([(id ...) rhs] ...) body ...+)))
@@ -408,7 +428,17 @@
           (expand (m 'els) ctx)))))
 
 (add-core-form!
- 'begin
+ 'with-continuation-mark
+ (lambda (s ctx)
+   (define m (parse-syntax s '(with-continuation-mark key val body)))
+   (rebuild
+    s
+    (list (m 'with-continuation-mark)
+          (expand (m 'key) ctx)
+          (expand (m 'val) ctx)
+          (expand (m 'body) ctx)))))
+
+(define (make-begin)
  (lambda (s ctx)
    (define m (parse-syntax s '(begin e ...+)))
    (rebuild
@@ -416,6 +446,30 @@
     (cons (m 'begin)
           (for/list ([e (in-list (m 'e))])
             (expand e ctx))))))
+
+(add-core-form!
+ 'begin
+ (make-begin))
+
+(add-core-form!
+ 'begin0
+ (make-begin))
+
+(add-core-form!
+ 'set!
+ (lambda (s ctx)
+   (define m (parse-syntax s '(set! id rhs)))
+   (define binding (resolve (m 'id) (expand-context-phase ctx)))
+   (unless binding
+     (error "no binding for assignment:" s))
+   (define t (lookup binding ctx s))
+   (unless (variable? t)
+     (error "cannot assign to syntax:" s))
+   (rebuild
+    s
+    (list (m 'set!)
+          (m 'id)
+          (expand (m 'rhs) ctx)))))
 
 (add-core-form!
  'define-values
@@ -449,6 +503,10 @@
 (define demo-stx (add-scope core-stx (shift-multi-scope core-scope 1)))
 
 (expand (datum->syntax demo-stx '(lambda (x) x)))
+(compile (expand (datum->syntax demo-stx '(case-lambda
+                                           [(x) (set! x 5)]
+                                           [(x y) (begin0 y x)]
+                                           [() (with-continuation-mark 1 2 3)]))))
 (compile (expand (datum->syntax demo-stx '(lambda (x) (define-values (y) x) y))))
 (compile (expand (datum->syntax demo-stx '(lambda (x)
                                            (define-syntaxes (y) (lambda (stx) (quote-syntax 7)))

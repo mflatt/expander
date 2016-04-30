@@ -16,30 +16,12 @@
        (error "not a core form:" s)]
       [(lambda)
        (define m (parse-syntax s '(lambda formals body)))
-       (define gen-formals
-         (let loop ([formals (m 'formals)])
-           (cond
-            [(identifier? formals) (gensym (syntax-e formals))]
-            [(syntax? formals) (loop (syntax-e formals))]
-            [(pair? formals) (cons (loop (car formals))
-                                   (loop (cdr formals)))]
-            [else null])))
-       (define body-env
-         (let loop ([formals (m 'formals)]
-                    [gen-formals gen-formals]
-                    [env env])
-           (cond
-            [(identifier? formals)
-             (define b (resolve formals phase))
-             (unless (local-binding? b)
-               (error "bad binding:" formals))
-             (hash-set env (local-binding-key b) gen-formals)]
-            [(syntax? formals) (loop (syntax-e formals) gen-formals env)]
-            [(pair? formals)
-             (loop (cdr formals) (cdr gen-formals)
-                   (loop (car formals) (car gen-formals) env))]
-            [else env])))
-       `(lambda ,gen-formals ,(compile (m 'body) phase ns body-env))]
+       `(lambda ,@(compile-lambda (m 'formals) (m 'body) phase ns env))]
+      [(case-lambda)
+       (define m (parse-syntax s '(case-lambda [formals body] ...)))
+       `(case-lambda ,@(for/list ([formals (in-list (m 'formals))]
+                             [body (in-list (m 'body))])
+                    (compile-lambda formals body phase ns env)))]
       [(#%app)
        (define m (parse-syntax s '(#%app . rest)))
        (for/list ([s (in-list (m 'rest))])
@@ -50,10 +32,21 @@
          ,(compile (m 'tst) phase ns env)
          ,(compile (m 'thn) phase ns env)
          ,(compile (m 'els) phase ns env))]
-      [(begin)
+      [(with-continuation-mark)
+       (define m (parse-syntax s '(if key val body)))
+       `(with-continuation-mark
+         ,(compile (m 'key) phase ns env)
+         ,(compile (m 'val) phase ns env)
+         ,(compile (m 'body) phase ns env))]
+      [(begin begin0)
        (define m (parse-syntax s '(begin e ...+)))
-       `(begin ,@(for/list ([e (in-list (m 'e))])
-                   (compile e phase ns env)))]
+       `(,core-sym ,@(for/list ([e (in-list (m 'e))])
+                       (compile e phase ns env)))]
+      [(set!)
+       (define m (parse-syntax s '(set! id rhs)))
+       `(set!
+         ,(compile (m 'id) phase ns env)
+         ,(compile (m 'rhs) phase ns env))]
       [(let-values letrec-values)
        (define rec? (eq? core-sym 'letrec-values))
        (define m (parse-syntax s '(let-values ([(id ...) rhs] ...) body)))
@@ -100,3 +93,28 @@
    [else
     (error "bad syntax after expansion:" s)]))
 
+(define (compile-lambda formals body phase ns env)
+  (define gen-formals
+    (let loop ([formals formals])
+      (cond
+       [(identifier? formals) (gensym (syntax-e formals))]
+       [(syntax? formals) (loop (syntax-e formals))]
+       [(pair? formals) (cons (loop (car formals))
+                              (loop (cdr formals)))]
+       [else null])))
+  (define body-env
+    (let loop ([formals formals]
+               [gen-formals gen-formals]
+               [env env])
+      (cond
+       [(identifier? formals)
+        (define b (resolve formals phase))
+        (unless (local-binding? b)
+          (error "bad binding:" formals))
+        (hash-set env (local-binding-key b) gen-formals)]
+       [(syntax? formals) (loop (syntax-e formals) gen-formals env)]
+       [(pair? formals)
+        (loop (cdr formals) (cdr gen-formals)
+              (loop (car formals) (car gen-formals) env))]
+       [else env])))
+  `(,gen-formals ,(compile body phase ns body-env)))
