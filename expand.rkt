@@ -7,8 +7,8 @@
          "binding.rkt"
          "dup-check.rkt"
          "compile.rkt"
+         "require.rkt"
          "expand-context.rkt"
-         
          "expand-sig.rkt"
          "expand-expr.rkt"
          "expand-top-level.rkt")
@@ -278,6 +278,7 @@
                             (values sym (module-binding '#%core 0 sym))))
                (hasheqv 0 (for/hasheq ([sym (in-hash-keys core-transformers)])
                             (values sym (module-binding '#%core 0 sym))))
+               0 1
                (lambda (ns phase phase-level)
                  (case phase-level
                    [(0)
@@ -289,15 +290,13 @@
 
 (declare-module! (current-namespace) '#%core core-module)
 
-(namespace-module-instantiate! (current-namespace) '#%core 0 0)
-(namespace-module-visit! (current-namespace) '#%core 0 0)
-
-(namespace-module-instantiate! (current-namespace) '#%core 1 0)
-(namespace-module-visit! (current-namespace) '#%core 1 0)
-
 ;; ----------------------------------------
 
-(define demo-stx (add-scope core-stx (shift-multi-scope core-scope 1)))
+(define demo-scope (new-multi-scope))
+(define demo-stx (add-scope empty-stx demo-scope))
+
+(namespace-require! demo-stx 0 (current-namespace) '#%core)
+(namespace-require! demo-stx 1 (current-namespace) '#%core)
 
 (expand (datum->syntax demo-stx '(lambda (x) x)))
 (compile (expand (datum->syntax demo-stx '(case-lambda

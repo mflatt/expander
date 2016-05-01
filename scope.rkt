@@ -16,6 +16,7 @@
          resolve
          
          phase?
+         phase+
          bound-identifier=?
          free-identifier=?)
 
@@ -159,6 +160,9 @@
 (define (phase? v)
   (or (not v)
       (exact-integer? v)))
+
+(define (phase+ a b)
+  (and a b (+ a b)))
 
 (define (bound-identifier=? a b phase)
   (unless (identifier? a)
