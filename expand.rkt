@@ -1,25 +1,23 @@
 #lang racket/base
-(require "stx.rkt"
+(require racket/unit
+         "stx.rkt"
          "scope.rkt"
          "pattern.rkt"
          "namespace.rkt"
          "binding.rkt"
          "dup-check.rkt"
-         "compile.rkt")
+         "compile.rkt"
+         "expand-context.rkt"
+         
+         "expand-sig.rkt"
+         "expand-expr.rkt"
+         "expand-top-level.rkt")
 
-(struct expand-context (phase      ; current expansion phase
-                        namespace  ; namespace for modules and top-levels
-                        env        ; environment for local bindings
-                        only-immediate? ; #t => stop at core forms
-                        add-scope  ; scope to add to every expansion; #f if none
-                        ))
+(provide expand)
 
-(define current-expand-context (make-parameter
-                                (expand-context 0
-                                                (current-namespace)
-                                                empty-env
-                                                #f
-                                                #f)))
+;; exports are via "expand-sig.rkt"
+
+;; ----------------------------------------
 
 (define (expand s [ctx (current-expand-context)])
   (cond
@@ -116,6 +114,15 @@
                               sym
                               (core-form proc)))
 
+(define (add-core-primitive! sym val)
+  (add-binding! (datum->syntax core-stx sym)
+                (module-binding '#%core 0 sym)
+                0)
+  (namespace-set-variable! core-module
+                           0
+                           sym
+                           val))
+
 (define (add-local-binding! id phase)
   (define key (gensym))
   (add-binding! id (local-binding key) phase)
@@ -188,7 +195,7 @@
          (define new-dups (check-no-duplicate-ids ids phase exp-body dups))
          (define keys (for/list ([id (in-list ids)])
                         (add-local-binding! id phase)))
-         (define vals (eval-for-letrec-syntaxes (m 'rhs) ids ctx))
+         (define vals (eval-for-syntaxes-binding (m 'rhs) ids ctx))
          (define extended-env (for/fold ([env (expand-context-env body-ctx)]) ([key (in-list keys)]
                                                                                [val (in-list vals)])
                                 (env-extend env key (local-transformer val))))
@@ -239,9 +246,7 @@
        ,(finish-bodys))
      s)]))
 
-
-
-(define (eval-for-letrec-syntaxes rhs ids ctx)
+(define (eval-for-syntaxes-binding rhs ids ctx)
   (define vals
     (call-with-values (lambda ()
                         (eval-transformer
@@ -255,243 +260,10 @@
 
 ;; ----------------------------------------
 
-(define (make-lambda-expander s formals bodys ctx)
-  (define sc (new-scope))
-  (define ids (let loop ([formals formals])
-                (cond
-                 [(identifier? formals) (list (add-scope formals sc))]
-                 [(syntax? formals)
-                  (define p (syntax-e formals))
-                  (cond
-                   [(pair? p) (loop p)]
-                   [(null? p) null]
-                   [else (error "not an identifier:" p)])]
-                 [(pair? formals)
-                  (unless (identifier? (car formals))
-                    (error "not an identifier:" (car formals)))
-                  (cons (add-scope (car formals) sc)
-                        (loop (cdr formals)))]
-                 [(null? formals)
-                  null]
-                 [else (error "huh?" formals)])))
-  (define phase (expand-context-phase ctx))
-  (check-no-duplicate-ids ids phase s)
-  (define keys (for/list ([id (in-list ids)])
-                 (add-local-binding! id phase)))
-  (define body-env (for*/fold ([env (expand-context-env ctx)]) ([key (in-list keys)])
-                     (env-extend env key 'variable)))
-  (define body-ctx (struct-copy expand-context ctx [env body-env]))
-  (values (add-scope (datum->syntax #f formals s) sc)
-          (expand-body bodys sc s body-ctx)))
-
-(add-core-form!
- 'lambda
- (lambda (s ctx)
-   (define m (parse-syntax s '(lambda formals body ...+)))
-   (define-values (formals body)
-     (make-lambda-expander s (m 'formals) (m 'body) ctx))
-   (rebuild
-    s
-    `(,(m 'lambda) ,formals ,body))))
-
-(add-core-form!
- 'case-lambda
- (lambda (s ctx)
-   (define m (parse-syntax s '(case-lambda [formals body ...+] ...)))
-   (define cm (parse-syntax s '(case-lambda clause ...)))
-   (rebuild
-    s
-    `(,(m 'case-lambda)
-      ,@(for/list ([formals (in-list (m 'formals))]
-                   [bodys (in-list (m 'body))]
-                   [clause (in-list (cm 'clause))])
-          (define-values (exp-formals exp-body)
-            (make-lambda-expander s formals bodys ctx))
-          (rebuild clause `[,exp-formals ,exp-body]))))))
-   
-(define (make-let-values-form rec?)
- (lambda (s ctx)
-   (define m (parse-syntax s '(let-values ([(id ...) rhs] ...) body ...+)))
-   (define sc (new-scope))
-   (define idss (for/list ([ids (in-list (m 'id))])
-                  (for/list ([id (in-list ids)])
-                    (add-scope id sc))))
-   (define phase (expand-context-phase ctx))
-   (check-no-duplicate-ids idss phase s)
-   (define keyss (for/list ([ids (in-list idss)])
-                   (for/list ([id (in-list ids)])
-                     (add-local-binding! id phase))))
-   (define body-env (for*/fold ([env (expand-context-env ctx)]) ([keys (in-list keyss)]
-                                                                 [key (in-list keys)])
-                      (env-extend env key 'variable)))
-   (define body-ctx (struct-copy expand-context ctx [env body-env]))
-   (rebuild
-    s
-    `(,(m 'let-values) ,(for/list ([ids (in-list idss)]
-                                   [rhs (in-list (m 'rhs))])
-                          `[,ids ,(expand (if rec? (add-scope rhs sc) rhs)
-                                          (if rec? body-ctx ctx))])
-      ,(expand-body (m 'body) sc s body-ctx)))))
-
-(add-core-form!
- 'let-values
- (make-let-values-form #f))
-
-(add-core-form!
- 'letrec-values
- (make-let-values-form #t))
-
-(add-core-form!
- 'letrec-syntaxes+values
- (lambda (s ctx)
-   (define m (parse-syntax s '(letrec-syntaxes+values
-                               ([(trans-id ...) trans-rhs] ...)
-                               ([(val-id ...) val-rhs] ...)
-                               body ...+)))
-   (define sc (new-scope))
-   (define trans-idss (for/list ([ids (in-list (m 'trans-id))])
-                        (for/list ([id (in-list ids)])
-                          (add-scope id sc))))
-   (define val-idss (for/list ([ids (in-list (m 'val-id))])
-                      (for/list ([id (in-list ids)])
-                        (add-scope id sc))))
-   (define phase (expand-context-phase ctx))
-   (check-no-duplicate-ids (list trans-idss val-idss) phase s)
-   (define trans-keyss (for/list ([ids (in-list trans-idss)])
-                         (for/list ([id (in-list ids)])
-                           (add-local-binding! id phase))))
-   (define val-keyss (for/list ([ids (in-list val-idss)])
-                       (for/list ([id (in-list ids)])
-                         (add-local-binding! id phase))))
-   (define trans-valss (for/list ([rhs (in-list (m 'trans-rhs))]
-                                  [ids (in-list trans-idss)])
-                         (eval-for-letrec-syntaxes (add-scope rhs sc) ids ctx)))
-   (define rec-val-env (for*/fold ([env (expand-context-env ctx)]) ([keys (in-list val-keyss)]
-                                                                    [key (in-list keys)])
-                         (env-extend env key 'variable)))
-   (define rec-env (for/fold ([env rec-val-env]) ([keys (in-list trans-keyss)]
-                                                  [vals (in-list trans-valss)])
-                     (for/fold ([env env]) ([key (in-list keys)]
-                                            [val (in-list vals)])
-                       (env-extend env key (local-transformer val)))))
-   (define rec-ctx (struct-copy expand-context ctx [env rec-env]))
-   (define letrec-values-id (datum->syntax (syntax-shift-phase-level core-stx phase) 'letrec-values))
-   (rebuild
-    s
-    `(,letrec-values-id ,(for/list ([ids (in-list val-idss)]
-                                    [rhs (in-list (m 'val-rhs))])
-                           `[,ids ,(expand (add-scope rhs sc) rec-ctx)])
-      ,(expand-body (m 'body) sc s rec-ctx)))))
-
-(add-core-form!
- '#%datum
- (lambda (s ctx)
-   (define m (parse-syntax s '(#%datum . datum)))
-   (define phase (expand-context-phase ctx))
-   (rebuild
-    s
-    (list (datum->syntax (syntax-shift-phase-level core-stx phase) 'quote)
-          (m 'datum)))))
-
-(add-core-form!
- '#%app
- (lambda (s ctx)
-   (define m (parse-syntax s '(#%app rator rand ...)))
-   (rebuild
-    s
-    (list* (m '#%app)
-           (expand (m 'rator) ctx)
-           (for/list ([rand (in-list (m 'rand))])
-             (expand rand ctx))))))
-
-(add-core-form!
- 'quote
- (lambda (s ctx)
-   (parse-syntax s '(quote datum))
-   s))
-
-(add-core-form!
- 'quote-syntax
- (lambda (s ctx)
-   (parse-syntax s '(quote-syntax datum))
-   s))
-
-(add-core-form!
- 'if
- (lambda (s ctx)
-   (define m (parse-syntax s '(if tst thn els)))
-   (rebuild
-    s
-    (list (m 'if)
-          (expand (m 'tst) ctx)
-          (expand (m 'thn) ctx)
-          (expand (m 'els) ctx)))))
-
-(add-core-form!
- 'with-continuation-mark
- (lambda (s ctx)
-   (define m (parse-syntax s '(with-continuation-mark key val body)))
-   (rebuild
-    s
-    (list (m 'with-continuation-mark)
-          (expand (m 'key) ctx)
-          (expand (m 'val) ctx)
-          (expand (m 'body) ctx)))))
-
-(define (make-begin)
- (lambda (s ctx)
-   (define m (parse-syntax s '(begin e ...+)))
-   (rebuild
-    s
-    (cons (m 'begin)
-          (for/list ([e (in-list (m 'e))])
-            (expand e ctx))))))
-
-(add-core-form!
- 'begin
- (make-begin))
-
-(add-core-form!
- 'begin0
- (make-begin))
-
-(add-core-form!
- 'set!
- (lambda (s ctx)
-   (define m (parse-syntax s '(set! id rhs)))
-   (define binding (resolve (m 'id) (expand-context-phase ctx)))
-   (unless binding
-     (error "no binding for assignment:" s))
-   (define t (lookup binding ctx s))
-   (unless (variable? t)
-     (error "cannot assign to syntax:" s))
-   (rebuild
-    s
-    (list (m 'set!)
-          (m 'id)
-          (expand (m 'rhs) ctx)))))
-
-(add-core-form!
- 'define-values
- (lambda (s ctx)
-   (error "not allowed in an expression position:" s)))
-
-(add-core-form!
- 'define-syntaxes
- (lambda (s ctx)
-   (error "not allowed in an expression position:" s)))
+(invoke-unit expand-expr@ (import expand^))
+(invoke-unit expand-top-level@ (import expand^))
 
 ;; ----------------------------------------
-
-(define (add-core-primitive! sym val)
-  (add-binding! (datum->syntax core-stx sym)
-                (module-binding '#%core 0 sym)
-                0)
-  (namespace-set-variable! core-module
-                           0
-                           sym
-                           val))
-
 
 (add-core-primitive! 'syntax-e syntax-e)
 (add-core-primitive! 'car car)
