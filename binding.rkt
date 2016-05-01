@@ -37,11 +37,12 @@
 (define (env-extend env key val)
   (hash-set env key val))
 
-(define (binding-lookup b env ns id)
+(define (binding-lookup b env ns phase id)
   (cond
    [(module-binding? b)
     (define m (namespace->module-namespace ns
-                                           (module-binding-module b)))
+                                           (module-binding-module b)
+                                           phase))
     (lookup-in-namespace m (module-binding-phase b) (module-binding-def b) id)]
    [(local-binding? b)
     (define l (hash-ref env

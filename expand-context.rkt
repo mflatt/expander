@@ -5,7 +5,8 @@
 (provide (struct-out expand-context)
          current-expand-context)
 
-(struct expand-context (phase      ; current expansion phase
+(struct expand-context (context    ; 'expression, 'module, or 'top-level
+                        phase      ; current expansion phase
                         namespace  ; namespace for modules and top-levels
                         env        ; environment for local bindings
                         only-immediate? ; #t => stop at core forms
@@ -13,7 +14,8 @@
                         ))
 
 (define current-expand-context (make-parameter
-                                (expand-context 0
+                                (expand-context 'expression
+                                                0
                                                 (current-namespace)
                                                 empty-env
                                                 #f

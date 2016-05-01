@@ -81,6 +81,7 @@
   (binding-lookup b
                   (expand-context-env ctx)
                   (expand-context-namespace ctx)
+                  (expand-context-phase ctx)
                   id))
 
 ;; ----------------------------------------
@@ -93,35 +94,34 @@
 (define (eval-transformer s ctx)
   (eval `(#%expression ,(compile s
                                  (add1 (expand-context-phase ctx))
-                                 core-module))
+                                 (expand-context-namespace ctx)))
         (make-base-namespace)))
 
 ;; ----------------------------------------
 
-(define core-module
-  (namespace->module-namespace (current-namespace)
-                               '#%core))
-
 (define core-scope (new-multi-scope))
 (define core-stx (add-scope empty-stx core-scope))
+
+(define core-transformers #hasheq())
+(define core-primitives #hasheq())
 
 (define (add-core-form! sym proc)
   (add-binding! (datum->syntax core-stx sym)
                 (module-binding '#%core 0 sym)
                 0)
-  (namespace-set-transformer! core-module
-                              0
-                              sym
-                              (core-form proc)))
+  (set! core-transformers (hash-set core-transformers
+                                    sym
+                                    proc)))
 
 (define (add-core-primitive! sym val)
   (add-binding! (datum->syntax core-stx sym)
                 (module-binding '#%core 0 sym)
                 0)
-  (namespace-set-variable! core-module
-                           0
-                           sym
-                           val))
+  (set! core-primitives (hash-set core-primitives
+                                  sym
+                                  val)))
+
+;; ----------------------------------------
 
 (define (add-local-binding! id phase)
   (define key (gensym))
@@ -133,14 +133,6 @@
   (datum->syntax orig-s new orig-s orig-s))
   
 ;; ----------------------------------------
-
-(define (no-binds s phase)
-  (define s-core-stx (syntax-shift-phase-level core-stx phase))
-  (list null null (datum->syntax #f
-                                 `(,(datum->syntax s-core-stx 'begin)
-                                   (,(datum->syntax s-core-stx '#%app)
-                                    ,(datum->syntax s-core-stx 'values)))
-                                 s)))
 
 (define (expand-body bodys sc s ctx)
   (define outside-sc (new-scope))
@@ -215,6 +207,14 @@
                val-binds
                dups)])])))
 
+(define (no-binds s phase)
+  (define s-core-stx (syntax-shift-phase-level core-stx phase))
+  (list null null (datum->syntax #f
+                                 `(,(datum->syntax s-core-stx 'begin)
+                                   (,(datum->syntax s-core-stx '#%app)
+                                    ,(datum->syntax s-core-stx 'values)))
+                                 s)))
+
 (define (finish-expanding-body body-ctx done-bodys val-binds s)
   (when (null? done-bodys)
     (error "no body forms:" s))
@@ -272,6 +272,31 @@
 
 ;; ----------------------------------------
 
+(define core-module
+  (make-module null
+               (hasheqv 0 (for/hasheq ([sym (in-hash-keys core-primitives)])
+                            (values sym (module-binding '#%core 0 sym))))
+               (hasheqv 0 (for/hasheq ([sym (in-hash-keys core-transformers)])
+                            (values sym (module-binding '#%core 0 sym))))
+               (lambda (ns phase phase-level)
+                 (case phase-level
+                   [(0)
+                    (for ([(sym val) (in-hash core-primitives)])
+                      (namespace-set-variable! ns 0 sym val))]
+                   [(1)
+                    (for ([(sym proc) (in-hash core-transformers)])
+                      (namespace-set-transformer! ns 0 sym (core-form proc)))]))))
+
+(declare-module! (current-namespace) '#%core core-module)
+
+(namespace-module-instantiate! (current-namespace) '#%core 0 0)
+(namespace-module-visit! (current-namespace) '#%core 0 0)
+
+(namespace-module-instantiate! (current-namespace) '#%core 1 0)
+(namespace-module-visit! (current-namespace) '#%core 1 0)
+
+;; ----------------------------------------
+
 (define demo-stx (add-scope core-stx (shift-multi-scope core-scope 1)))
 
 (expand (datum->syntax demo-stx '(lambda (x) x)))
@@ -283,7 +308,7 @@
 (compile (expand (datum->syntax demo-stx '(lambda (x)
                                            (define-syntaxes (y) (lambda (stx) (quote-syntax 7)))
                                            y))))
-                                                    
+
 (compile (expand (datum->syntax demo-stx '(let-values ([(z) 9])
                                            (letrec-syntaxes+values
                                             ([(m) (lambda (stx) (car (cdr (syntax-e stx))))])

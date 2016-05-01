@@ -86,8 +86,8 @@
         (error "missing a binding after expansion:" s))
       sym]
      [(module-binding? b)
-      (define m (namespace->module-namespace ns (module-binding-module b)))
-      (namespace-get-variable ns (module-binding-phase b) (module-binding-def b) 'undefined)]
+      (define m-ns (namespace->module-namespace ns (module-binding-module b) phase))
+      (namespace-get-variable m-ns (module-binding-phase b) (module-binding-def b) 'undefined)]
      [else
       (error "not a reference to a local binding:" s)])]
    [else
