@@ -41,6 +41,7 @@
                                     (#%require (for-syntax '#%core))
                                     (define-syntaxes (m) (lambda (stx) (quote-syntax 10)))
                                     (define-values (x) 1)
+                                    (println x)
                                     (#%provide (prefix-all-defined def:))
                                     (m)))
           (struct-copy expand-context (current-expand-context)

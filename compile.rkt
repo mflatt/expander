@@ -174,7 +174,8 @@
                  (add-body
                   phase-to-body
                   phase
-                  `(let-values ([,syms ,(compile (m 'rhs) phase ns empty-env)])
+                  `(begin
+                    (define-values ,syms ,(compile (m 'rhs) phase ns empty-env))
                     ,@(for/list ([sym (in-list syms)])
                         `(namespace-set-variable! ,ns-id ,phase-id ',sym ,sym)))))]
           [(define-syntaxes)
