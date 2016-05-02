@@ -156,7 +156,7 @@
   (define done-syms (make-hash))
   (stx-context-require/expansion-time!
    bind-in-stx phase m-ns module-name
-   #:filter (lambda (binding as-transformer?)
+   #:filter (lambda (binding)
               (define sym (module-binding-nominal-sym binding))
               (define export-phase (module-binding-nominal-phase binding))
               (define adjusted-sym
@@ -185,7 +185,7 @@
                 (define bind-phase (phase+ phase export-phase))
                 (when (resolve s bind-phase #:exactly? #t)
                   (error "already imported or defined:" s))
-                (add-defined-or-imported-id! s bind-phase binding as-transformer?))
+                (add-defined-or-imported-id! s bind-phase binding))
               adjusted-sym))
   ;; check that we covered all expected ids:
   (define need-syms (cond

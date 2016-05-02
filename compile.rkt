@@ -5,15 +5,28 @@
          "binding.rkt"
          "pattern.rkt")
 
-(provide compile)
+(provide compile
+         expand-time-eval
+         run-time-eval)
 
-(define (compile s [phase 0] [ns (current-namespace)] [env #hasheq()])
+(define empty-env #hasheq())
+
+(define phase-id (gensym 'phase))
+
+(define (compile s [phase 0] [ns (current-namespace)] [env empty-env])
   (cond
    [(pair? (syntax-e s))
     (define core-sym (core-form-sym s phase))
     (case core-sym
       [(#f)
        (error "not a core form:" s)]
+      [(module)
+       (define m (parse-syntax s '(module name import form ...)))
+       (compile-module (syntax-e (m 'name))
+                       (syntax-property s 'module-requires)
+                       (syntax-property s 'module-provides)
+                       (m 'form)
+                       ns)]
       [(lambda)
        (define m (parse-syntax s '(lambda formals body)))
        `(lambda ,@(compile-lambda (m 'formals) (m 'body) phase ns env))]
@@ -86,8 +99,23 @@
         (error "missing a binding after expansion:" s))
       sym]
      [(module-binding? b)
-      (define m-ns (namespace->module-namespace ns (module-binding-module b) phase))
-      (namespace-get-variable m-ns (module-binding-phase b) (module-binding-sym b) 'undefined)]
+      (define mod-name (module-binding-module b))
+      (cond
+       [(equal? mod-name '#%core)
+        (define m-ns (namespace->module-namespace ns mod-name phase))
+        (or (namespace-get-variable m-ns (module-binding-phase b) (module-binding-sym b) #f)
+            (error "internal error: bad #%core reference"))]
+       [(equal? mod-name 'self)
+        (module-binding-sym b)]
+       [else
+        `(namespace-get-variable
+          (namespace->module-namespace (current-namespace)
+                                       ',mod-name
+                                       (+ ,phase-id
+                                          ,(module-binding-nominal-import-phase b)))
+          ,(module-binding-phase b)
+          ',(module-binding-sym b)
+          'undefined)])]
      [else
       (error "not a reference to a local binding:" s)])]
    [else
@@ -118,3 +146,106 @@
               (loop (car formals) (car gen-formals) env))]
        [else env])))
   `(,gen-formals ,(compile body phase ns body-env)))
+
+
+
+;; ----------------------------------------
+                       
+(define (compile-module name requires provides bodys ns)
+  (define ns-id (gensym 'namespace))
+  (define phase-level-id (gensym 'phase-level))
+  
+  (define (add-body phase-to-body phase body)
+    (hash-update phase-to-body phase (lambda (l) (cons body l)) null))
+  
+  (define phase-to-bodys
+    (let loop ([bodys bodys]
+               [phase 0]
+               [phase-to-body #hasheqv()])
+      (cond
+       [(null? bodys) phase-to-body]
+       [else
+        (case (core-form-sym (car bodys) phase)
+          [(define-values)
+           (define m (parse-syntax (car bodys) '(define-values (id ...) rhs)))
+           (define syms (def-ids-to-syms (m 'id) phase))
+           (loop (cdr bodys)
+                 phase
+                 (add-body
+                  phase-to-body
+                  phase
+                  `(let-values ([,syms ,(compile (m 'rhs) phase ns empty-env)])
+                    ,@(for/list ([sym (in-list syms)])
+                        `(namespace-set-variable! ,ns-id ,phase-id ',sym ,sym)))))]
+          [(define-syntaxes)
+           (define m (parse-syntax (car bodys) '(define-syntaxes (id ...) rhs)))
+           (define syms (def-ids-to-syms (m 'id) phase))
+           (loop (cdr bodys)
+                 phase
+                 (add-body
+                  phase-to-body
+                  (add1 phase)
+                  `(let-values ([,syms ,(compile (m 'rhs) (add1 phase) ns empty-env)])
+                    ,@(for/list ([sym (in-list syms)])
+                        `(namespace-set-transformer! ,ns-id (sub1 ,phase-id) ',sym ,sym)))))]
+          [(#%require #%provide)
+           (loop (cdr bodys)
+                 phase
+                 phase-to-body)]
+          [else
+           (loop (cdr bodys)
+                 phase
+                 (add-body
+                  phase-to-body
+                  phase
+                  (compile (car bodys) phase ns empty-env)))])])))
+  
+  (define-values (min-phase max-phase)
+    (for/fold ([min-phase 0] [max-phase 0]) ([phase (in-hash-keys phase-to-bodys)])
+      (values (min min-phase phase)
+              (max max-phase phase))))
+
+  `(declare-module!
+    (current-namespace)
+    ',name
+    (make-module
+     ,requires
+     ,provides
+     ,min-phase
+     ,max-phase
+     (lambda (,ns-id ,phase-id ,phase-level-id)
+       (case ,phase-level-id
+         ,@(for/list ([(phase bodys) (in-hash phase-to-bodys)])
+             `[(,phase)
+               (let ([,phase-id (+ ,phase-id ,phase-level-id)])
+                 ,@(reverse bodys))]))
+       (void)))))
+         
+(define (def-ids-to-syms ids phase)
+  (for/list ([id (in-list ids)])
+    (define b (resolve id phase))
+    (unless (and (module-binding? b)
+                 (eq? 'self (module-binding-module b))
+                 (eqv? phase (module-binding-phase b)))
+      (error "bad binding for module definition:" id))
+    (module-binding-sym b)))
+
+
+(define expand-time-namespace (make-base-namespace))
+(define (expand-time-eval compiled)
+  (eval compiled expand-time-namespace))
+
+(define run-time-namespace (make-base-namespace))
+(define (add-run-time! sym val)
+  (namespace-set-variable-value! sym val #t run-time-namespace))
+
+(add-run-time! 'make-module make-module)
+(add-run-time! 'declare-module! declare-module!)
+(add-run-time! 'current-namespace current-namespace)
+(add-run-time! 'namespace-set-variable! namespace-set-variable!)
+(add-run-time! 'namespace-set-transformer! namespace-set-transformer!)
+(add-run-time! 'namespace-get-variable namespace-get-variable)
+(add-run-time! 'namespace->module-namespace namespace->module-namespace)
+
+(define (run-time-eval compiled)
+  (eval compiled run-time-namespace))

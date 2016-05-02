@@ -96,10 +96,9 @@
                          [current-module-scopes null])))
 
 (define (eval-transformer s ctx)
-  (eval `(#%expression ,(compile s
-                                 (add1 (expand-context-phase ctx))
-                                 (expand-context-namespace ctx)))
-        (make-base-namespace)))
+  (expand-time-eval `(#%expression ,(compile s
+                                             (add1 (expand-context-phase ctx))
+                                             (expand-context-namespace ctx)))))
 
 ;; ----------------------------------------
 
@@ -281,16 +280,15 @@
 (add-core-primitive! 'car car)
 (add-core-primitive! 'cdr cdr)
 (add-core-primitive! 'values values)
+(add-core-primitive! 'println println)
 
 ;; ----------------------------------------
 
 (define core-module
   (make-module null
-               (hasheqv 0 (for/hasheq ([sym (in-hash-keys core-primitives)])
-                            (values sym (module-binding '#%core 0 sym
-                                                        '#%core 0 sym
-                                                        0))))
-               (hasheqv 0 (for/hasheq ([sym (in-hash-keys core-transformers)])
+               (hasheqv 0 (for/hasheq ([sym (in-sequences
+                                             (in-hash-keys core-primitives)
+                                             (in-hash-keys core-transformers))])
                             (values sym (module-binding '#%core 0 sym
                                                         '#%core 0 sym
                                                         0))))
@@ -305,40 +303,3 @@
                       (namespace-set-transformer! ns 0 sym (core-form proc)))]))))
 
 (declare-module! (current-namespace) '#%core core-module)
-
-;; ----------------------------------------
-
-(define demo-scope (new-multi-scope))
-(define demo-stx (add-scope empty-stx demo-scope))
-
-(stx-context-require! demo-stx 0 (current-namespace) '#%core)
-(stx-context-require! demo-stx 1 (current-namespace) '#%core)
-
-(expand (datum->syntax demo-stx '(lambda (x) x)))
-(compile (expand (datum->syntax demo-stx '(case-lambda
-                                           [(x) (set! x 5)]
-                                           [(x y) (begin0 y x)]
-                                           [() (with-continuation-mark 1 2 3)]))))
-(compile (expand (datum->syntax demo-stx '(lambda (x) (define-values (y) x) y))))
-(compile (expand (datum->syntax demo-stx '(lambda (x)
-                                           (define-syntaxes (y) (lambda (stx) (quote-syntax 7)))
-                                           y))))
-
-(compile (expand (datum->syntax demo-stx '(let-values ([(z) 9])
-                                           (letrec-syntaxes+values
-                                            ([(m) (lambda (stx) (car (cdr (syntax-e stx))))])
-                                            ([(x) 5] [(y) (lambda (z) z)])
-                                            (let-values ([(z) 10])
-                                              (begin z (if (m 10) 1 2))))))))
-
-;; ----------------------------------------
-
-(expand (datum->syntax demo-stx '(module m '#%core
-                                  (#%require (for-syntax '#%core))
-                                  (define-syntaxes (m) (lambda (stx) (quote-syntax 10)))
-                                  (define-values (x) 1)
-                                  (#%provide (prefix-all-defined-except def: x))
-                                  (m)))
-        (struct-copy expand-context (current-expand-context)
-                     [context 'top-level]
-                     [current-module-scopes (list demo-scope)]))

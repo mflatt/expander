@@ -7,8 +7,7 @@
          
          make-module
          declare-module!
-         module-variable-exports
-         module-transformer-exports
+         module-provides
          
          namespace-module-instantiate!
          namespace-module-visit!
@@ -30,9 +29,8 @@
                      transformers   ; sym -> val
                      [instantiated? #:mutable]))
 
-(struct module (imports        ; list of (cons resolved-module-name phase-level)
-                variable-exports    ; phase-level -> sym -> binding
-                transformer-exports ; phase-level -> sym -> binding
+(struct module (requires        ; phase -> resolved-module-name
+                provides        ; phase-level -> sym -> binding
                 min-phase-level ; phase-level
                 max-phase-level ; phase-level
                 ;; expected to be consistent with exports and {min,max}-phase-level:
@@ -56,10 +54,10 @@
 (define (namespace->module ns name)
   (hash-ref (namespace-module-declarations ns) name #f))
 
-(define (make-module imports variable-exports transformer-exports
+(define (make-module imports exports
                      min-phase-level max-phase-level
                      instantiate)
-  (module imports variable-exports transformer-exports
+  (module imports exports
           min-phase-level max-phase-level
           instantiate))
 

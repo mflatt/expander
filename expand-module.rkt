@@ -20,7 +20,7 @@
    (unless (eq? (expand-context-context ctx) 'top-level)
      (error "allowed only at the top level:" s))
    
-   (define m (parse-syntax s '(module id initial-import body ...)))
+   (define m (parse-syntax s '(module id:module-name initial-import body ...)))
    
    (define initial-import (syntax->datum (m 'initial-import)))
    (unless (module-path? initial-import)
@@ -45,9 +45,9 @@
                 inside-scope))
 
    ;; To track imports and exports:
-   (define import-export (make-import-export-registry m-ns))
-   (define (add-defined-or-imported-id! id phase binding as-transformer?)
-     (register-defined-or-imported-id! import-export id phase binding as-transformer?))
+   (define import-export (make-import-export-registry))
+   (define (add-defined-or-imported-id! id phase binding)
+     (register-defined-or-imported-id! import-export id phase binding))
 
    ;; Initial import:
    (perform-initial-require! initial-import
@@ -91,8 +91,7 @@
             (define ids (m 'id))
             (check-ids-unbound ids phase)
             (define keys (select-local-names-and-bind ids local-names self phase
-                                                       add-defined-or-imported-id!
-                                                       #f))
+                                                       add-defined-or-imported-id!))
             (loop (cdr bodys)
                   (cons (car bodys) done-bodys))]
            [(define-syntaxes)
@@ -100,8 +99,7 @@
             (define ids (m 'id))
             (check-ids-unbound ids phase)
             (define keys (select-local-names-and-bind ids local-names self phase
-                                                      add-defined-or-imported-id!
-                                                      #t))
+                                                      add-defined-or-imported-id!))
             ;; Expand and evaluate RHS:
             (define-values (exp-rhs vals)
               (expand+eval-for-syntaxes-binding (m 'rhs) ids partial-body-ctx))
@@ -190,7 +188,7 @@
    (attach-import-export-properties
     (rebuild
      s
-     `(,(m 'module) ,(m 'initial-import) ,@fully-expanded-bodys))
+     `(,(m 'module) ,(m 'id:module-name) ,(m 'initial-import) ,@fully-expanded-bodys))
     import-export
     self)))
 
@@ -202,8 +200,7 @@
       (error "identifier is already defined or imported:" id))))
 
 (define (select-local-names-and-bind ids local-names self phase
-                                     add-defined-or-imported-id!
-                                     as-transformer?)
+                                     add-defined-or-imported-id!)
   (for/list ([id (in-list ids)])
     (define sym (syntax-e id))
     (define local-sym
@@ -219,5 +216,5 @@
                               self phase local-sym
                               0))
     (add-binding! id b phase)
-    (add-defined-or-imported-id! id phase b as-transformer?)
+    (add-defined-or-imported-id! id phase b)
     local-sym))
