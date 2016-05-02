@@ -11,6 +11,7 @@
                         env        ; environment for local bindings
                         only-immediate? ; #t => stop at core forms
                         add-scope  ; scope to add to every expansion; #f if none
+                        current-module-scopes ; list of scopes for enclosing module ot top level
                         ))
 
 (define current-expand-context (make-parameter
@@ -19,4 +20,5 @@
                                                 (current-namespace)
                                                 empty-env
                                                 #f
-                                                #f)))
+                                                #f
+                                                null)))

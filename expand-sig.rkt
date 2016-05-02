@@ -11,4 +11,5 @@ lookup
 
 rebuild
 
+expand+eval-for-syntaxes-binding
 eval-for-syntaxes-binding

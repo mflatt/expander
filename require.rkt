@@ -3,8 +3,8 @@
          "scope.rkt"
          "namespace.rkt")
 
-(provide namespace-require!
-         namespace-require/expansion-time!)
+(provide stx-context-require!
+         stx-context-require/expansion-time!)
 
 (define (bind-all-exports! in-stx phase-level ns module-name)
   (define m (namespace->module ns module-name))
@@ -18,10 +18,10 @@
   (bind-all (module-variable-exports m))
   (bind-all (module-transformer-exports m)))
 
-(define (namespace-require/expansion-time! in-stx phase-level ns module-name)
+(define (stx-context-require/expansion-time! in-stx phase-level ns module-name)
   (bind-all-exports! in-stx phase-level ns module-name)
   (namespace-module-visit! ns module-name phase-level 0))
   
-(define (namespace-require! in-stx phase-level ns module-name)
-  (namespace-require/expansion-time! in-stx phase-level ns module-name)
+(define (stx-context-require! in-stx phase-level ns module-name)
+  (stx-context-require/expansion-time! in-stx phase-level ns module-name)
   (namespace-module-instantiate! ns module-name phase-level 0))

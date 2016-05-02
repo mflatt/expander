@@ -13,3 +13,8 @@
  'define-syntaxes
  (lambda (s ctx)
    (error "not allowed in an expression position:" s)))
+
+(add-core-form!
+ '#%require
+ (lambda (s ctx)
+   (error "not yet supported here:" s)))

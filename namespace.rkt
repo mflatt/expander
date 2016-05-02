@@ -2,6 +2,7 @@
 
 (provide make-empty-namespace
          current-namespace
+         make-module-namespace
          namespace->module
          
          make-module
@@ -37,10 +38,20 @@
                 ;; expected to be consistent with exports and {min,max}-phase-level:
                 instantiate))  ; namespace phase phase-level ->
 
-(define current-namespace (make-parameter (namespace
-                                           (make-hasheqv)
-                                           (make-hasheq)
-                                           (make-hash))))
+(define (make-empty-namespace)
+  (namespace (make-hasheqv)
+             (make-hasheq)
+             (make-hash)))
+
+(define current-namespace (make-parameter (make-empty-namespace)))
+
+(define (make-module-namespace ns name)
+  (define m-ns
+    ;; Keeps all module declarations, but makes a fresh space of instances
+    (struct-copy namespace (make-empty-namespace)
+                 [module-declarations (namespace-module-declarations ns)]))
+  (hash-set! (namespace-module-instances m-ns) (cons name 0) m-ns)
+  m-ns)
 
 (define (namespace->module ns name)
   (hash-ref (namespace-module-declarations ns) name #f))

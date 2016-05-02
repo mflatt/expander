@@ -127,7 +127,7 @@
 (define (add-binding! id binding phase)
   (add-binding-in-scopes! (stx-scope-set id phase) (syntax-e id) binding))
 
-(define (resolve s phase)
+(define (resolve s phase #:exactly? [exactly? #f])
   (unless (identifier? s)
     (raise-argument-error 'resolve "identifier?" s))
   (unless (phase? phase)
@@ -151,8 +151,11 @@
    [max-candidate
     (for ([c (in-list candidates)])
       (unless (subset? (car c) (car max-candidate))
-        (error "ambiguous")))
-    (cdr max-candidate)]
+        (error "ambiguous:" s)))
+    (and (or (not exactly?)
+             (equal? (set-count scopes)
+                     (set-count (car max-candidate))))
+         (cdr max-candidate))]
    [else #f]))
 
 ;; ----------------------------------------

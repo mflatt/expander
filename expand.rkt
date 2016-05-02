@@ -11,6 +11,7 @@
          "expand-context.rkt"
          "expand-sig.rkt"
          "expand-expr.rkt"
+         "expand-module.rkt"
          "expand-top-level.rkt")
 
 (provide expand)
@@ -89,7 +90,10 @@
 (define (expand-transformer s ctx)
   (expand s (struct-copy expand-context ctx
                          [phase (add1 (expand-context-phase ctx))]
-                         [env empty-env])))
+                         [env empty-env]
+                         [only-immediate? #f]
+                         [add-scope #f]
+                         [current-module-scopes null])))
 
 (define (eval-transformer s ctx)
   (eval `(#%expression ,(compile s
@@ -246,21 +250,25 @@
        ,(finish-bodys))
      s)]))
 
-(define (eval-for-syntaxes-binding rhs ids ctx)
+(define (expand+eval-for-syntaxes-binding rhs ids ctx)
+  (define exp-rhs (expand-transformer rhs ctx))
   (define vals
-    (call-with-values (lambda ()
-                        (eval-transformer
-                         (expand-transformer rhs ctx)
-                         ctx))
+    (call-with-values (lambda () (eval-transformer exp-rhs ctx))
       list))
   (unless (= (length vals) (length ids))
     (error "wrong number of results (" (length vals) "vs." (length ids) ")"
            "from" rhs))
+  (values exp-rhs vals))
+
+(define (eval-for-syntaxes-binding rhs ids ctx)
+  (define-values (exp-rhs vals)
+    (expand+eval-for-syntaxes-binding rhs ids ctx))
   vals)
 
 ;; ----------------------------------------
 
 (invoke-unit expand-expr@ (import expand^))
+(invoke-unit expand-module@ (import expand^))
 (invoke-unit expand-top-level@ (import expand^))
 
 ;; ----------------------------------------
@@ -295,8 +303,8 @@
 (define demo-scope (new-multi-scope))
 (define demo-stx (add-scope empty-stx demo-scope))
 
-(namespace-require! demo-stx 0 (current-namespace) '#%core)
-(namespace-require! demo-stx 1 (current-namespace) '#%core)
+(stx-context-require! demo-stx 0 (current-namespace) '#%core)
+(stx-context-require! demo-stx 1 (current-namespace) '#%core)
 
 (expand (datum->syntax demo-stx '(lambda (x) x)))
 (compile (expand (datum->syntax demo-stx '(case-lambda
@@ -314,3 +322,14 @@
                                             ([(x) 5] [(y) (lambda (z) z)])
                                             (let-values ([(z) 10])
                                               (begin z (if (m 10) 1 2))))))))
+
+;; ----------------------------------------
+
+(expand (datum->syntax demo-stx '(module m '#%core
+                                  (#%require (for-syntax '#%core))
+                                  (define-syntaxes (m) (lambda (stx) (quote-syntax 10)))
+                                  (define-values (x) 1)
+                                  (m)))
+        (struct-copy expand-context (current-expand-context)
+                     [context 'top-level]
+                     [current-module-scopes (list demo-scope)]))
