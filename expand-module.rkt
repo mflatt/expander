@@ -1,25 +1,17 @@
 #lang racket/unit
-(require racket/unit
-         "stx.rkt"
+(require "stx.rkt"
          "scope.rkt"
          "pattern.rkt"
          "namespace.rkt"
          "binding.rkt"
-         "dup-check.rkt"
          "require.rkt"
+         "module-path.rkt"
          "expand-context.rkt"
-         "expand-sig.rkt")
+         "expand-sig.rkt"
+         "expand-require.rkt")
 
 (import expand^)
 (export)
-
-;; ----------------------------------------
-
-(define (resolve-module-path p)
-  ;; Assume 'name, for now
-  (cadr p))
-
-;; ----------------------------------------
 
 (add-core-form!
  'module
@@ -42,21 +34,23 @@
    (define self 'self)
    (define m-ns (make-module-namespace (expand-context-namespace ctx)
                                        'self))
+   
+   (define enclosing-scopes
+     (expand-context-current-module-scopes ctx))
+   (define (apply-module-scopes s)
+     (define s-without-enclosing
+       (for/fold ([s s]) ([sc (in-list enclosing-scopes)])
+         (remove-scope s sc)))
+     (add-scope (add-scope s-without-enclosing
+                           outside-scope)
+                inside-scope))
 
-   (stx-context-require! inside-stx
+   (stx-context-require! (apply-module-scopes (m 'initial-import))
                          0
                          m-ns
                          initial-import-name)
    
-   (define bodys (for/list ([body (in-list (m 'body))])
-                   (define scopes
-                     (expand-context-current-module-scopes ctx))
-                   (define body-without-enclosing
-                     (for/fold ([body body]) ([sc (in-list scopes)])
-                       (remove-scope body sc)))
-                   (add-scope (add-scope body-without-enclosing
-                                         outside-scope)
-                              inside-scope)))
+   (define bodys (map apply-module-scopes (m 'body)))
 
    (define phase 0)
       
@@ -108,12 +102,8 @@
                                  `(,(m 'define-syntaxes) ,ids ,exp-rhs))
                         done-bodys))]
            [(#%require)
-            (define m (parse-syntax exp-body '(#%require (for-syntax mod))))
-            (stx-context-require! inside-stx
-                                  1
-                                  m-ns
-                                  (resolve-module-path
-                                   (syntax->datum (m 'mod))))
+            (define m (parse-syntax exp-body '(#%require req ...)))
+            (parse-and-perform-requires (m 'req) m-ns phase)
             (loop (cdr bodys)
                   (cons (car bodys)
                         done-bodys))]
@@ -175,3 +165,5 @@
     (hash-set! local-names local-sym id)
     (add-binding! id (module-binding self phase local-sym) phase)
     local-sym))
+
+;; ----------------------------------------

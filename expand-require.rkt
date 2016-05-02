@@ -1,0 +1,189 @@
+#lang racket/base
+(require racket/set
+         "stx.rkt"
+         "scope.rkt"
+         "pattern.rkt"
+         "require.rkt"
+         "module-path.rkt")
+
+(provide parse-and-perform-requires)
+
+(struct adjust-only (syms))
+(struct adjust-prefix (sym))
+(struct adjust-all-except (prefix-sym syms))
+(struct adjust-rename (to-id from-sym))
+
+(define layers '(raw raw/no-just-meta phaseless path))
+
+(define (parse-and-perform-requires reqs m-ns phase)
+  (let loop ([reqs reqs]
+             [top-req #f]
+             [phase-shift 0]
+             [just-meta 'all]
+             [adjust #f]
+             [layer 'raw])
+    (for ([req (in-list reqs)])
+      (define (check-nested want-layer)
+        (unless (member want-layer (member layer layers))
+          (error "invalid nesting:" req)))
+      (define fm (and (pair? (syntax-e req))
+                      (identifier? (car (syntax-e req)))
+                      (syntax-e (car (syntax-e req)))))
+      (case fm
+        [(for-meta)
+         (check-nested 'raw/no-just-meta)
+         (define m (parse-syntax req '(for-meta phase-level spec ...)))
+         (define p (syntax-e (m 'phase-level)))
+         (unless (phase? p)
+           (error "bad phase:" req))
+         (loop (m 'spec) 
+               (or top-req req)
+               (phase+ phase-shift p)
+               just-meta
+               adjust
+               'phaseless)]
+        [(for-syntax)
+         (check-nested 'raw/no-just-meta)
+         (define m (parse-syntax req '(for-syntax spec ...)))
+         (loop (m 'spec)
+               (or top-req req)
+               (phase+ phase-shift 1)
+               just-meta
+               adjust
+               'phaseless)]
+        [(for-template)
+         (check-nested 'raw/no-just-meta)
+         (define m (parse-syntax req '(for-template spec ...)))
+         (loop (m 'spec)
+               (or top-req req)
+               (phase+ phase-shift -1)
+               just-meta
+               adjust
+               'phaseless)]
+        [(for-label)
+         (check-nested 'raw/no-just-meta)
+         (define m (parse-syntax req '(for-label spec ...)))
+         (loop (m 'spec)
+               (or top-req req)
+               (phase+ phase-shift #f)
+               just-meta
+               adjust
+               'phaseless)]
+        [(just-meta)
+         (check-nested 'raw)
+         (define m (parse-syntax req '(just-meta phase-level spec ...)))
+         (define p (syntax-e (m 'phase-level)))
+         (unless (phase? p)
+           (error "bad phase:" req))
+         (loop (m 'spec)
+               (or top-req req)
+               phase-shift
+               just-meta
+               adjust
+               'raw/no-just-meta)]
+        [(only)
+         (check-nested 'phaseless)
+         (define m (parse-syntax req '(only spec id ...)))
+         (loop (list (m 'spec))
+               (or top-req req)
+               phase-shift
+               just-meta
+               (adjust-only (ids->sym-set (m 'id)))
+               'path)]
+        [(prefix)
+         (check-nested 'phaseless)
+         (define m (parse-syntax req '(prefix id:prefix spec)))
+         (loop (list (m 'spec))
+               (or top-req req)
+               phase-shift
+               just-meta
+               (adjust-prefix (syntax-e (m 'id:prefix)))
+               'path)]
+        [(all-except)
+         (check-nested 'phaseless)
+         (define m (parse-syntax req '(all-except spec id ...)))
+         (loop (list (m 'spec))
+               (or top-req req)
+               phase-shift
+               just-meta
+               (adjust-all-except '|| (ids->sym-set (m 'id)))
+               'path)]
+        [(prefix-all-except)
+         (check-nested 'phaseless)
+         (define m (parse-syntax req '(prefix-all-except id:prefix spec id ...)))
+         (loop (list (m 'spec))
+               (or top-req req)
+               phase-shift
+               just-meta
+               (adjust-all-except (syntax-e (m 'id:prefix)) (ids->sym-set (m 'id)))
+               'path)]
+        [(rename)
+         (check-nested 'phaseless)
+         (define m (parse-syntax req '(rename spec id:to id:from)))
+         (loop (list (m 'spec))
+               (or top-req req)
+               phase-shift
+               just-meta
+               (adjust-rename (m 'id:to) (syntax-e (m 'id:from)))
+               'path)]
+        [else
+         (define mp (syntax->datum req))
+         (unless (module-path? mp)
+           (error "bad require spec:" req))
+         (perform-require mp (or req top-req) m-ns phase phase-shift just-meta adjust)]))))
+        
+(define (perform-require mod-path in-stx m-ns to-phase phase-shift just-meta adjust)
+  (define module-name (resolve-module-path mod-path))
+  (define bind-in-stx (if (adjust-rename? adjust)
+                          (adjust-rename-to-id adjust)
+                          in-stx))
+  (define phase (phase+ to-phase phase-shift))
+  (define done-syms (make-hash))
+  (stx-context-require/expansion-time!
+   bind-in-stx phase m-ns module-name
+   #:filter (lambda (sym export-phase)
+                                (define adjusted-sym
+                                  (cond
+                                   [(and (not (eq? just-meta 'all))
+                                         (not (equal? export-phase just-meta)))
+                                    #f]
+                                   [(not adjust) sym]
+                                   [(adjust-only? adjust)
+                                    (and (set-member? (adjust-only-syms adjust) sym)
+                                         (hash-set! done-syms sym #t)
+                                         sym)]
+                                   [(adjust-prefix? adjust)
+                                    (string->symbol
+                                     (format "~a~a" (adjust-prefix-sym adjust) sym))]
+                                   [(adjust-all-except? adjust)
+                                    (and (not (and (set-member? (adjust-all-except-syms adjust) sym)
+                                                   (hash-set! done-syms sym #t)))
+                                         (string->symbol
+                                          (format "~a~a" (adjust-all-except-prefix-sym adjust) sym)))]
+                                   [(adjust-rename? adjust)
+                                    (and (eq? sym (adjust-rename-from-sym adjust))
+                                         (adjust-rename-to-id adjust))]))
+                                (when adjusted-sym
+                                  (define s (datum->syntax bind-in-stx adjusted-sym))
+                                  (when (resolve s (phase+ phase export-phase) #:exactly? #t)
+                                    (error "already imported or defined:" s)))
+                                adjusted-sym))
+  ;; check that we covered all expected ids:
+  (define need-syms (cond
+                    [(adjust-only? adjust)
+                     (adjust-only-syms adjust)]
+                    [(adjust-all-except? adjust)
+                     (adjust-all-except-syms adjust)]
+                    [(adjust-rename? adjust)
+                     (set (adjust-rename-from-sym adjust))]
+                    [else #f]))
+  (when (and need-syms
+             (not (= (set-count need-syms) (hash-count done-syms))))
+    (for ([sym (in-set need-syms)])
+      (unless (hash-ref done-syms sym #f)
+        (error "not in nested spec:" sym)))))
+
+
+(define (ids->sym-set ids)
+  (for/set ([id (in-list ids)])
+    (syntax-e id)))

@@ -1,12 +1,14 @@
 #lang racket/base
 (require "stx.rkt")
 
-(provide parse-syntax)
+(provide parse-syntax
+         try-parse-syntax)
 
 ;; A lightweight pattern matcher along the lines of `syntax-rules`.
 ;; The result of matching is a function that takes a symbol and
 ;; returns its match.
-(define (parse-syntax orig-s pattern)
+(define (parse-syntax orig-s pattern
+                      #:error [error error])
   (define (parse s pattern)
     (cond
      [(symbol? pattern)
@@ -54,6 +56,11 @@
         (cadr a)
         ;; assume a sequence with 0 matches
         null)))
+
+(define (try-parse-syntax orig-s pattern)
+  (let/ec esc
+    (parse-syntax orig-s pattern
+                  #:error (lambda args (esc #f)))))
 
 (define (to-syntax-list s)
   (cond
