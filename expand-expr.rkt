@@ -1,5 +1,5 @@
 #lang racket/unit
-(require "stx.rkt"
+(require "syntax.rkt"
          "scope.rkt"
          "pattern.rkt"
          "namespace.rkt"

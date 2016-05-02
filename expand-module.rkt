@@ -1,5 +1,5 @@
 #lang racket/unit
-(require "stx.rkt"
+(require "syntax.rkt"
          "scope.rkt"
          "pattern.rkt"
          "namespace.rkt"
@@ -28,7 +28,7 @@
    
    (define outside-scope (new-scope))
    (define inside-scope (new-multi-scope))
-   (define inside-stx (add-scope empty-stx inside-scope))
+   (define inside-stx (add-scope empty-syntax inside-scope))
 
    (define self 'self)
    (define m-ns (make-module-namespace (expand-context-namespace ctx)

@@ -1,6 +1,6 @@
 #lang racket/base
 (require racket/set
-         "stx.rkt")
+         "syntax.rkt")
 
 (provide new-scope
          new-multi-scope
@@ -55,15 +55,16 @@
 
 (define (apply-scope s sc op)
   (cond
-   [(stx? s) (stx (apply-scope (stx-e s) sc op)
-                  (if (shifted-multi-scope? sc)
-                      (stx-scopes s)
-                      (op (stx-scopes s) sc))
-                  (if (shifted-multi-scope? sc)
-                      (op (stx-shifted-multi-scopes s) sc)
-                      (stx-shifted-multi-scopes s))
-                  (stx-srcloc s)
-                  (stx-props s))]
+   [(syntax? s) (struct-copy syntax s
+                             [e (apply-scope (syntax-e s) sc op)]
+                             [scopes
+                              (if (shifted-multi-scope? sc)
+                                  (syntax-scopes s)
+                                  (op (syntax-scopes s) sc))]
+                             [shifted-multi-scopes
+                              (if (shifted-multi-scope? sc)
+                                  (op (syntax-shifted-multi-scopes s) sc)
+                                  (syntax-shifted-multi-scopes s))])]
    [(pair? s) (cons (apply-scope (car s) sc op)
                     (apply-scope (cdr s) sc op))]
    [else s]))
@@ -93,20 +94,20 @@
       s
       (let loop ([s s])
         (cond
-         [(stx? s) (struct-copy stx s
-                                [e (loop (stx-e s))]
-                                [shifted-multi-scopes
-                                 (for/set ([sms (in-set (stx-shifted-multi-scopes s))])
-                                   (shifted-multi-scope (+ phase (shifted-multi-scope-phase sms))
-                                                        (shifted-multi-scope-multi-scope sms)))])]
+         [(syntax? s) (struct-copy syntax s
+                                   [e (loop (syntax-e s))]
+                                   [shifted-multi-scopes
+                                    (for/set ([sms (in-set (syntax-shifted-multi-scopes s))])
+                                      (shifted-multi-scope (+ phase (shifted-multi-scope-phase sms))
+                                                           (shifted-multi-scope-multi-scope sms)))])]
          [(pair? s) (cons (loop (car s))
                           (loop (cdr s)))]
          [else s]))))
 
 ;; ----------------------------------------
 
-(define (stx-scope-set s phase)
-  (for/fold ([scopes (stx-scopes s)]) ([sms (in-set (stx-shifted-multi-scopes s))])
+(define (syntax-scope-set s phase)
+  (for/fold ([scopes (syntax-scopes s)]) ([sms (in-set (syntax-shifted-multi-scopes s))])
     (set-add scopes (multi-scope-to-scope-at-phase (shifted-multi-scope-multi-scope sms)
                                                    (- (shifted-multi-scope-phase sms) phase)))))
 
@@ -125,15 +126,15 @@
   (hash-set! sym-bindings scopes binding))
 
 (define (add-binding! id binding phase)
-  (add-binding-in-scopes! (stx-scope-set id phase) (syntax-e id) binding))
+  (add-binding-in-scopes! (syntax-scope-set id phase) (syntax-e id) binding))
 
 (define (resolve s phase #:exactly? [exactly? #f])
   (unless (identifier? s)
     (raise-argument-error 'resolve "identifier?" s))
   (unless (phase? phase)
     (raise-argument-error 'resolve "phase?" phase))
-  (define scopes (stx-scope-set s phase))
-  (define sym (stx-e s))
+  (define scopes (syntax-scope-set s phase))
+  (define sym (syntax-e s))
   (define candidates
     (for*/list ([sc (in-set scopes)]
                 [bindings (in-value (hash-ref (scope-bindings sc) sym #f))]
@@ -176,8 +177,8 @@
     (raise-argument-error 'bound-identifier=? "phase?" phase))
   (and (eq? (syntax-e a)
             (syntax-e b))
-       (equal? (stx-scope-set a phase)
-               (stx-scope-set b phase))))
+       (equal? (syntax-scope-set a phase)
+               (syntax-scope-set b phase))))
 
 (define (free-identifier=? a b phase)
   (unless (identifier? a)

@@ -1,6 +1,6 @@
 #lang racket/base
 (require racket/set
-         "stx.rkt"
+         "syntax.rkt"
          "scope.rkt"
          "binding.rkt"
          "pattern.rkt"
@@ -154,7 +154,7 @@
                           in-stx))
   (define phase (phase+ to-phase phase-shift))
   (define done-syms (make-hash))
-  (stx-context-require/expansion-time!
+  (syntax-context-require/expansion-time!
    bind-in-stx phase m-ns module-name
    #:filter (lambda (binding)
               (define sym (module-binding-nominal-sym binding))

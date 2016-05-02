@@ -1,11 +1,11 @@
 #lang racket/base
-(require "stx.rkt"
+(require "syntax.rkt"
          "scope.rkt"
          "binding.rkt"
          "namespace.rkt")
 
-(provide stx-context-require!
-         stx-context-require/expansion-time!)
+(provide syntax-context-require!
+         syntax-context-require/expansion-time!)
 
 (define (bind-all-exports! in-stx phase-level ns module-name filter)
   (define m (namespace->module ns module-name))
@@ -30,11 +30,11 @@
 (define (default-filter binding)
   (module-binding-nominal-sym binding))
 
-(define (stx-context-require/expansion-time! in-stx phase-level ns module-name
-                                             #:filter [filter default-filter])
+(define (syntax-context-require/expansion-time! in-stx phase-level ns module-name
+                                                #:filter [filter default-filter])
   (bind-all-exports! in-stx phase-level ns module-name filter)
   (namespace-module-visit! ns module-name phase-level 0))
   
-(define (stx-context-require! in-stx phase-level ns module-name)
-  (stx-context-require/expansion-time! in-stx phase-level ns module-name)
+(define (syntax-context-require! in-stx phase-level ns module-name)
+  (syntax-context-require/expansion-time! in-stx phase-level ns module-name)
   (namespace-module-instantiate! ns module-name phase-level 0))

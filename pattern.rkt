@@ -1,5 +1,5 @@
 #lang racket/base
-(require "stx.rkt")
+(require "syntax.rkt")
 
 (provide parse-syntax
          try-parse-syntax)
@@ -16,7 +16,7 @@
         (unless (identifier? s)
           (error "not an identifier:" s)))
       (list (list pattern s))]
-     [(stx? s) (parse (syntax-e s) pattern)]
+     [(syntax? s) (parse (syntax-e s) pattern)]
      [(and (list? pattern)
            (= (length pattern) 2)
            (or (eq? '... (cadr pattern))
@@ -65,5 +65,5 @@
 (define (to-syntax-list s)
   (cond
    [(pair? s) (cons (car s) (to-syntax-list (cdr s)))]
-   [(stx? s) (to-syntax-list (syntax-e s))]
+   [(syntax? s) (to-syntax-list (syntax-e s))]
    [else s]))

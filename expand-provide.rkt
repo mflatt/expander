@@ -1,6 +1,6 @@
 #lang racket/base
 (require racket/set
-         "stx.rkt"
+         "syntax.rkt"
          "scope.rkt"
          "pattern.rkt"
          "binding.rkt"

@@ -1,6 +1,6 @@
 #lang racket/base
 (require racket/unit
-         "stx.rkt"
+         "syntax.rkt"
          "scope.rkt"
          "pattern.rkt"
          "namespace.rkt"
@@ -103,7 +103,7 @@
 ;; ----------------------------------------
 
 (define core-scope (new-multi-scope))
-(define core-stx (add-scope empty-stx core-scope))
+(define core-stx (add-scope empty-syntax core-scope))
 
 (define core-transformers #hasheq())
 (define core-primitives #hasheq())

@@ -1,5 +1,5 @@
 #lang racket/base
-(require "stx.rkt"
+(require "syntax.rkt"
          "scope.rkt"
          "namespace.rkt"
          "expand-context.rkt"
@@ -10,10 +10,10 @@
 ;; ----------------------------------------
 
 (define demo-scope (new-multi-scope))
-(define demo-stx (add-scope empty-stx demo-scope))
+(define demo-stx (add-scope empty-syntax demo-scope))
 
-(stx-context-require! demo-stx 0 (current-namespace) '#%core)
-(stx-context-require! demo-stx 1 (current-namespace) '#%core)
+(syntax-context-require! demo-stx 0 (current-namespace) '#%core)
+(syntax-context-require! demo-stx 1 (current-namespace) '#%core)
 
 (expand (datum->syntax demo-stx '(lambda (x) x)))
 (compile (expand (datum->syntax demo-stx '(case-lambda
@@ -56,5 +56,5 @@
                        [context 'top-level]
                        [current-module-scopes (list demo-scope)]))))
 
-(stx-context-require! demo-stx 0 (current-namespace) 'm1)
-(stx-context-require! demo-stx 0 (current-namespace) 'm2)
+(syntax-context-require! demo-stx 0 (current-namespace) 'm1)
+(syntax-context-require! demo-stx 0 (current-namespace) 'm2)
