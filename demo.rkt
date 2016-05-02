@@ -39,10 +39,13 @@
  (compile
   (expand (datum->syntax demo-stx '(module m1 '#%core
                                     (#%require (for-syntax '#%core))
-                                    (define-syntaxes (m) (lambda (stx) (quote-syntax 10)))
+                                    (begin-for-syntax
+                                      (define-values (ten) (quote-syntax 10)))
+                                    (define-syntaxes (m) (lambda (stx) ten))
                                     (define-values (x) 1)
                                     (println x)
                                     (#%provide (prefix-all-defined def:))
+                                    (println (m))
                                     (m)))
           (struct-copy expand-context (current-expand-context)
                        [context 'top-level]

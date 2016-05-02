@@ -5,6 +5,7 @@
          "pattern.rkt"
          "binding.rkt"
          "require.rkt"
+         "expand-context.rkt"
          "module-path.rkt")
 
 (provide parse-and-expand-provides!
@@ -114,7 +115,8 @@
          [(expand)
           (void (parse-syntax spec '(expand (id . datum))))
           (define m (parse-syntax spec '(expand form)))
-          (define exp-spec (expand (m 'form) ctx))
+          (define exp-spec (expand (m 'form) (struct-copy expand-context ctx
+                                                          [phase phase])))
           (unless (and (pair? (syntax-e exp-spec))
                        (identifier? (car (syntax-e exp-spec)))
                        (eq? 'begin (core-form-sym (car (syntax-e exp-spec)))))

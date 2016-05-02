@@ -15,6 +15,11 @@
    (error "not allowed in an expression position:" s)))
 
 (add-core-form!
+ 'begin-for-syntax
+ (lambda (s ctx)
+   (error "not yet supported here:" s)))
+
+(add-core-form!
  '#%require
  (lambda (s ctx)
    (error "not yet supported here:" s)))

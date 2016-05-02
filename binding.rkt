@@ -45,7 +45,7 @@
    [(module-binding? b)
     (define m (namespace->module-namespace ns
                                            (module-binding-module b)
-                                           phase))
+                                           (module-binding-nominal-import-phase b)))
     (lookup-in-namespace m (module-binding-phase b) (module-binding-sym b) id)]
    [(local-binding? b)
     (define l (hash-ref env

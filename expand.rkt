@@ -95,11 +95,6 @@
                          [add-scope #f]
                          [current-module-scopes null])))
 
-(define (eval-transformer s ctx)
-  (expand-time-eval `(#%expression ,(compile s
-                                             (add1 (expand-context-phase ctx))
-                                             (expand-context-namespace ctx)))))
-
 ;; ----------------------------------------
 
 (define core-scope (new-multi-scope))
@@ -255,17 +250,25 @@
 
 (define (expand+eval-for-syntaxes-binding rhs ids ctx)
   (define exp-rhs (expand-transformer rhs ctx))
-  (define vals
-    (call-with-values (lambda () (eval-transformer exp-rhs ctx))
-      list))
-  (unless (= (length vals) (length ids))
-    (error "wrong number of results (" (length vals) "vs." (length ids) ")"
-           "from" rhs))
-  (values exp-rhs vals))
+  (values exp-rhs
+          (eval-for-bindings ids
+                             exp-rhs
+                             (add1 (expand-context-phase ctx))
+                             (expand-context-namespace ctx))))
 
 (define (eval-for-syntaxes-binding rhs ids ctx)
   (define-values (exp-rhs vals)
     (expand+eval-for-syntaxes-binding rhs ids ctx))
+  vals)
+
+(define (eval-for-bindings ids s phase ns)
+  (define compiled (compile s phase ns))
+  (define vals
+    (call-with-values (lambda () (expand-time-eval `(#%expression ,compiled)))
+      list))
+  (unless (= (length vals) (length ids))
+    (error "wrong number of results (" (length vals) "vs." (length ids) ")"
+           "from" s))
   vals)
 
 ;; ----------------------------------------
