@@ -7,7 +7,8 @@
          "require.rkt"
          "module-path.rkt")
 
-(provide parse-and-perform-requires)
+(provide parse-and-perform-requires!
+         perform-initial-require!)
 
 (struct adjust-only (syms))
 (struct adjust-prefix (sym))
@@ -16,8 +17,8 @@
 
 (define layers '(raw raw/no-just-meta phaseless path))
 
-(define (parse-and-perform-requires reqs m-ns phase
-                                    add-defined-or-imported-id!)
+(define (parse-and-perform-requires! reqs m-ns phase
+                                     add-defined-or-imported-id!)
   (let loop ([reqs reqs]
              [top-req #f]
              [phase-shift 0]
@@ -132,11 +133,21 @@
          (define mp (syntax->datum req))
          (unless (module-path? mp)
            (error "bad require spec:" req))
-         (perform-require mp (or req top-req) m-ns phase phase-shift just-meta adjust
-                          add-defined-or-imported-id!)]))))
+         (perform-require! mp (or req top-req) m-ns phase phase-shift just-meta adjust
+                           add-defined-or-imported-id!)]))))
+
+;; ----------------------------------------
+
+(define (perform-initial-require! mod-path in-stx m-ns
+                                  add-defined-or-imported-id!)
+  (perform-require! mod-path in-stx m-ns
+                    0 0 'all #f
+                    add-defined-or-imported-id!))
+
+;; ----------------------------------------
         
-(define (perform-require mod-path in-stx m-ns to-phase phase-shift just-meta adjust
-                         add-defined-or-imported-id!)
+(define (perform-require! mod-path in-stx m-ns to-phase phase-shift just-meta adjust
+                          add-defined-or-imported-id!)
   (define module-name (resolve-module-path mod-path))
   (define bind-in-stx (if (adjust-rename? adjust)
                           (adjust-rename-to-id adjust)

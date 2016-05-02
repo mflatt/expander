@@ -29,8 +29,6 @@
    (define outside-scope (new-scope))
    (define inside-scope (new-multi-scope))
    (define inside-stx (add-scope empty-stx inside-scope))
-   
-   (define initial-import-name (resolve-module-path initial-import))   
 
    (define self 'self)
    (define m-ns (make-module-namespace (expand-context-namespace ctx)
@@ -46,10 +44,16 @@
                            outside-scope)
                 inside-scope))
 
-   (stx-context-require! (apply-module-scopes (m 'initial-import))
-                         0
-                         m-ns
-                         initial-import-name)
+   ;; To track imports and exports:
+   (define import-export (make-import-export-registry))
+   (define (add-defined-or-imported-id! id phase binding)
+     (register-defined-or-imported-id! import-export id phase binding))
+   
+   ;; Initial import:
+   (perform-initial-require! initial-import
+                             (apply-module-scopes (m 'initial-import))
+                             m-ns
+                             add-defined-or-imported-id!)
    
    (define bodys (map apply-module-scopes (m 'body)))
 
@@ -71,11 +75,6 @@
    ;; Symbol picked for each binding in this module:
    (define local-names (make-hasheq))
 
-   ;; To track imports and exports:
-   (define import-export (make-import-export-registry))
-   (define (add-defined-or-imported-id! id phase binding)
-     (register-defined-or-imported-id! import-export id phase binding))
-   
    (define partially-expanded-bodys
      (let loop ([bodys bodys] [done-bodys null])
        (cond
@@ -114,8 +113,8 @@
                         done-bodys))]
            [(#%require)
             (define m (parse-syntax exp-body '(#%require req ...)))
-            (parse-and-perform-requires (m 'req) m-ns phase
-                                        add-defined-or-imported-id!)
+            (parse-and-perform-requires! (m 'req) m-ns phase
+                                         add-defined-or-imported-id!)
             (loop (cdr bodys)
                   (cons (car bodys)
                         done-bodys))]
@@ -170,10 +169,10 @@
            [(#%provide)
             (define m (parse-syntax (car bodys) '(#%provide spec ...)))
             (define specs
-              (parse-and-expand-provides (m 'spec)
-                                         import-export
-                                         phase body-ctx
-                                         expand rebuild))
+              (parse-and-expand-provides! (m 'spec)
+                                          import-export self
+                                          phase body-ctx
+                                          expand rebuild))
             (loop (cdr bodys)
                   (cons (rebuild (car bodys)
                                  `(,(m '#%provide) ,@specs))

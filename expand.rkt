@@ -337,7 +337,7 @@
                                   (#%require (for-syntax '#%core))
                                   (define-syntaxes (m) (lambda (stx) (quote-syntax 10)))
                                   (define-values (x) 1)
-                                  (#%provide (rename x y))
+                                  (#%provide (prefix-all-defined-except def: x))
                                   (m)))
         (struct-copy expand-context (current-expand-context)
                      [context 'top-level]
