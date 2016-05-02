@@ -142,32 +142,32 @@
   (stx-context-require/expansion-time!
    bind-in-stx phase m-ns module-name
    #:filter (lambda (sym export-phase)
-                                (define adjusted-sym
-                                  (cond
-                                   [(and (not (eq? just-meta 'all))
-                                         (not (equal? export-phase just-meta)))
-                                    #f]
-                                   [(not adjust) sym]
-                                   [(adjust-only? adjust)
-                                    (and (set-member? (adjust-only-syms adjust) sym)
-                                         (hash-set! done-syms sym #t)
-                                         sym)]
-                                   [(adjust-prefix? adjust)
-                                    (string->symbol
-                                     (format "~a~a" (adjust-prefix-sym adjust) sym))]
-                                   [(adjust-all-except? adjust)
-                                    (and (not (and (set-member? (adjust-all-except-syms adjust) sym)
-                                                   (hash-set! done-syms sym #t)))
-                                         (string->symbol
-                                          (format "~a~a" (adjust-all-except-prefix-sym adjust) sym)))]
-                                   [(adjust-rename? adjust)
-                                    (and (eq? sym (adjust-rename-from-sym adjust))
-                                         (adjust-rename-to-id adjust))]))
-                                (when adjusted-sym
-                                  (define s (datum->syntax bind-in-stx adjusted-sym))
-                                  (when (resolve s (phase+ phase export-phase) #:exactly? #t)
-                                    (error "already imported or defined:" s)))
-                                adjusted-sym))
+              (define adjusted-sym
+                (cond
+                 [(and (not (eq? just-meta 'all))
+                       (not (equal? export-phase just-meta)))
+                  #f]
+                 [(not adjust) sym]
+                 [(adjust-only? adjust)
+                  (and (set-member? (adjust-only-syms adjust) sym)
+                       (hash-set! done-syms sym #t)
+                       sym)]
+                 [(adjust-prefix? adjust)
+                  (string->symbol
+                   (format "~a~a" (adjust-prefix-sym adjust) sym))]
+                 [(adjust-all-except? adjust)
+                  (and (not (and (set-member? (adjust-all-except-syms adjust) sym)
+                                 (hash-set! done-syms sym #t)))
+                       (string->symbol
+                        (format "~a~a" (adjust-all-except-prefix-sym adjust) sym)))]
+                 [(adjust-rename? adjust)
+                  (and (eq? sym (adjust-rename-from-sym adjust))
+                       (adjust-rename-to-id adjust))]))
+              (when adjusted-sym
+                (define s (datum->syntax bind-in-stx adjusted-sym))
+                (when (resolve s (phase+ phase export-phase) #:exactly? #t)
+                  (error "already imported or defined:" s)))
+              adjusted-sym))
   ;; check that we covered all expected ids:
   (define need-syms (cond
                     [(adjust-only? adjust)
