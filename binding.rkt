@@ -25,9 +25,12 @@
 (define (transformer? t) (procedure? t))
 (define (variable? t) (eq? t 'variable))
 
-(struct module-binding (module phase def) #:transparent)
+(struct module-binding (module phase sym
+                         nominal-module nominal-phase nominal-sym
+                         nominal-import-phase)
+        #:transparent)
 (struct local-binding (key))
-(struct top-level-binding (module phase def))
+(struct top-level-binding (module phase sym))
 
 (struct core-form (expander) #:transparent)
 (struct local-transformer (value))
@@ -43,7 +46,7 @@
     (define m (namespace->module-namespace ns
                                            (module-binding-module b)
                                            phase))
-    (lookup-in-namespace m (module-binding-phase b) (module-binding-def b) id)]
+    (lookup-in-namespace m (module-binding-phase b) (module-binding-sym b) id)]
    [(local-binding? b)
     (define l (hash-ref env
                         (local-binding-key b)
@@ -59,7 +62,7 @@
    [(top-level-binding? b)
     (lookup-in-namespace ns
                          (top-level-binding-phase b) 
-                         (top-level-binding-def b)
+                         (top-level-binding-sym b)
                          id)]
    [else (error "unknown binding for lookup:" b)]))
 
@@ -84,4 +87,4 @@
                 (define b (resolve id phase))
                 (and (module-binding? b)
                      (eq? '#%core (module-binding-module b))
-                     (module-binding-def b)))))))
+                     (module-binding-sym b)))))))

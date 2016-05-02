@@ -1,6 +1,7 @@
 #lang racket/base
 (require "stx.rkt"
          "scope.rkt"
+         "binding.rkt"
          "namespace.rkt")
 
 (provide stx-context-require!
@@ -14,14 +15,19 @@
     (for ([(export-phase-level exports) (in-hash exports)])
       (define phase (+ phase-level export-phase-level))
       (for ([(sym binding) (in-hash exports)])
-        (let-values ([(sym) (filter sym export-phase-level)])
+        (define b (struct-copy module-binding binding
+                               [nominal-module module-name]
+                               [nominal-phase export-phase-level]
+                               [nominal-sym sym]
+                               [nominal-import-phase phase-level]))
+        (let-values ([(sym) (filter b)])
           (when sym
-            (add-binding! (datum->syntax in-stx sym) binding phase))))))
+            (add-binding! (datum->syntax in-stx sym) b phase))))))
   (bind-all (module-variable-exports m))
   (bind-all (module-transformer-exports m)))
 
-(define (default-filter sym phase-level)
-  sym)
+(define (default-filter binding)
+  (module-binding-nominal-sym binding))
 
 (define (stx-context-require/expansion-time! in-stx phase-level ns module-name
                                              #:filter [filter default-filter])

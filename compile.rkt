@@ -87,7 +87,7 @@
       sym]
      [(module-binding? b)
       (define m-ns (namespace->module-namespace ns (module-binding-module b) phase))
-      (namespace-get-variable m-ns (module-binding-phase b) (module-binding-def b) 'undefined)]
+      (namespace-get-variable m-ns (module-binding-phase b) (module-binding-sym b) 'undefined)]
      [else
       (error "not a reference to a local binding:" s)])]
    [else

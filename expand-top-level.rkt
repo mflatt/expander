@@ -18,3 +18,8 @@
  '#%require
  (lambda (s ctx)
    (error "not yet supported here:" s)))
+
+(add-core-form!
+ '#%provide
+ (lambda (s ctx)
+   (error "not allowed outside of a module body:" s)))

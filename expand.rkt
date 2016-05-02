@@ -111,7 +111,9 @@
 
 (define (add-core-form! sym proc)
   (add-binding! (datum->syntax core-stx sym)
-                (module-binding '#%core 0 sym)
+                (module-binding '#%core 0 sym
+                                '#%core 0 sym
+                                0)
                 0)
   (set! core-transformers (hash-set core-transformers
                                     sym
@@ -119,7 +121,9 @@
 
 (define (add-core-primitive! sym val)
   (add-binding! (datum->syntax core-stx sym)
-                (module-binding '#%core 0 sym)
+                (module-binding '#%core 0 sym
+                                '#%core 0 sym
+                                0)
                 0)
   (set! core-primitives (hash-set core-primitives
                                   sym
@@ -283,9 +287,13 @@
 (define core-module
   (make-module null
                (hasheqv 0 (for/hasheq ([sym (in-hash-keys core-primitives)])
-                            (values sym (module-binding '#%core 0 sym))))
+                            (values sym (module-binding '#%core 0 sym
+                                                        '#%core 0 sym
+                                                        0))))
                (hasheqv 0 (for/hasheq ([sym (in-hash-keys core-transformers)])
-                            (values sym (module-binding '#%core 0 sym))))
+                            (values sym (module-binding '#%core 0 sym
+                                                        '#%core 0 sym
+                                                        0))))
                0 1
                (lambda (ns phase phase-level)
                  (case phase-level
@@ -329,6 +337,7 @@
                                   (#%require (for-syntax '#%core))
                                   (define-syntaxes (m) (lambda (stx) (quote-syntax 10)))
                                   (define-values (x) 1)
+                                  (#%provide (rename x y))
                                   (m)))
         (struct-copy expand-context (current-expand-context)
                      [context 'top-level]

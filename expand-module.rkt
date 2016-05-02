@@ -8,7 +8,8 @@
          "module-path.rkt"
          "expand-context.rkt"
          "expand-sig.rkt"
-         "expand-require.rkt")
+         "expand-require.rkt"
+         "expand-provide.rkt")
 
 (import expand^)
 (export)
@@ -53,7 +54,8 @@
    (define bodys (map apply-module-scopes (m 'body)))
 
    (define phase 0)
-      
+
+   ;; ------------------------------------------------------------
    ;; Pass 1: partially expand to discover all bindings and install all 
    ;; defined macro transformers
    
@@ -65,7 +67,14 @@
                                          [add-scope inside-scope]
                                          [current-module-scopes
                                           (list inside-scope outside-scope)]))
+   
+   ;; Symbol picked for each binding in this module:
    (define local-names (make-hasheq))
+
+   ;; To track imports and exports:
+   (define import-export (make-import-export-registry))
+   (define (add-defined-or-imported-id! id phase binding)
+     (register-defined-or-imported-id! import-export id phase binding))
    
    (define partially-expanded-bodys
      (let loop ([bodys bodys] [done-bodys null])
@@ -82,14 +91,16 @@
             (define m (parse-syntax exp-body '(define-values (id ...) rhs)))
             (define ids (m 'id))
             (check-ids-unbound ids phase)
-            (define keys (select-local-names-and-bind ids local-names self phase))
+            (define keys (select-local-names-and-bind ids local-names self phase
+                                                       add-defined-or-imported-id!))
             (loop (cdr bodys)
                   (cons (car bodys) done-bodys))]
            [(define-syntaxes)
             (define m (parse-syntax exp-body '(define-syntaxes (id ...) rhs)))
             (define ids (m 'id))
             (check-ids-unbound ids phase)
-            (define keys (select-local-names-and-bind ids local-names self phase))
+            (define keys (select-local-names-and-bind ids local-names self phase
+                                                      add-defined-or-imported-id!))
             ;; Expand and evaluate RHS:
             (define-values (exp-rhs vals)
               (expand+eval-for-syntaxes-binding (m 'rhs) ids partial-body-ctx))
@@ -103,7 +114,13 @@
                         done-bodys))]
            [(#%require)
             (define m (parse-syntax exp-body '(#%require req ...)))
-            (parse-and-perform-requires (m 'req) m-ns phase)
+            (parse-and-perform-requires (m 'req) m-ns phase
+                                        add-defined-or-imported-id!)
+            (loop (cdr bodys)
+                  (cons (car bodys)
+                        done-bodys))]
+           [(#%provide)
+            ;; save for last pass
             (loop (cdr bodys)
                   (cons (car bodys)
                         done-bodys))]
@@ -111,15 +128,16 @@
             (loop (cdr bodys)
                   (cons (car bodys)
                         done-bodys))])])))
-      
+
+   ;; ------------------------------------------------------------
    ;; Pass 2: finish expanding
+   
    (define body-ctx (struct-copy expand-context partial-body-ctx
                                  [only-immediate? #f]
                                  [add-scope #f]))
    
-   
-   (define fully-expanded-bodys
-     (let loop ([bodys bodys] [done-bodys null])
+   (define expression-expanded-bodys
+     (let loop ([bodys partially-expanded-bodys] [done-bodys null])
        (cond
         [(null? bodys) (reverse done-bodys)]
         [else
@@ -131,7 +149,7 @@
                   (cons (rebuild (car bodys)
                                  `(,(m 'define-values) ,(m 'id) ,exp-rhs))
                         done-bodys))]
-           [(define-syntaxes #%require)
+           [(define-syntaxes #%require #%provide)
             (loop (cdr bodys)
                   (cons (car bodys)
                         done-bodys))]
@@ -139,7 +157,35 @@
             (loop (cdr bodys)
                   (cons (expand (car bodys) body-ctx)
                         done-bodys))])])))
+
+   ;; ------------------------------------------------------------
+   ;; Pass 3: resolve exports
    
+   (define fully-expanded-bodys
+     (let loop ([bodys expression-expanded-bodys] [done-bodys null])
+       (cond
+        [(null? bodys) (reverse done-bodys)]
+        [else
+         (case (core-form-sym (car bodys) phase)
+           [(#%provide)
+            (define m (parse-syntax (car bodys) '(#%provide spec ...)))
+            (define specs
+              (parse-and-expand-provides (m 'spec)
+                                         import-export
+                                         phase body-ctx
+                                         expand rebuild))
+            (loop (cdr bodys)
+                  (cons (rebuild (car bodys)
+                                 `(,(m '#%provide) ,@specs))
+                        done-bodys))]
+           [else
+            (loop (cdr bodys)
+                  (cons (car bodys)
+                        done-bodys))])])))
+           
+   ;; ------------------------------------------------------------
+   ;; Assemble the result
+
    (rebuild
     s
     `(,(m 'module) ,(m 'initial-import) ,@fully-expanded-bodys))))
@@ -151,7 +197,8 @@
     (when (resolve id phase #:exactly? #t)
       (error "identifier is already defined or imported:" id))))
 
-(define (select-local-names-and-bind ids local-names self phase)
+(define (select-local-names-and-bind ids local-names self phase
+                                     add-defined-or-imported-id!)
   (for/list ([id (in-list ids)])
     (define sym (syntax-e id))
     (define local-sym
@@ -163,7 +210,9 @@
                 (loop (add1 pos))
                 s))))
     (hash-set! local-names local-sym id)
-    (add-binding! id (module-binding self phase local-sym) phase)
+    (define b (module-binding self phase local-sym
+                              self phase local-sym
+                              0))
+    (add-binding! id b phase)
+    (add-defined-or-imported-id! id phase b)
     local-sym))
-
-;; ----------------------------------------
