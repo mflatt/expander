@@ -9,7 +9,9 @@
  
  identifier?
  
- syntax-property)
+ syntax-property
+ 
+ rebuild)
 
 (struct syntax (e      ; datum and nested syntax objects
                 scopes ; scopes that apply at all phases
@@ -71,3 +73,6 @@
        (raise-argument-error 'syntax-property "syntax" s))
      (struct-copy syntax s
                   [props (hash-set (syntax-props s) key val)])]))
+
+(define (rebuild orig-s new)
+  (datum->syntax orig-s new orig-s orig-s))

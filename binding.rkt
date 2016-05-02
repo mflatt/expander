@@ -20,11 +20,14 @@
  
  binding-lookup
  
+ add-local-binding!
+ 
  core-form-sym)
  
 (define (transformer? t) (procedure? t))
 (define (variable? t) (eq? t 'variable))
 
+;; see `identifier-binding` docs for information about these fields:
 (struct module-binding (module phase sym
                          nominal-module nominal-phase nominal-sym
                          nominal-import-phase)
@@ -75,6 +78,13 @@
    [(transformer? tr) tr]
    [(core-form? tr) tr]
    [else (lambda (s) (error "bad syntax: " id))]))
+
+;; ----------------------------------------
+
+(define (add-local-binding! id phase)
+  (define key (gensym))
+  (add-binding! id (local-binding key) phase)
+  key)
 
 ;; ----------------------------------------
 

@@ -105,7 +105,7 @@
                 (define m (parse-syntax exp-body '(define-values (id ...) rhs)))
                 (define ids (m 'id))
                 (check-ids-unbound ids phase)
-                (define keys (select-local-names-and-bind ids local-names self phase
+                (define syms (select-local-names-and-bind ids local-names self phase
                                                           add-defined-or-imported-id!))
                 (loop (cdr bodys)
                       (cons (car bodys) done-bodys))]
@@ -113,13 +113,13 @@
                 (define m (parse-syntax exp-body '(define-syntaxes (id ...) rhs)))
                 (define ids (m 'id))
                 (check-ids-unbound ids phase)
-                (define keys (select-local-names-and-bind ids local-names self phase
+                (define syms (select-local-names-and-bind ids local-names self phase
                                                           add-defined-or-imported-id!))
                 ;; Expand and evaluate RHS:
                 (define-values (exp-rhs vals)
                   (expand+eval-for-syntaxes-binding (m 'rhs) ids partial-body-ctx))
                 ;; Install transformers in the namespace for expansion:
-                (for ([key (in-list keys)]
+                (for ([key (in-list syms)]
                       [val (in-list vals)])
                   (namespace-set-transformer! m-ns phase key val))
                 (loop (cdr bodys)

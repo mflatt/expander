@@ -16,7 +16,7 @@
 
 (provide expand)
 
-;; exports are via "expand-sig.rkt"
+;; other exports are via "expand-sig.rkt"
 
 ;; ----------------------------------------
 
@@ -69,14 +69,18 @@
         s
         ((core-form-expander t) s ctx))]
    [(transformer? t)
+    ;; Apply transformer and expand again
     (define exp-s (parameterize ([current-expand-context ctx])
                     (t s)))
     (define next-s (if (expand-context-add-scope ctx)
                        (add-scope exp-s (expand-context-add-scope ctx))
                        exp-s))
     (expand next-s ctx)]
-   [(variable? t) s]
-   [else (error "unknown transformer for dispatch:" t)]))
+   [(variable? t)
+    ;; A reference to a variable expands to itself
+    s]
+   [else
+    (error "internal error: unknown transformer for dispatch:" t)]))
 
 (define (lookup b ctx id)
   (binding-lookup b
@@ -85,55 +89,6 @@
                   (expand-context-phase ctx)
                   id))
 
-;; ----------------------------------------
-
-(define (expand-transformer s ctx)
-  (expand s (struct-copy expand-context ctx
-                         [phase (add1 (expand-context-phase ctx))]
-                         [env empty-env]
-                         [only-immediate? #f]
-                         [add-scope #f]
-                         [current-module-scopes null])))
-
-;; ----------------------------------------
-
-(define core-scope (new-multi-scope))
-(define core-stx (add-scope empty-syntax core-scope))
-
-(define core-transformers #hasheq())
-(define core-primitives #hasheq())
-
-(define (add-core-form! sym proc)
-  (add-binding! (datum->syntax core-stx sym)
-                (module-binding '#%core 0 sym
-                                '#%core 0 sym
-                                0)
-                0)
-  (set! core-transformers (hash-set core-transformers
-                                    sym
-                                    proc)))
-
-(define (add-core-primitive! sym val)
-  (add-binding! (datum->syntax core-stx sym)
-                (module-binding '#%core 0 sym
-                                '#%core 0 sym
-                                0)
-                0)
-  (set! core-primitives (hash-set core-primitives
-                                  sym
-                                  val)))
-
-;; ----------------------------------------
-
-(define (add-local-binding! id phase)
-  (define key (gensym))
-  (add-binding! id (local-binding key) phase)
-  key)
-
-
-(define (rebuild orig-s new)
-  (datum->syntax orig-s new orig-s orig-s))
-  
 ;; ----------------------------------------
 
 (define (expand-body bodys sc s ctx)
@@ -248,6 +203,16 @@
        ,(finish-bodys))
      s)]))
 
+;; ----------------------------------------
+
+(define (expand-transformer s ctx)
+  (expand s (struct-copy expand-context ctx
+                         [phase (add1 (expand-context-phase ctx))]
+                         [env empty-env]
+                         [only-immediate? #f]
+                         [add-scope #f]
+                         [current-module-scopes null])))
+
 (define (expand+eval-for-syntaxes-binding rhs ids ctx)
   (define exp-rhs (expand-transformer rhs ctx))
   (values exp-rhs
@@ -273,19 +238,43 @@
 
 ;; ----------------------------------------
 
+;; Core forms are added by `expand-expr@`, etc.
+
+(define core-scope (new-multi-scope))
+(define core-stx (add-scope empty-syntax core-scope))
+
+(define core-transformers #hasheq())
+(define core-primitives #hasheq())
+
+(define (add-core-form! sym proc)
+  (add-core-binding! sym)
+  (set! core-transformers (hash-set core-transformers
+                                    sym
+                                    proc)))
+
+(define (add-core-primitive! sym val)
+  (add-core-binding! sym)
+  (set! core-primitives (hash-set core-primitives
+                                  sym
+                                  val)))
+
+(define (add-core-binding! sym)
+  (add-binding! (datum->syntax core-stx sym)
+                (module-binding '#%core 0 sym
+                                '#%core 0 sym
+                                0)
+                0))
+  
 (invoke-unit expand-expr@ (import expand^))
 (invoke-unit expand-module@ (import expand^))
 (invoke-unit expand-top-level@ (import expand^))
 
-;; ----------------------------------------
-
+;; This list will need to be a lot longer...
 (add-core-primitive! 'syntax-e syntax-e)
 (add-core-primitive! 'car car)
 (add-core-primitive! 'cdr cdr)
 (add-core-primitive! 'values values)
 (add-core-primitive! 'println println)
-
-;; ----------------------------------------
 
 (define core-module
   (make-module null
