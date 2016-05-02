@@ -11,7 +11,12 @@
  
  syntax-property)
 
-(struct syntax (e scopes shifted-multi-scopes srcloc props)
+(struct syntax (e      ; datum and nested syntax objects
+                scopes ; scopes that apply at all phases
+                shifted-multi-scopes ; scopes with a distinct identity at each phase
+                srcloc ; source location
+                props) ; properties
+        ;; Custom printer:
         #:property prop:custom-write
         (lambda (s port mode)
           (write-string "#<syntax:" port)

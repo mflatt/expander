@@ -20,13 +20,16 @@
          bound-identifier=?
          free-identifier=?)
 
+(struct scope (id          ; internal scope identity; used for sorting
+               bindings))  ; sym -> scope-set -> binding
+(struct representative-scope scope (owner   ; a multi-scope for which this one is a phase-specific identity
+                                    phase)) ; phase of this scope
+(struct multi-scope (scopes)) ; phase -> representative-scope
+(struct shifted-multi-scope (phase        ; phase shift applies to all scopes in multi-scope
+                             multi-scope) ; a multi-scope
+        #:transparent)
+
 (define id-counter 0)
-
-(struct scope (id bindings))
-(struct pseudo-scope scope (owner phase))
-(struct multi-scope (scopes))
-(struct shifted-multi-scope (phase multi-scope) #:transparent)
-
 (define (new-scope-id!)
   (set! id-counter (add1 id-counter))
   id-counter)
@@ -45,14 +48,17 @@
                        (shifted-multi-scope-multi-scope sms)))
 
 (define (multi-scope-to-scope-at-phase ms phase)
+  ;; Get the identity of `ms` at phase`
   (or (hash-ref (multi-scope-scopes ms) phase #f)
-      (let ([s (pseudo-scope (new-scope-id!) (make-bindings) ms phase)])
+      (let ([s (representative-scope (new-scope-id!) (make-bindings) ms phase)])
         (hash-set! (multi-scope-scopes ms) phase s)
         s)))
 
 (define (scope>? sc1 sc2)
   ((scope-id sc1) . > . (scope-id sc2)))
 
+;; FIXME: Adding, removing, or flipping a scope currently recurs
+;; through a syntax object eagerly, but it should be lazy
 (define (apply-scope s sc op)
   (cond
    [(syntax? s) (struct-copy syntax s
@@ -69,10 +75,13 @@
                     (apply-scope (cdr s) sc op))]
    [else s]))
 
+;; When a representative-scope is manipulated, we want to
+;; manipulate the multi scope, instead (at a particular
+;; phase shift)
 (define (generalize-scope sc)
-  (if (pseudo-scope? sc)
-      (shifted-multi-scope (pseudo-scope-phase sc)
-                           (pseudo-scope-owner sc))
+  (if (representative-scope? sc)
+      (shifted-multi-scope (representative-scope-phase sc)
+                           (representative-scope-owner sc))
       sc))
 
 (define (add-scope s sc)
