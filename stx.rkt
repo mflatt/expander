@@ -5,9 +5,13 @@
  empty-stx
  syntax?
  syntax-e
+ 
  syntax->datum
  datum->syntax
- identifier?)
+ 
+ identifier?
+ 
+ syntax-property)
 
 (struct stx (e scopes shifted-multi-scopes srcloc props)
         #:property prop:custom-write
@@ -58,3 +62,15 @@
 
 (define (identifier? s)
   (and (stx? s) (symbol? (stx-e s))))
+
+(define syntax-property
+  (case-lambda
+    [(s key)
+     (unless (stx? s)
+       (raise-argument-error 'syntax-property "syntax" s))
+     (hash-ref (stx-props s) key #f)]
+    [(s key val)
+     (unless (stx? s)
+       (raise-argument-error 'syntax-property "syntax" s))
+     (struct-copy stx s
+                  [props (hash-set (stx-props s) key val)])]))

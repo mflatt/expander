@@ -11,7 +11,7 @@
   (define m (namespace->module ns module-name))
   (unless m
     (error "module not declared:" module-name))
-  (define (bind-all exports)
+  (define (bind-all exports as-transformer?)
     (for ([(export-phase-level exports) (in-hash exports)])
       (define phase (+ phase-level export-phase-level))
       (for ([(sym binding) (in-hash exports)])
@@ -20,13 +20,13 @@
                                [nominal-phase export-phase-level]
                                [nominal-sym sym]
                                [nominal-import-phase phase-level]))
-        (let-values ([(sym) (filter b)])
+        (let-values ([(sym) (filter b as-transformer?)])
           (when sym
             (add-binding! (datum->syntax in-stx sym) b phase))))))
-  (bind-all (module-variable-exports m))
-  (bind-all (module-transformer-exports m)))
+  (bind-all (module-variable-exports m) #f)
+  (bind-all (module-transformer-exports m) #t))
 
-(define (default-filter binding)
+(define (default-filter binding trans?)
   (module-binding-nominal-sym binding))
 
 (define (stx-context-require/expansion-time! in-stx phase-level ns module-name

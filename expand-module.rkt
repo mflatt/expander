@@ -45,10 +45,10 @@
                 inside-scope))
 
    ;; To track imports and exports:
-   (define import-export (make-import-export-registry))
-   (define (add-defined-or-imported-id! id phase binding)
-     (register-defined-or-imported-id! import-export id phase binding))
-   
+   (define import-export (make-import-export-registry m-ns))
+   (define (add-defined-or-imported-id! id phase binding as-transformer?)
+     (register-defined-or-imported-id! import-export id phase binding as-transformer?))
+
    ;; Initial import:
    (perform-initial-require! initial-import
                              (apply-module-scopes (m 'initial-import))
@@ -91,7 +91,8 @@
             (define ids (m 'id))
             (check-ids-unbound ids phase)
             (define keys (select-local-names-and-bind ids local-names self phase
-                                                       add-defined-or-imported-id!))
+                                                       add-defined-or-imported-id!
+                                                       #f))
             (loop (cdr bodys)
                   (cons (car bodys) done-bodys))]
            [(define-syntaxes)
@@ -99,7 +100,8 @@
             (define ids (m 'id))
             (check-ids-unbound ids phase)
             (define keys (select-local-names-and-bind ids local-names self phase
-                                                      add-defined-or-imported-id!))
+                                                      add-defined-or-imported-id!
+                                                      #t))
             ;; Expand and evaluate RHS:
             (define-values (exp-rhs vals)
               (expand+eval-for-syntaxes-binding (m 'rhs) ids partial-body-ctx))
@@ -185,9 +187,12 @@
    ;; ------------------------------------------------------------
    ;; Assemble the result
 
-   (rebuild
-    s
-    `(,(m 'module) ,(m 'initial-import) ,@fully-expanded-bodys))))
+   (attach-import-export-properties
+    (rebuild
+     s
+     `(,(m 'module) ,(m 'initial-import) ,@fully-expanded-bodys))
+    import-export
+    self)))
 
 ;; ----------------------------------------
 
@@ -197,7 +202,8 @@
       (error "identifier is already defined or imported:" id))))
 
 (define (select-local-names-and-bind ids local-names self phase
-                                     add-defined-or-imported-id!)
+                                     add-defined-or-imported-id!
+                                     as-transformer?)
   (for/list ([id (in-list ids)])
     (define sym (syntax-e id))
     (define local-sym
@@ -213,5 +219,5 @@
                               self phase local-sym
                               0))
     (add-binding! id b phase)
-    (add-defined-or-imported-id! id phase b)
+    (add-defined-or-imported-id! id phase b as-transformer?)
     local-sym))

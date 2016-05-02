@@ -10,7 +10,8 @@
 (provide parse-and-expand-provides!
          
          make-import-export-registry
-         register-defined-or-imported-id!)
+         register-defined-or-imported-id!
+         attach-import-export-properties)
 
 (define layers '(raw phaseless id))
 
@@ -137,7 +138,8 @@
   (define b (resolve spec at-phase))
   (unless b
     (error "provided identifier is not defined or imported:" spec))
-  (register-export! ie sym at-phase b spec))
+  (define v (binding-lookup b empty-env (import-export-namespace ie) at-phase spec))
+  (register-export! ie sym at-phase b spec (not (eq? v 'variable))))
 
 (define (parse-struct! id:struct fields at-phase ie)
   (define (mk fmt)
@@ -167,8 +169,8 @@
   (parse-all-from-module (resolve-module-path mod-path) #f except-ids #f at-phase ie))
   
 (define (parse-all-from-module mod-path matching-stx except-ids prefix-sym at-phase ie)
-  (define ids+phases (register-extract-module-ids ie mod-path at-phase))
-  (unless ids+phases
+  (define importeds (register-extract-module-imports ie mod-path at-phase))
+  (unless importeds
     (error "no imports from module path:" mod-path "at phase:" at-phase))
   
   (define (add-prefix sym)
@@ -179,9 +181,9 @@
   (define found (make-hasheq))
   
   ;; Register all except excluded bindings:
-  (for ([id+phase (in-list ids+phases)])
-    (define id (car id+phase))
-    (define phase (cdr id+phase))
+  (for ([i (in-list importeds)])
+    (define id (imported-id i))
+    (define phase (imported-phase i))
     (unless (or (and matching-stx
                      ;; For `(all-defined-out)`, binding context must match:
                      (not (free-identifier=? id
@@ -190,15 +192,16 @@
                 (for/or ([except-id (in-list except-ids)])
                   (and (free-identifier=? id except-id phase)
                        (hash-set! found except-id #t))))
-      (register-export! ie (add-prefix (syntax-e id)) phase (resolve id phase) id)))
+      (register-export! ie (add-prefix (syntax-e id)) phase (resolve id phase) id
+                        (imported-as-transformer? i))))
   
   ;; Check that all exclusions matched something to exclude:
   (unless (= (hash-count found) (length except-ids))
     (for ([except-id (in-list except-ids)])
       (unless (or (hash-ref found except-id #f)
-                  (for/or ([id+phase (in-list ids+phases)])
-                    (define id (car id+phase))
-                    (define phase (cdr id+phase))
+                  (for/or ([i (in-list importeds)])
+                    (define id (imported-id i))
+                    (define phase (imported-phase i))
                     (free-identifier=? id except-id phase)))
         (error (if matching-stx
                    "excluded identifier was not defined in the module:"
@@ -207,46 +210,41 @@
 
 ;; ----------------------------------------
 
-(struct import-export (ids-to-binding  ; phase -> sym -> list of (cons id binding)
-                       module-to-ids   ; resolved-module-name-> import-phase -> list of (cons id phase)
-                       provided-syms)) ; phase -> sym -> module-binding
+(struct imported (id phase as-transformer?))
+(struct exported (binding as-transformer?))
 
-(define (make-import-export-registry)
-  (import-export (make-hasheqv)
+(struct import-export (namespace          ; a namespace used to determine whether an export is a transformer
+                       module-to-ids      ; resolved-module-name-> import-phase -> list of (cons id phase)
+                       phase-to-exports)) ; phase -> sym -> exported
+
+(define (make-import-export-registry ns)
+  (import-export ns
                  (make-hash)
                  (make-hasheqv)))
 
-(define (register-defined-or-imported-id! ie id phase binding)
+(define (register-defined-or-imported-id! ie id phase binding as-transformer?)
   (unless (equal? phase (phase+ (module-binding-nominal-phase binding)
                                 (module-binding-nominal-import-phase binding)))
     (error "internal error: binding phase does not match nominal info"))
-
-  (hash-update! (import-export-ids-to-binding ie)
-                phase
-                (lambda (at-phase)
-                  (hash-update at-phase
-                               (syntax-e id)
-                               (lambda (l) (cons (cons id binding) l))
-                               null))
-                #hasheq())
   
   (hash-update! (import-export-module-to-ids ie)
                 (module-binding-nominal-module binding)
                 (lambda (at-mod)
                   (hash-update at-mod
                                (module-binding-nominal-import-phase binding)
-                               (lambda (l) (cons (cons id phase) l))
+                               (lambda (l) (cons (imported id phase as-transformer?) l))
                                null))
                 #hasheqv()))
 
-(define (register-export! ie sym phase binding id)
-  (hash-update! (import-export-provided-syms ie)
+(define (register-export! ie sym phase binding id as-transformer?)
+  (hash-update! (import-export-phase-to-exports ie)
                 phase
                 (lambda (at-phase)
-                  (define b (hash-ref at-phase sym #f))
+                  (define e (hash-ref at-phase sym #f))
+                  (define b (and e (exported-binding e)))
                   (cond
-                   [(not b)
-                    (hash-set at-phase sym b)]
+                   [(not e)
+                    (hash-set at-phase sym (exported binding as-transformer?))]
                    [(and (equal? (module-binding-module b) (module-binding-module binding))
                          (eqv? (module-binding-phase b) (module-binding-phase binding))
                          (eq? (module-binding-sym b) (module-binding-sym binding)))
@@ -258,7 +256,35 @@
                     (error "identifier already provided as a different binding:" id)]))
                 #hasheq()))
 
-(define (register-extract-module-ids ie mod-path phase)
+(define (register-extract-module-imports ie mod-path phase)
   (define at-mod (hash-ref (import-export-module-to-ids ie) mod-path #f))
   (and at-mod
-       (hash-ref at-mod phase null)))
+       (hash-ref at-mod phase #f)))
+
+(define (attach-import-export-properties s ie self)
+  (define (sort-by-phase l)
+    (sort (filter (lambda (v) (pair? (cdr v))) l) < #:key car))
+  (define (extract-requires)
+    (define ht
+      (for/fold ([ht #hasheqv()]) ([(module-name ht) (in-hash (import-export-module-to-ids ie))])
+        (for/fold ([ht ht]) ([phase (in-hash-keys ht)])
+          (hash-update ht phase (lambda (s) (set-add s module-name)) (set)))))
+    (sort-by-phase (for/list ([(phase mods) (in-hash ht)])
+                     (cons phase (set->list mods)))))
+  (define (extract-provides as-transformer?)
+    (sort-by-phase
+     (for/list ([(phase ht) (in-hash (import-export-phase-to-exports ie))])
+       (cons
+        phase
+        (for/list ([(sym e) (in-hash ht)]
+                   #:when (eq? as-transformer? (exported-as-transformer? e)))
+          (define b (exported-binding e))
+          (vector sym
+                  (module-binding-module b)
+                  (module-binding-phase b)
+                  (module-binding-sym b)))))))
+  ;; These are not the original property shapes:
+  (let* ([s (syntax-property s 'module-requires (extract-requires))]
+         [s (syntax-property s 'module-variable-provides (extract-provides #f))]
+         [s (syntax-property s 'module-transformer-provides (extract-provides #t))])
+    s))
