@@ -21,8 +21,11 @@
   (values c
           (run-time-eval c)))
 
-(define (eval-expression e)
+(define (eval-expression e #:check [check-val #f])
   (define-values (c v) (compile+eval-expression e))
+  (when check-val
+    (unless (equal? v check-val)
+      (error "check failed")))
   v)
   
 (compile+eval-expression
@@ -47,8 +50,9 @@
     (let-values ([(z) 10])
       (begin z (if (m 10) 1 2))))))
 
-"expansion not captured; result is 'x-1"
+"expansion not captured"
 (eval-expression
+ #:check 'x-1
  '(let-values ([(x) 'x-1])
    (letrec-syntaxes+values
     ([(m) (lambda (stx) (quote-syntax x))])
@@ -56,8 +60,9 @@
     (let-values ([(x) 'x-3])
       (m)))))
 
-"non-capturing expansion; result is 'x-3"
+"non-capturing expansion"
 (eval-expression
+ #:check 'x-3
  '(let-values ([(x) 'x-1])
    (letrec-syntaxes+values
     ([(m) (lambda (stx)
@@ -71,8 +76,9 @@
     (let-values ([(x) 'x-3])
       (m x)))))
 
-"distinct generated variables; result is '(2 1)"
+"distinct generated variables"
 (eval-expression
+ #:check '(2 1)
  '(letrec-syntaxes+values
    ([(gen) (lambda (stx)
              (let-values ([(vals) (syntax-e (car (cdr (syntax-e stx))))]
@@ -101,8 +107,9 @@
    ()
    (gen (1 2) () ())))
 
-"use-site scopes ('ok instead of ambiguous)"
+"use-site scopes (so not ambiguous)"
 (eval-expression
+ #:check 'ok
  '((let-values ()
      (define-syntaxes (identity)
        (lambda (stx)
@@ -118,6 +125,7 @@
 
 "use-site scope remove from binding position"
 (eval-expression
+ #:check 'still-ok
  '(let-values ()
    (define-syntaxes (define-identity)
      (lambda (stx)
@@ -131,6 +139,7 @@
 "compile-time scopes pruned by `quote-syntax`"
 (syntax-context-require/expansion-time! demo-stx 2 (current-namespace) '#%core)
 (eval-expression
+ #:check 'bound
  '(letrec-syntaxes+values
    ([(m)
      (lambda (stx)
@@ -145,6 +154,26 @@
          (datum->syntax
           (quote-syntax here)
           (list 'let-values (list (list (list id1) ''bound))
+                id2))))])
+   ()
+   (m)))
+
+"`(quote-syntax .... #:local)` doesn't prune"
+(eval-expression
+ #:check 'bound-2
+ '(letrec-syntaxes+values
+   ([(m)
+     (lambda (stx)
+       (let-values ([(id1) (let-values ([(x) 1])
+                             (quote-syntax x #:local))]
+                    [(id2) (let-values ([(x) 1])
+                             (define-syntaxes (wrap)
+                               (lambda (stx) (car (cdr (syntax-e stx)))))
+                             (quote-syntax x #:local))])
+         (datum->syntax
+          (quote-syntax here)
+          (list 'let-values (list (list (list id1) ''bound-1)
+                                  (list (list id2) ''bound-2))
                 id2))))])
    ()
    (m)))

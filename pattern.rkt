@@ -47,6 +47,9 @@
       (cond
        [(null? s) null]
        [else (error "bad syntax:" orig-s)])]
+     [(and (keyword? pattern)
+           (eq? pattern s))
+      null]
      [else
       (error "bad pattern")]))
   (define a-list (parse orig-s pattern))

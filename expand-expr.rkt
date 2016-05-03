@@ -166,14 +166,21 @@
 (add-core-form!
  'quote-syntax
  (lambda (s ctx)
-   (define m (parse-syntax s '(quote-syntax datum)))
-   (define (prune-scopes s)
-     (for/fold ([s s]) ([sc (in-list (expand-context-scopes ctx))])
-       (remove-scope s sc)))
+   (define m-local (try-parse-syntax s '(quote-syntax datum #:local)))
+   (define m (or m-local
+                 (parse-syntax s '(quote-syntax datum))))
    (rebuild
     s
     `(,(m 'quote-syntax)
-      ,(prune-scopes (m 'datum))))))
+      ,(if m-local
+           ;; #:local means don't prune:
+           (m 'datum)
+           ;; otherwise, prune scopes up to transformer boundary:
+           (prune-scopes (m 'datum) ctx))))))
+
+(define (prune-scopes s ctx)
+  (for/fold ([s s]) ([sc (in-list (expand-context-scopes ctx))])
+    (remove-scope s sc)))
 
 (add-core-form!
  'if
