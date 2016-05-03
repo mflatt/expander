@@ -1,7 +1,6 @@
 This is a work-in-progress reimplementation of Racket's macro expander.
 
 TODO:
- module import instantion
  submodules
  top level
  module path indexes
