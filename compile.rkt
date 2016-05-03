@@ -24,7 +24,7 @@
         [(#f)
          (error "not a core form:" s)]
         [(module)
-         (define m (parse-syntax s '(module name import form ...)))
+         (define m (parse-syntax s '(module name initial-require form ...)))
          (compile-module (syntax-e (m 'name))
                          (syntax-property s 'module-requires)
                          (syntax-property s 'module-provides)

@@ -19,7 +19,7 @@
 (define layers '(raw raw/no-just-meta phaseless path))
 
 (define (parse-and-perform-requires! reqs m-ns phase-shift
-                                     add-defined-or-imported-id!)
+                                     add-defined-or-required-id!)
   (let loop ([reqs reqs]
              [top-req #f]
              [phase-shift phase-shift]
@@ -135,20 +135,20 @@
          (unless (module-path? mp)
            (error "bad require spec:" req))
          (perform-require! mp (or req top-req) m-ns phase-shift just-meta adjust
-                           add-defined-or-imported-id!)]))))
+                           add-defined-or-required-id!)]))))
 
 ;; ----------------------------------------
 
 (define (perform-initial-require! mod-path in-stx m-ns
-                                  add-defined-or-imported-id!)
+                                  add-defined-or-required-id!)
   (perform-require! mod-path in-stx m-ns
                     0 'all #f
-                    add-defined-or-imported-id!))
+                    add-defined-or-required-id!))
 
 ;; ----------------------------------------
         
 (define (perform-require! mod-path in-stx m-ns phase-shift just-meta adjust
-                          add-defined-or-imported-id!)
+                          add-defined-or-required-id!)
   (define module-name (resolve-module-path mod-path))
   (define bind-in-stx (if (adjust-rename? adjust)
                           (adjust-rename-to-id adjust)
@@ -158,11 +158,11 @@
    bind-in-stx phase-shift m-ns module-name
    #:filter (lambda (binding)
               (define sym (module-binding-nominal-sym binding))
-              (define export-phase (module-binding-nominal-phase binding))
+              (define provide-phase (module-binding-nominal-phase binding))
               (define adjusted-sym
                 (cond
                  [(and (not (eq? just-meta 'all))
-                       (not (equal? export-phase just-meta)))
+                       (not (equal? provide-phase just-meta)))
                   #f]
                  [(not adjust) sym]
                  [(adjust-only? adjust)
@@ -182,10 +182,10 @@
                        (adjust-rename-to-id adjust))]))
               (when adjusted-sym
                 (define s (datum->syntax bind-in-stx adjusted-sym))
-                (define bind-phase (phase+ phase-shift export-phase))
+                (define bind-phase (phase+ phase-shift provide-phase))
                 (when (resolve s bind-phase #:exactly? #t)
-                  (error "already imported or defined:" s))
-                (add-defined-or-imported-id! s bind-phase binding))
+                  (error "already required or defined:" s))
+                (add-defined-or-required-id! s bind-phase binding))
               adjusted-sym))
   ;; check that we covered all expected ids:
   (define need-syms (cond

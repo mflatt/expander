@@ -21,11 +21,11 @@
    (unless (eq? (expand-context-context ctx) 'top-level)
      (error "allowed only at the top level:" s))
    
-   (define m (parse-syntax s '(module id:module-name initial-import body ...)))
+   (define m (parse-syntax s '(module id:module-name initial-require body ...)))
    
-   (define initial-import (syntax->datum (m 'initial-import)))
-   (unless (module-path? initial-import)
-     (error "not a module path:" (m 'initial-import)))
+   (define initial-require (syntax->datum (m 'initial-require)))
+   (unless (module-path? initial-require)
+     (error "not a module path:" (m 'initial-require)))
    
    (define outside-scope (new-scope))
    (define inside-scope (new-multi-scope))
@@ -45,16 +45,16 @@
                            outside-scope)
                 inside-scope))
 
-   ;; To track imports and exports:
-   (define import-export (make-import-export-registry))
-   (define (add-defined-or-imported-id! id phase binding)
-     (register-defined-or-imported-id! import-export id phase binding))
+   ;; To track requires and provides:
+   (define require-provide (make-require-provide-registry))
+   (define (add-defined-or-required-id! id phase binding)
+     (register-defined-or-required-id! require-provide id phase binding))
 
-   ;; Initial import:
-   (perform-initial-require! initial-import
-                             (apply-module-scopes (m 'initial-import))
+   ;; Initial require:
+   (perform-initial-require! initial-require
+                             (apply-module-scopes (m 'initial-require))
                              m-ns
-                             add-defined-or-imported-id!)
+                             add-defined-or-required-id!)
    
    (define bodys (map apply-module-scopes (m 'body)))
 
@@ -106,7 +106,7 @@
                 (define ids (m 'id))
                 (check-ids-unbound ids phase)
                 (define syms (select-local-names-and-bind ids local-names self phase
-                                                          add-defined-or-imported-id!))
+                                                          add-defined-or-required-id!))
                 (loop (cdr bodys)
                       (cons (car bodys) done-bodys))]
                [(define-syntaxes)
@@ -114,7 +114,7 @@
                 (define ids (m 'id))
                 (check-ids-unbound ids phase)
                 (define syms (select-local-names-and-bind ids local-names self phase
-                                                          add-defined-or-imported-id!))
+                                                          add-defined-or-required-id!))
                 ;; Expand and evaluate RHS:
                 (define-values (exp-rhs vals)
                   (expand+eval-for-syntaxes-binding (m 'rhs) ids partial-body-ctx))
@@ -129,7 +129,7 @@
                [(#%require)
                 (define m (parse-syntax exp-body '(#%require req ...)))
                 (parse-and-perform-requires! (m 'req) m-ns phase
-                                             add-defined-or-imported-id!)
+                                             add-defined-or-required-id!)
                 (loop (cdr bodys)
                       (cons (car bodys)
                             done-bodys))]
@@ -176,7 +176,7 @@
        expression-expanded-bodys))
 
    ;; ------------------------------------------------------------
-   ;; Pass 3: resolve exports at all phases
+   ;; Pass 3: resolve provides at all phases
    
    (define fully-expanded-bodys
      (let loop ([bodys expression-expanded-bodys] [phase phase] [done-bodys null])
@@ -188,7 +188,7 @@
             (define m (parse-syntax (car bodys) '(#%provide spec ...)))
             (define specs
               (parse-and-expand-provides! (m 'spec)
-                                          import-export self
+                                          require-provide self
                                           phase ctx
                                           expand rebuild))
             (loop (cdr bodys)
@@ -212,11 +212,11 @@
    ;; ------------------------------------------------------------
    ;; Assemble the result
 
-   (attach-import-export-properties
+   (attach-require-provide-properties
     (rebuild
      s
-     `(,(m 'module) ,(m 'id:module-name) ,(m 'initial-import) ,@fully-expanded-bodys))
-    import-export
+     `(,(m 'module) ,(m 'id:module-name) ,(m 'initial-require) ,@fully-expanded-bodys))
+    require-provide
     self)))
 
 ;; ----------------------------------------
@@ -224,10 +224,10 @@
 (define (check-ids-unbound ids phase)
   (for ([id (in-list ids)])
     (when (resolve id phase #:exactly? #t)
-      (error "identifier is already defined or imported:" id))))
+      (error "identifier is already defined or required:" id))))
 
 (define (select-local-names-and-bind ids local-names self phase
-                                     add-defined-or-imported-id!)
+                                     add-defined-or-required-id!)
   (for/list ([id (in-list ids)])
     (define sym (syntax-e id))
     (define local-sym
@@ -243,7 +243,7 @@
                               self phase local-sym
                               0))
     (add-binding! id b phase)
-    (add-defined-or-imported-id! id phase b)
+    (add-defined-or-required-id! id phase b)
     local-sym))
 
 ;; ----------------------------------------

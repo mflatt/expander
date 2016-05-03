@@ -34,7 +34,7 @@
                 provides        ; phase-level -> sym -> binding
                 min-phase-level ; phase-level
                 max-phase-level ; phase-level
-                ;; expected to be consistent with exports and {min,max}-phase-level:
+                ;; expected to be consistent with provides and {min,max}-phase-level:
                 instantiate))  ; namespace phase phase-level ->
 
 (define (make-empty-namespace)
@@ -55,10 +55,10 @@
 (define (namespace->module ns name)
   (hash-ref (namespace-module-declarations ns) name #f))
 
-(define (make-module imports exports
+(define (make-module requires provides
                      min-phase-level max-phase-level
                      instantiate)
-  (module imports exports
+  (module requires provides
           min-phase-level max-phase-level
           instantiate))
 

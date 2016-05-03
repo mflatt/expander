@@ -32,7 +32,7 @@
 ;; see `identifier-binding` docs for information about these fields:
 (struct module-binding (module phase sym
                          nominal-module nominal-phase nominal-sym
-                         nominal-import-phase)
+                         nominal-require-phase)
         #:transparent)
 (struct local-binding (key))
 
