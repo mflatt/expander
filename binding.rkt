@@ -63,7 +63,7 @@
 
 ;; Helper for registering a local binding in a set of scopes:
 (define (add-local-binding! id phase)
-  (define key (gensym))
+  (define key (gensym (syntax-e id)))
   (add-binding! id (local-binding key) phase)
   key)
 
@@ -75,20 +75,25 @@
 (define (env-extend env key val)
   (hash-set env key val))
 
+;; `variable` is a token to represent a binding to a run-time variable
 (define variable (gensym))
 (define (variable? t) (eq? t variable))
 
+;; `unbound` is a token to represent the absence of a binding (which
+;; is not always an error) as a result from `binding-lookup`; a
+;; distinct token is needed so that it's distinct from all compile-time
+;; values
 (define unbound (gensym))
 (define (unbound? t) (eq? t unbound))
 
-;; The subset of compile-time values that are macro transformers:
+;; A subset of compile-time values are macro transformers
 (define (transformer? t) (procedure? t))
 
-;; The subset of compile-time values that are primitive forms:
+;; A subset of compile-time values are primitive forms
 (struct core-form (expander) #:transparent)
 
-;; Returns `variable`, a compile-time value, or `unbound` (for
-;; module-level bindings):
+;; Returns `variable`, a compile-time value, or `unbound` (only
+;; in the case of module-level bindings)
 (define (binding-lookup b env ns phase id)
   (cond
    [(module-binding? b)

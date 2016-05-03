@@ -138,6 +138,8 @@
  '#%datum
  (lambda (s ctx)
    (define m (parse-syntax s '(#%datum . datum)))
+   (when (keyword? (syntax-e (m 'datum)))
+     (error "keyword misused as an expression:" (m 'datum)))
    (define phase (expand-context-phase ctx))
    (rebuild
     s

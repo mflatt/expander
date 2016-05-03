@@ -13,7 +13,7 @@
                         namespace  ; namespace for modules and top-levels
                         env        ; environment for local bindings
                         only-immediate? ; #t => stop at core forms
-                        add-scope  ; scope to add to every expansion; #f if none
+                        post-expansion-scope  ; scope to add to every expansion; #f if none
                         ))
 
 (define current-expand-context (make-parameter

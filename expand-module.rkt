@@ -71,7 +71,7 @@
                                              [phase phase]
                                              [namespace m-ns]
                                              [only-immediate? #t]
-                                             [add-scope inside-scope]
+                                             [post-expansion-scope inside-scope]
                                              [module-scopes
                                               (list inside-scope outside-scope)]))
        
@@ -147,7 +147,7 @@
        
        (define body-ctx (struct-copy expand-context partial-body-ctx
                                      [only-immediate? #f]
-                                     [add-scope #f]))
+                                     [post-expansion-scope #f]))
        
        (define expression-expanded-bodys
          (let loop ([bodys partially-expanded-bodys] [done-bodys null])
