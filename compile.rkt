@@ -11,21 +11,19 @@
          expand-time-eval
          run-time-eval)
 
-(define empty-env #hasheq())
-
 (define phase-shift-id (gensym 'phase))
 (define ns-id (gensym 'namespace))
 
 ;; Convert an expanded syntax object to an expression that is represented
 ;; by a plain S-expression. The expression is compiled for a particular
 ;; phase, but if the expression is in a module, its phase can be shifted
-;; at run time by the amount bound to `phase-shift-id`.
+;; at run time by the amount bound to `phase-shift-id`. Module bindings
+;; are accessed through a namespace that is bound to `ns-id` at run time.
 (define (compile s
                  [phase 0]      ; phase (top level) or phase-level (within a module)
-                 [ns (current-namespace)]
-                 [env empty-env]
+                 [ns (current-namespace)] ; compile-time namespace
                  [self-name #f]) ; if non-#f, compiling the body of a module
-  (let ([compile (lambda (s) (compile s phase ns env self-name))])
+  (let ([compile (lambda (s) (compile s phase ns self-name))])
     (cond
      [(pair? (syntax-e s))
       (define core-sym (core-form-sym s phase))
@@ -41,12 +39,12 @@
                          ns)]
         [(lambda)
          (define m (parse-syntax s '(lambda formals body)))
-         `(lambda ,@(compile-lambda (m 'formals) (m 'body) phase ns env self-name))]
+         `(lambda ,@(compile-lambda (m 'formals) (m 'body) phase ns self-name))]
         [(case-lambda)
          (define m (parse-syntax s '(case-lambda [formals body] ...)))
          `(case-lambda ,@(for/list ([formals (in-list (m 'formals))]
                                [body (in-list (m 'body))])
-                      (compile-lambda formals body phase ns env self-name)))]
+                      (compile-lambda formals body phase ns self-name)))]
         [(#%app)
          (define m (parse-syntax s '(#%app . rest)))
          (for/list ([s (in-list (m 'rest))])
@@ -73,7 +71,7 @@
            ,(compile (m 'id))
            ,(compile (m 'rhs)))]
         [(let-values letrec-values)
-         (compile-let core-sym s phase ns env self-name)]
+         (compile-let core-sym s phase ns self-name)]
         [(quote)
          (define m (parse-syntax s '(quote datum)))
          `(quote ,(syntax->datum (m 'datum)))]
@@ -89,7 +87,7 @@
       (define b (resolve s phase))
       (cond
        [(local-binding? b)
-        (define sym (hash-ref env (local-binding-key b) #f))
+        (define sym (key->symbol (local-binding-key b)))
         (unless sym
           (error "missing a binding after expansion:" s))
         sym]
@@ -97,23 +95,26 @@
         (define mod-name (module-binding-module b))
         (cond
          [(equal? mod-name '#%core)
+          ;; Inline a core binding:
           (define m-ns (namespace->module-namespace ns mod-name phase))
           (or (namespace-get-variable m-ns (module-binding-phase b) (module-binding-sym b) #f)
-              (error "internal error: bad #%core reference:"  phase (module-binding-sym b) (module-binding-phase b)))]
+              (error "internal error: bad #%core reference:"
+                     phase (module-binding-sym b) (module-binding-phase b)))]
          [(equal? mod-name self-name)
+          ;; Direct reference to a variable defined in the same module:
           (module-binding-sym b)]
          [else
+          ;; Reference to a variable defined in another module:
           `(namespace-get-variable
             (namespace->module-namespace ,(if self-name
                                               ns-id
                                               ns)
                                          ',mod-name
-                                         ,(if self-name
-                                              `(+ ,phase-shift-id
-                                                ,(- phase
-                                                    (module-binding-phase b)))
-                                              (- phase
-                                                 (module-binding-phase b))))
+                                         ,(let ([phase (phase- phase
+                                                               (module-binding-phase b))])
+                                            (if self-name
+                                                `(+ ,phase-shift-id ,phase)
+                                                phase)))
             ,(module-binding-phase b)
             ',(module-binding-sym b)
             (lambda () (error "undefined:"
@@ -125,54 +126,29 @@
      [else
       (error "bad syntax after expansion:" s)])))
 
-(define (compile-lambda formals body phase ns env self-name)
+(define (compile-lambda formals body phase ns self-name)
   (define gen-formals
     (let loop ([formals formals])
       (cond
-       [(identifier? formals) (gensym (syntax-e formals))]
+       [(identifier? formals) (local->symbol formals phase)]
        [(syntax? formals) (loop (syntax-e formals))]
        [(pair? formals) (cons (loop (car formals))
                               (loop (cdr formals)))]
        [else null])))
-  (define body-env
-    (let loop ([formals formals]
-               [gen-formals gen-formals]
-               [env env])
-      (cond
-       [(identifier? formals)
-        (define b (resolve formals phase))
-        (unless (local-binding? b)
-          (error "bad binding:" formals))
-        (hash-set env (local-binding-key b) gen-formals)]
-       [(syntax? formals) (loop (syntax-e formals) gen-formals env)]
-       [(pair? formals)
-        (loop (cdr formals) (cdr gen-formals)
-              (loop (car formals) (car gen-formals) env))]
-       [else env])))
-  `(,gen-formals ,(compile body phase ns body-env self-name)))
+  `(,gen-formals ,(compile body phase ns self-name)))
 
-(define (compile-let core-sym s phase ns env self-name)
+(define (compile-let core-sym s phase ns self-name)
   (define rec? (eq? core-sym 'letrec-values))
   (define m (parse-syntax s '(let-values ([(id ...) rhs] ...) body)))
   (define sc (new-scope))
   (define idss (m 'id))
-  (define keyss (for/list ([ids (in-list idss)])
+  (define symss (for/list ([ids (in-list idss)])
                   (for/list ([id (in-list ids)])
-                    (define b (resolve id phase))
-                    (unless (local-binding? b)
-                      (error "bad binding:" id))
-                    (local-binding-key b))))
-  (define rec-env (for/fold ([env env]) ([ids (in-list idss)]
-                                         [keys (in-list keyss)])
-                    (for/fold ([env env]) ([id (in-list ids)]
-                                           [key (in-list keys)])
-                      (hash-set env key (gensym (syntax-e id))))))
-  `(,core-sym ,(for/list ([keys (in-list keyss)]
+                    (local->symbol id phase))))
+  `(,core-sym ,(for/list ([syms (in-list symss)]
                           [rhs (in-list (m 'rhs))])
-                 `[,(for/list ([key (in-list keys)])
-                      (hash-ref rec-env key))
-                   ,(compile rhs phase ns rec-env)])
-    ,(compile (m 'body) phase ns rec-env)))
+                 `[,syms ,(compile rhs phase ns self-name)])
+    ,(compile (m 'body) phase ns self-name)))
 
 ;; ----------------------------------------
                        
@@ -201,7 +177,7 @@
                   phase-to-body
                   phase
                   `(begin
-                    (define-values ,syms ,(compile (m 'rhs) phase ns empty-env self))
+                    (define-values ,syms ,(compile (m 'rhs) phase ns self))
                     ,@(for/list ([sym (in-list syms)])
                         `(namespace-set-variable! ,ns-id ,phase ',sym ,sym)))))]
           [(define-syntaxes)
@@ -212,7 +188,7 @@
                  (add-body
                   phase-to-body
                   (add1 phase)
-                  `(let-values ([,syms ,(compile (m 'rhs) (add1 phase) ns empty-env self)])
+                  `(let-values ([,syms ,(compile (m 'rhs) (add1 phase) ns self)])
                     ,@(for/list ([sym (in-list syms)])
                         `(namespace-set-transformer! ,ns-id ,(sub1 phase) ',sym ,sym)))))]
           [(begin-for-syntax)
@@ -230,7 +206,7 @@
                  (add-body
                   phase-to-body
                   phase
-                  (compile (car bodys) phase ns empty-env self)))])])))
+                  (compile (car bodys) phase ns self)))])])))
   
   (define-values (min-phase max-phase)
     (for/fold ([min-phase 0] [max-phase 0]) ([phase (in-hash-keys phase-to-bodys)])
@@ -251,7 +227,19 @@
              `[(,phase)
                ,@(reverse bodys)]))
        (void)))))
+
+;; ----------------------------------------
          
+(define (local->symbol id phase)
+  (define b (resolve id phase))
+  (unless (local-binding? b)
+    (error "bad binding:" id))
+  (key->symbol (local-binding-key b)))
+
+(define (key->symbol key)
+  ;; A local-binding key is already a symbol
+  key)
+ 
 (define (def-ids-to-syms ids phase)
   (for/list ([id (in-list ids)])
     (define b (resolve id phase))
