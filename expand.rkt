@@ -9,6 +9,7 @@
          "dup-check.rkt"
          "compile.rkt"
          "require.rkt"
+         "core.rkt"
          "expand-context.rkt"
          "expand-sig.rkt"
          "expand-expr.rkt"
@@ -39,7 +40,8 @@
      [else
       (define t (lookup binding ctx id))
       (cond
-       [(variable? t) (expand-implicit '#%app s ctx)]
+       [(or (variable? t) (unbound? t))
+        (expand-implicit '#%app s ctx)]
        [else (dispatch t s ctx)])])]
    [(pair? (syntax-e s))
     (expand-implicit '#%app s ctx)]
@@ -72,11 +74,13 @@
    [(transformer? t)
     ;; Apply transformer and expand again
     (expand (apply-transformer t s ctx) ctx)]
-   [(variable? t)
+   [(or (variable? t)
+        (unbound? t)) ;; treat unbound as variable (for top level)
     ;; A reference to a variable expands to itself
     s]
    [else
-    (error "internal error: unknown transformer for dispatch:" t)]))
+    ;; Some other compile-time value:
+    (error "illegal use of syntax:" t)]))
 
 (define (apply-transformer t s ctx)
   (define intro-scope (new-scope))
@@ -151,7 +155,7 @@
          (define keys (for/list ([id (in-list ids)])
                         (add-local-binding! id phase)))
          (define extended-env (for/fold ([env (expand-context-env body-ctx)]) ([key (in-list keys)])
-                                (env-extend env key 'variable)))
+                                (env-extend env key variable)))
          (loop (struct-copy expand-context body-ctx
                             [env extended-env])
                (cdr bodys)
@@ -172,7 +176,7 @@
          (define vals (eval-for-syntaxes-binding (m 'rhs) ids ctx))
          (define extended-env (for/fold ([env (expand-context-env body-ctx)]) ([key (in-list keys)]
                                                                                [val (in-list vals)])
-                                (env-extend env key (local-transformer val))))
+                                (env-extend env key val)))
          (loop (struct-copy expand-context body-ctx
                             [env extended-env])
                (cdr bodys)
@@ -233,8 +237,7 @@
      s)]))
 
 (define (remove-use-site-scopes s ctx)
-  (for/fold ([s s]) ([sc (in-list (unbox (expand-context-use-site-scopes ctx)))])
-    (remove-scope s sc)))
+  (remove-scopes s (unbox (expand-context-use-site-scopes ctx))))
 
 ;; ----------------------------------------
 
@@ -272,33 +275,6 @@
 
 ;; ----------------------------------------
 
-;; Core forms are added by `expand-expr@`, etc.
-
-(define core-scope (new-multi-scope))
-(define core-stx (add-scope empty-syntax core-scope))
-
-(define core-transformers #hasheq())
-(define core-primitives #hasheq())
-
-(define (add-core-form! sym proc)
-  (add-core-binding! sym)
-  (set! core-transformers (hash-set core-transformers
-                                    sym
-                                    proc)))
-
-(define (add-core-primitive! sym val)
-  (add-core-binding! sym)
-  (set! core-primitives (hash-set core-primitives
-                                  sym
-                                  val)))
-
-(define (add-core-binding! sym)
-  (add-binding! (datum->syntax core-stx sym)
-                (module-binding '#%core 0 sym
-                                '#%core 0 sym
-                                0)
-                0))
-  
 (invoke-unit expand-expr@ (import expand^))
 (invoke-unit expand-module@ (import expand^))
 (invoke-unit expand-top-level@ (import expand^))
@@ -314,23 +290,3 @@
 (add-core-primitive! 'values values)
 (add-core-primitive! 'println println)
 (add-core-primitive! 'random random)
-
-(define core-module
-  (make-module #hasheq()
-               (hasheqv 0 (for/hasheq ([sym (in-sequences
-                                             (in-hash-keys core-primitives)
-                                             (in-hash-keys core-transformers))])
-                            (values sym (module-binding '#%core 0 sym
-                                                        '#%core 0 sym
-                                                        0))))
-               0 1
-               (lambda (ns phase phase-level)
-                 (case phase-level
-                   [(0)
-                    (for ([(sym val) (in-hash core-primitives)])
-                      (namespace-set-variable! ns 0 sym val))]
-                   [(1)
-                    (for ([(sym proc) (in-hash core-transformers)])
-                      (namespace-set-transformer! ns 0 sym (core-form proc)))]))))
-
-(declare-module! (current-namespace) '#%core core-module)

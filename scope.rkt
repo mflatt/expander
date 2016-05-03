@@ -5,9 +5,9 @@
 
 (provide new-scope
          new-multi-scope
-         shift-multi-scope
          add-scope
          remove-scope
+         remove-scopes
          flip-scope
          
          syntax-shift-phase-level
@@ -18,6 +18,12 @@
          
          bound-identifier=?)
 
+;; A scope represents a distinct "dimension" of binding. We can attach
+;; the bindings for a set of scopes to an arbitrary scope in the set;
+;; we pick the most recently allocated scope to make a binding search
+;; faster and to improve GC, since non-nested binding contexts will
+;; generally not share a most-recent scope.
+
 (struct scope (id          ; internal scope identity; used for sorting
                bindings)   ; sym -> scope-set -> binding
         ;; Custom printer:
@@ -26,13 +32,28 @@
           (write-string "#<scope:" port)
           (display (scope-id sc) port)
           (write-string ">" port)))
+
+;; A "multi-scope" represents a group of scopes, each of which exists
+;; only at a specific phase, and each in a distinct phase. This
+;; infinite group of scopes is realized on demand. A multi-scope is
+;; used to represent the inside of a module, where bindings in
+;; different phases are distinguished by the different scopes within
+;; the module's multi-scope.
+;;
+;; To compute a syntax's set of scopes at a given phase, the
+;; phase-specific representative of the multi scope is combined with
+;; the phase-independent scopes. Since a multi-scope corresponds to
+;; a module, the number of multi-scopes in a syntax is expected to
+;; be small.
+(struct multi-scope (scopes)) ; phase -> representative-scope
 (struct representative-scope scope (owner   ; a multi-scope for which this one is a phase-specific identity
                                     phase)) ; phase of this scope
-(struct multi-scope (scopes)) ; phase -> representative-scope
 (struct shifted-multi-scope (phase        ; phase shift applies to all scopes in multi-scope
                              multi-scope) ; a multi-scope
         #:transparent)
 
+;; Each new scope increments the counter, so we can check whether one
+;; scope is newer than another.
 (define id-counter 0)
 (define (new-scope-id!)
   (set! id-counter (add1 id-counter))
@@ -46,12 +67,6 @@
 
 (define (new-multi-scope [name (gensym)])
   (shifted-multi-scope 0 (multi-scope (make-hasheqv))))
-
-(define (shift-multi-scope sms delta)
-  (if (zero? delta)
-      sms
-      (shifted-multi-scope (phase+ delta (shifted-multi-scope-phase sms))
-                           (shifted-multi-scope-multi-scope sms))))
 
 (define (multi-scope-to-scope-at-phase ms phase)
   ;; Get the identity of `ms` at phase`
@@ -96,6 +111,10 @@
 (define (remove-scope s sc)
   (apply-scope s (generalize-scope sc) set-remove))
 
+(define (remove-scopes s scs)
+  (for/fold ([s s]) ([sc (in-list scs)])
+    (remove-scope s sc)))
+
 (define (set-flip s e)
   (if (set-member? s e)
       (set-remove s e)
@@ -104,9 +123,20 @@
 (define (flip-scope s sc)
   (apply-scope s (generalize-scope sc) set-flip))
 
+;; To shift a syntax's phase, we only have to shift the phase
+;; of any phase-specific scopes. The bindings attached to a
+;; scope must be represented in such a s way that the binding
+;; shift is implicit via the phase in which the binding
+;; is resolved.
+(define (shift-multi-scope sms delta)
+  (if (zero? delta)
+      sms
+      (shifted-multi-scope (phase+ delta (shifted-multi-scope-phase sms))
+                           (shifted-multi-scope-multi-scope sms))))
+
 ;; FIXME: this should be lazy, too
 (define (syntax-shift-phase-level s phase)
-  (if (zero? phase) 
+  (if (eqv? phase 0)
       s
       (let loop ([s s])
         (cond
@@ -121,6 +151,8 @@
 
 ;; ----------------------------------------
 
+;; Assemble the complete set of scopes at a given phase by extracting
+;; a phase-specific representative from each multi-scope.
 (define (syntax-scope-set s phase)
   (for/fold ([scopes (syntax-scopes s)]) ([sms (in-set (syntax-shifted-multi-scopes s))])
     (set-add scopes (multi-scope-to-scope-at-phase (shifted-multi-scope-multi-scope sms)

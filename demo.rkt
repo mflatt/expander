@@ -5,9 +5,12 @@
          "expand-context.rkt"
          "expand.rkt"
          "require.rkt"
-         "compile.rkt")
+         "compile.rkt"
+         "core.rkt")
 
 ;; ----------------------------------------
+
+(declare-core-module! (current-namespace))
 
 (define demo-scope (new-multi-scope))
 (define demo-stx (add-scope empty-syntax demo-scope))
@@ -177,6 +180,19 @@
                 id2))))])
    ()
    (m)))
+
+"non-transformer binding misuse"
+(with-handlers ([exn:fail? (lambda (exn)
+                             (unless (regexp-match? #rx"illegal use of syntax"
+                                                    (exn-message exn))
+                               (error "wrong error"))
+                             'illegal-use)])
+  (expand (datum->syntax demo-stx
+                         '(letrec-syntaxes+values
+                           ([(v) 1])
+                           ()
+                           v)))
+  (error "shouldn't get here"))
 
 ;; ----------------------------------------
 

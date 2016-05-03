@@ -38,7 +38,7 @@
   (define keys (for/list ([id (in-list ids)])
                  (add-local-binding! id phase)))
   (define body-env (for*/fold ([env (expand-context-env ctx)]) ([key (in-list keys)])
-                     (env-extend env key 'variable)))
+                     (env-extend env key variable)))
   (define body-ctx (struct-copy expand-context ctx
                                 [env body-env]
                                 [scopes (cons sc (expand-context-scopes ctx))]))
@@ -102,12 +102,12 @@
    (define rec-val-env
      (for*/fold ([env (expand-context-env ctx)]) ([keys (in-list val-keyss)]
                                                   [key (in-list keys)])
-       (env-extend env key 'variable)))
+       (env-extend env key variable)))
    (define rec-env (for/fold ([env rec-val-env]) ([keys (in-list trans-keyss)]
                                                   [vals (in-list trans-valss)])
                      (for/fold ([env env]) ([key (in-list keys)]
                                             [val (in-list vals)])
-                       (env-extend env key (local-transformer val)))))
+                       (env-extend env key val))))
    (define rec-ctx (struct-copy expand-context ctx
                                 [env rec-env]
                                 [scopes (cons sc (expand-context-scopes ctx))]))
@@ -176,11 +176,7 @@
            ;; #:local means don't prune:
            (m 'datum)
            ;; otherwise, prune scopes up to transformer boundary:
-           (prune-scopes (m 'datum) ctx))))))
-
-(define (prune-scopes s ctx)
-  (for/fold ([s s]) ([sc (in-list (expand-context-scopes ctx))])
-    (remove-scope s sc)))
+           (remove-scopes (m 'datum) (expand-context-scopes ctx)))))))
 
 (add-core-form!
  'if
@@ -230,7 +226,9 @@
      (error "no binding for assignment:" s))
    (define t (lookup binding ctx s))
    (unless (variable? t)
-     (error "cannot assign to syntax:" s))
+     (if (unbound? t)
+         (error "cannot assign to unbound identifier:" s)
+         (error "cannot assign to syntax:" s)))
    (rebuild
     s
     (list (m 'set!)

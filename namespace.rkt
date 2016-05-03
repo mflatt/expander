@@ -19,9 +19,6 @@
          namespace-get-variable
          namespace-get-transformer)
 
-;; A "phase" is the phase at which a module is instantiated.
-;; A "phase level" is a phase relative to a module's body.
-
 (struct namespace (phases              ; phase-level -> definitions
                    module-declarations ; resolved-module-name -> module
                    module-instances))  ; (cons resolved-module-name phase) -> namespace

@@ -7,6 +7,7 @@
          "binding.rkt"
          "require.rkt"
          "expand-context.rkt"
+         "core.rkt"
          "module-path.rkt")
 
 (provide parse-and-expand-provides!

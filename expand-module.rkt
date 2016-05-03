@@ -6,6 +6,7 @@
          "binding.rkt"
          "require.rkt"
          "module-path.rkt"
+         "core.rkt"
          "expand-context.rkt"
          "expand-sig.rkt"
          "expand-require.rkt"

@@ -4,7 +4,8 @@
          "scope.rkt"
          "namespace.rkt"
          "binding.rkt"
-         "pattern.rkt")
+         "pattern.rkt"
+         "core.rkt")
 
 (provide compile
          expand-time-eval
@@ -15,7 +16,15 @@
 (define phase-shift-id (gensym 'phase))
 (define ns-id (gensym 'namespace))
 
-(define (compile s [phase 0] [ns (current-namespace)] [env empty-env] [self-name #f])
+;; Convert an expanded syntax object to an expression that is represented
+;; by a plain S-expression. The expression is compiled for a particular
+;; phase, but if the expression is in a module, its phase can be shifted
+;; at run time by the amount bound to `phase-shift-id`.
+(define (compile s
+                 [phase 0]      ; phase (top level) or phase-level (within a module)
+                 [ns (current-namespace)]
+                 [env empty-env]
+                 [self-name #f]) ; if non-#f, compiling the body of a module
   (let ([compile (lambda (s) (compile s phase ns env self-name))])
     (cond
      [(pair? (syntax-e s))
