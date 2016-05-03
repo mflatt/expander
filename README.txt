@@ -1,5 +1,7 @@
 This is a work-in-progress reimplementation of Racket's macro expander.
 
+See "demo.rkt" for examples.
+
 TODO:
  submodules
  top level

@@ -1,17 +1,14 @@
 #lang racket
 
 (provide
- (struct-out syntax)
+ (struct-out syntax) ; includes `syntax?` and `syntax-e`
  empty-syntax
+ identifier?
  
  syntax->datum
  datum->syntax
  
- identifier?
- 
- syntax-property
- 
- rebuild)
+ syntax-property)
 
 (struct syntax (e      ; datum and nested syntax objects
                 scopes ; scopes that apply at all phases
@@ -31,6 +28,9 @@
 
 (define empty-syntax
   (syntax #f empty-scopes empty-shifted-multi-scopes #f empty-props))
+
+(define (identifier? s)
+  (and (syntax? s) (symbol? (syntax-e s))))
 
 (define (syntax->datum s)
   (let loop ([s (syntax-e s)])
@@ -59,9 +59,6 @@
                           (datum->syntax stx-c (cdr s) stx-l stx-p)))]
    [else (wrap s)]))
 
-(define (identifier? s)
-  (and (syntax? s) (symbol? (syntax-e s))))
-
 (define syntax-property
   (case-lambda
     [(s key)
@@ -73,6 +70,3 @@
        (raise-argument-error 'syntax-property "syntax" s))
      (struct-copy syntax s
                   [props (hash-set (syntax-props s) key val)])]))
-
-(define (rebuild orig-s new)
-  (datum->syntax orig-s new orig-s orig-s))

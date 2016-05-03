@@ -1,8 +1,6 @@
-#lang racket/unit
-(require "expand-sig.rkt")
-
-(import expand^)
-(export)
+#lang racket/base
+(require "core.rkt"
+         "expand.rkt")
 
 (add-core-form!
  'define-values

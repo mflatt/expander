@@ -10,15 +10,17 @@
          "compile.rkt"
          "require.rkt"
          "core.rkt"
-         "expand-context.rkt"
-         "expand-sig.rkt"
-         "expand-expr.rkt"
-         "expand-module.rkt"
-         "expand-top-level.rkt")
+         "expand-context.rkt")
 
-(provide expand)
-
-;; other exports are via "expand-sig.rkt"
+(provide expand
+         expand-body
+         lookup
+         
+         expand+eval-for-syntaxes-binding
+         eval-for-syntaxes-binding
+         eval-for-bindings
+         
+         rebuild)
 
 ;; ----------------------------------------
 
@@ -275,18 +277,6 @@
 
 ;; ----------------------------------------
 
-(invoke-unit expand-expr@ (import expand^))
-(invoke-unit expand-module@ (import expand^))
-(invoke-unit expand-top-level@ (import expand^))
-
-;; This list will need to be a lot longer...
-(add-core-primitive! 'syntax-e syntax-e)
-(add-core-primitive! 'datum->syntax datum->syntax)
-(add-core-primitive! 'cons cons)
-(add-core-primitive! 'list list)
-(add-core-primitive! 'car car)
-(add-core-primitive! 'cdr cdr)
-(add-core-primitive! 'null? null?)
-(add-core-primitive! 'values values)
-(add-core-primitive! 'println println)
-(add-core-primitive! 'random random)
+;; A helper for forms to reconstruct syntax
+(define (rebuild orig-s new)
+  (datum->syntax orig-s new orig-s orig-s))

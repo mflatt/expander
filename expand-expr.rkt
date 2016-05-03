@@ -1,4 +1,4 @@
-#lang racket/unit
+#lang racket/base
 (require racket/set
          "syntax.rkt"
          "scope.rkt"
@@ -6,11 +6,9 @@
          "namespace.rkt"
          "binding.rkt"
          "dup-check.rkt"
+         "core.rkt"
          "expand-context.rkt"
-         "expand-sig.rkt")
-
-(import expand^)
-(export)
+         "expand.rkt")
 
 ;; ----------------------------------------
 

@@ -6,7 +6,8 @@
          "expand.rkt"
          "require.rkt"
          "compile.rkt"
-         "core.rkt")
+         "core.rkt"
+         "expander.rkt")
 
 ;; ----------------------------------------
 

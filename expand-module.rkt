@@ -1,4 +1,4 @@
-#lang racket/unit
+#lang racket/base
 (require "syntax.rkt"
          "scope.rkt"
          "pattern.rkt"
@@ -8,13 +8,10 @@
          "module-path.rkt"
          "core.rkt"
          "expand-context.rkt"
-         "expand-sig.rkt"
+         "expand.rkt"
          "expand-require.rkt"
          "expand-provide.rkt"
          "compile.rkt")
-
-(import expand^)
-(export)
 
 (add-core-form!
  'module
