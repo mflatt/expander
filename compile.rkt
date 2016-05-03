@@ -1,5 +1,6 @@
 #lang racket/base
 (require "syntax.rkt"
+         "phase.rkt"
          "scope.rkt"
          "namespace.rkt"
          "binding.rkt"
@@ -11,7 +12,7 @@
 
 (define empty-env #hasheq())
 
-(define phase-id (gensym 'phase))
+(define phase-shift-id (gensym 'phase))
 (define ns-id (gensym 'namespace))
 
 (define (compile s [phase 0] [ns (current-namespace)] [env empty-env] [self-name #f])
@@ -69,7 +70,10 @@
          `(quote ,(syntax->datum (m 'datum)))]
         [(quote-syntax)
          (define m (parse-syntax s '(quote datum)))
-         `(quote ,(m 'datum))]
+         (define q `(quote ,(m 'datum)))
+         (if self-name
+             `(syntax-shift-phase-level ,q ,phase-shift-id)
+             q)]
         [else
          (error "unrecognized core form:" core-sym)])]
      [(identifier? s)
@@ -86,7 +90,7 @@
          [(equal? mod-name '#%core)
           (define m-ns (namespace->module-namespace ns mod-name phase))
           (or (namespace-get-variable m-ns (module-binding-phase b) (module-binding-sym b) #f)
-              (error "internal error: bad #%core reference"))]
+              (error "internal error: bad #%core reference:"  phase (module-binding-sym b) (module-binding-phase b)))]
          [(equal? mod-name self-name)
           (module-binding-sym b)]
          [else
@@ -96,12 +100,17 @@
                                               ns)
                                          ',mod-name
                                          ,(if self-name
-                                              `(+ ,phase-id
-                                                ,(module-binding-nominal-import-phase b))
-                                              (module-binding-nominal-import-phase b)))
+                                              `(+ ,phase-shift-id
+                                                ,(- phase
+                                                    (module-binding-phase b)))
+                                              (- phase
+                                                 (module-binding-phase b))))
             ,(module-binding-phase b)
             ',(module-binding-sym b)
-            'undefined)])]
+            (lambda () (error "undefined:"
+                         ,phase
+                         ',(module-binding-sym b)
+                         ,(module-binding-phase b))))])]
        [else
         (error "not a reference to a local binding:" s)])]
      [else
@@ -185,7 +194,7 @@
                   `(begin
                     (define-values ,syms ,(compile (m 'rhs) phase ns empty-env self))
                     ,@(for/list ([sym (in-list syms)])
-                        `(namespace-set-variable! ,ns-id ,phase-id ',sym ,sym)))))]
+                        `(namespace-set-variable! ,ns-id ,phase ',sym ,sym)))))]
           [(define-syntaxes)
            (define m (parse-syntax (car bodys) '(define-syntaxes (id ...) rhs)))
            (define syms (def-ids-to-syms (m 'id) phase))
@@ -196,7 +205,7 @@
                   (add1 phase)
                   `(let-values ([,syms ,(compile (m 'rhs) (add1 phase) ns empty-env self)])
                     ,@(for/list ([sym (in-list syms)])
-                        `(namespace-set-transformer! ,ns-id (sub1 ,phase-id) ',sym ,sym)))))]
+                        `(namespace-set-transformer! ,ns-id ,(sub1 phase) ',sym ,sym)))))]
           [(begin-for-syntax)
            (define m (parse-syntax (car bodys) `(begin-for-syntax e ...)))
            (loop (cdr bodys)
@@ -227,12 +236,11 @@
      ,provides
      ,min-phase
      ,max-phase
-     (lambda (,ns-id ,phase-id ,phase-level-id)
+     (lambda (,ns-id ,phase-shift-id ,phase-level-id)
        (case ,phase-level-id
          ,@(for/list ([(phase bodys) (in-hash phase-to-bodys)])
              `[(,phase)
-               (let ([,phase-id (+ ,phase-id ,phase-level-id)])
-                 ,@(reverse bodys))]))
+               ,@(reverse bodys)]))
        (void)))))
          
 (define (def-ids-to-syms ids phase)
@@ -253,6 +261,7 @@
 (add-expand-time! 'current-namespace current-namespace)
 (add-expand-time! 'namespace->module-namespace namespace->module-namespace)
 (add-expand-time! 'namespace-get-variable namespace-get-variable)
+(add-expand-time! 'syntax-shift-phase-level syntax-shift-phase-level)
 
 (define run-time-namespace (make-base-namespace))
 (define (add-run-time! sym val)
@@ -265,6 +274,7 @@
 (add-run-time! 'namespace-set-transformer! namespace-set-transformer!)
 (add-run-time! 'namespace-get-variable namespace-get-variable)
 (add-run-time! 'namespace->module-namespace namespace->module-namespace)
+(add-run-time! 'syntax-shift-phase-level syntax-shift-phase-level)
 
 (define (expand-time-eval compiled)
   (eval compiled expand-time-namespace))

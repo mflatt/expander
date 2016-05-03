@@ -1,6 +1,7 @@
 #lang racket/base
 (require racket/set
          "syntax.rkt"
+         "phase.rkt"
          "scope.rkt"
          "pattern.rkt"
          "binding.rkt"
@@ -22,7 +23,7 @@
                                     expand rebuild)
   ;; returns a list of expanded specs while registering exports in `ie`
   (let loop ([specs specs]
-             [at-phase 0]
+             [at-phase phase]
              [protected? #f]
              [layer 'raw])
     (apply
@@ -41,77 +42,80 @@
           (define p (syntax-e (m 'phase-level)))
           (unless (phase? p)
             (error "bad phase:" spec))
-          (rebuild
-           spec
-           `(,(m 'for-meta) ,(m 'phase-level) ,@(loop (m 'spec)
-                                                      p
-                                                      protected?
-                                                      'phaseless)))]
+          (list
+           (rebuild
+            spec
+            `(,(m 'for-meta) ,(m 'phase-level) ,@(loop (m 'spec)
+                                                       (phase+ p at-phase)
+                                                       protected?
+                                                       'phaseless))))]
          [(for-syntax)
           (check-nested 'raw)
           (define m (parse-syntax spec '(for-syntax spec ...)))
           (rebuild
            spec
            `(,(m 'for-syntax) ,@(loop (m 'spec)
-                                      1
+                                      (phase+ 1 at-phase)
                                       protected?
                                       'phaseless)))]
          [(for-label)
           (check-nested 'raw)
           (define m (parse-syntax spec '(for-label spec ...)))
-          (rebuild spec `(,(m 'for-label) ,@(loop (m 'spec)
-                                                  #f
-                                                  protected?
-                                                  'phaseless)))]
+          (list
+           (rebuild spec `(,(m 'for-label) ,@(loop (m 'spec)
+                                                   #f
+                                                   protected?
+                                                   'phaseless))))]
          [(protect)
           (check-nested 'phaseless)
           (when protected?
             (error "invalid nesting:" spec))
           (define m (parse-syntax spec '(protect spec ...)))
-          (rebuild spec `(,(m 'protect) ,@(loop (m 'spec)
-                                                at-phase
-                                                #t
-                                                layer)))]
+          (list
+           (rebuild spec `(,(m 'protect) ,@(loop (m 'spec)
+                                                 at-phase
+                                                 #t
+                                                 layer))))]
          [(rename)
           (check-nested 'phaseless)
           (define m (parse-syntax spec '(rename id:<from id:to)))
           (parse-identifier! (m 'id:from) (syntax-e (m 'id:to)) at-phase ie)
-          spec]
+          (list spec)]
          [(struct)
           (check-nested 'phaseless)
           (define m (parse-syntax spec '(struct id:struct (id:field ...))))
           (parse-struct! (m 'id:struct) (m 'id:field) at-phase ie)
-          spec]
+          (list spec)]
          [(all-from)
           (check-nested 'phaseless)
           (define m (parse-syntax spec '(all-from mod-path)))
           (parse-all-from (m 'mod-path) null at-phase ie)
-          spec]
+          (list spec)]
          [(all-from-except)
           (check-nested 'phaseless)
           (define m (parse-syntax spec '(all-from-except mod-path id ...)))
           (parse-all-from (m 'mod-path) (m 'id) at-phase ie)
-          spec]
+          (list spec)]
          [(all-defined)
           (check-nested 'phaseless)
           (define m (parse-syntax spec '(all-defined)))
           (parse-all-from-module self spec null #f at-phase ie)
-          spec]
+          (list spec)]
          [(all-defined-except)
           (check-nested 'phaseless)
           (define m (parse-syntax spec '(all-defined-except id ...)))
           (parse-all-from-module self spec (m 'id) #f at-phase ie)
-          spec]
+          (list spec)]
          [(prefix-all-defined)
           (check-nested 'phaseless)
           (define m (parse-syntax spec '(prefix-all-defined id:prefix)))
           (parse-all-from-module self spec null (syntax-e (m 'id:prefix)) at-phase ie)
-          spec]
+          (list spec)]
          [(prefix-all-defined-except)
           (check-nested 'phaseless)
           (define m (parse-syntax spec '(prefix-all-defined-except id:prefix id ...)))
           (parse-all-from-module self spec (m 'id) (syntax-e (m 'id:prefix)) at-phase ie)
-          spec]
+          (list spec)]
          [(expand)
           (void (parse-syntax spec '(expand (id . datum))))
           (define m (parse-syntax spec '(expand form)))
@@ -129,8 +133,8 @@
          [else
           (cond
            [(identifier? spec)
-            (parse-identifier! spec (syntax-e spec) phase ie)
-            spec]
+            (parse-identifier! spec (syntax-e spec) at-phase ie)
+            (list spec)]
            [else
             (error "bad provide spec:" spec)])])))))
 
@@ -212,7 +216,7 @@
 
 (struct imported (id phase))
 
-(struct import-export (module-to-ids      ; resolved-module-name-> import-phase -> list of (cons id phase)
+(struct import-export (module-to-ids      ; resolved-module-name-> import-phase -> list of (imported id phase)
                        phase-to-exports)) ; phase -> sym -> binding
 
 (define (make-import-export-registry)
@@ -259,11 +263,13 @@
 
 (define (attach-import-export-properties s ie self)
   (define (extract-requires)
-    (define ht
-      (for/fold ([ht #hasheqv()]) ([(module-name ht) (in-hash (import-export-module-to-ids ie))])
-        (for/fold ([ht ht]) ([phase (in-hash-keys ht)])
-          (hash-update ht phase (lambda (s) (set-add s module-name)) (set)))))
-    (for/hasheqv ([(phase mods) (in-hash ht)])
+    (define mht
+      (for/fold ([mht #hasheqv()]) ([(module-name ht) (in-hash (import-export-module-to-ids ie))])
+        (for/fold ([mht mht]) ([phase (in-hash-keys ht)])
+          (if (eq? module-name self)
+              mht
+              (hash-update mht phase (lambda (s) (set-add s module-name)) (set))))))
+    (for/hasheqv ([(phase mods) (in-hash mht)])
       (values phase (set->list mods))))
   (let* ([s (syntax-property s 'module-requires (extract-requires))]
          [s (syntax-property s 'module-provides (import-export-phase-to-exports ie))])

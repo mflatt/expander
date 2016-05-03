@@ -1,6 +1,7 @@
 #lang racket/base
 (require racket/set
-         "syntax.rkt")
+         "syntax.rkt"
+         "phase.rkt")
 
 (provide new-scope
          new-multi-scope
@@ -15,10 +16,7 @@
          add-binding!
          resolve
          
-         phase?
-         phase+
-         bound-identifier=?
-         free-identifier=?)
+         bound-identifier=?)
 
 (struct scope (id          ; internal scope identity; used for sorting
                bindings))  ; sym -> scope-set -> binding
@@ -44,8 +42,10 @@
   (shifted-multi-scope 0 (multi-scope (make-hasheqv))))
 
 (define (shift-multi-scope sms delta)
-  (shifted-multi-scope (+ delta (shifted-multi-scope-phase sms))
-                       (shifted-multi-scope-multi-scope sms)))
+  (if (zero? delta)
+      sms
+      (shifted-multi-scope (phase+ delta (shifted-multi-scope-phase sms))
+                           (shifted-multi-scope-multi-scope sms))))
 
 (define (multi-scope-to-scope-at-phase ms phase)
   ;; Get the identity of `ms` at phase`
@@ -78,17 +78,17 @@
 ;; When a representative-scope is manipulated, we want to
 ;; manipulate the multi scope, instead (at a particular
 ;; phase shift)
-(define (generalize-scope sc)
+(define (generalize-scope sc s)
   (if (representative-scope? sc)
       (shifted-multi-scope (representative-scope-phase sc)
                            (representative-scope-owner sc))
       sc))
 
 (define (add-scope s sc)
-  (apply-scope s (generalize-scope sc) set-add))
+  (apply-scope s (generalize-scope sc s) set-add))
 
 (define (remove-scope s sc)
-  (apply-scope s (generalize-scope sc) set-remove))
+  (apply-scope s (generalize-scope sc s) set-remove))
 
 (define (set-flip s e)
   (if (set-member? s e)
@@ -98,6 +98,7 @@
 (define (flip-scope s sc)
   (apply-scope s (generalize-scope sc) set-flip))
 
+;; FIXME: this should be lazy, too
 (define (syntax-shift-phase-level s phase)
   (if (zero? phase) 
       s
@@ -107,8 +108,7 @@
                                    [e (loop (syntax-e s))]
                                    [shifted-multi-scopes
                                     (for/set ([sms (in-set (syntax-shifted-multi-scopes s))])
-                                      (shifted-multi-scope (+ phase (shifted-multi-scope-phase sms))
-                                                           (shifted-multi-scope-multi-scope sms)))])]
+                                      (shift-multi-scope sms phase))])]
          [(pair? s) (cons (loop (car s))
                           (loop (cdr s)))]
          [else s]))))
@@ -118,7 +118,8 @@
 (define (syntax-scope-set s phase)
   (for/fold ([scopes (syntax-scopes s)]) ([sms (in-set (syntax-shifted-multi-scopes s))])
     (set-add scopes (multi-scope-to-scope-at-phase (shifted-multi-scope-multi-scope sms)
-                                                   (- (shifted-multi-scope-phase sms) phase)))))
+                                                   (phase- (shifted-multi-scope-phase sms)
+                                                           phase)))))
 
 (define (add-binding-in-scopes! scopes sym binding)
   (when (set-empty? scopes)
@@ -170,13 +171,6 @@
 
 ;; ----------------------------------------
 
-(define (phase? v)
-  (or (not v)
-      (exact-integer? v)))
-
-(define (phase+ a b)
-  (and a b (+ a b)))
-
 (define (bound-identifier=? a b phase)
   (unless (identifier? a)
     (raise-argument-error 'bound-identifier=? "identifier?" a))
@@ -188,13 +182,3 @@
             (syntax-e b))
        (equal? (syntax-scope-set a phase)
                (syntax-scope-set b phase))))
-
-(define (free-identifier=? a b phase)
-  (unless (identifier? a)
-    (raise-argument-error 'free-identifier=? "identifier?" a))
-  (unless (identifier? b)
-    (raise-argument-error 'free-identifier=? "identifier?" b))
-  (unless (phase? phase)
-    (raise-argument-error 'free-identifier=? "phase?" phase))
-  (equal? (resolve a phase)
-          (resolve b phase)))

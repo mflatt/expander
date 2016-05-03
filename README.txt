@@ -4,9 +4,11 @@ TODO:
  module import instantion
  submodules
  top level
- module path indexes & shifting
+ module path indexes
  module resolver
+ lazy module instantiation
  lazy scope propagation
  rename transformers
  syntax-local-...
+ lift syntax objects with shifts
  compile to serializable form

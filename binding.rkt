@@ -2,12 +2,12 @@
 (require racket/set
          "syntax.rkt"
          "scope.rkt"
+         "phase.rkt"
          "namespace.rkt")
 
 (provide
  (struct-out module-binding)
  (struct-out local-binding)
- (struct-out top-level-binding)
 
  (struct-out core-form)
  (struct-out local-transformer)
@@ -19,6 +19,8 @@
  env-extend
  
  binding-lookup
+ 
+ free-identifier=?
  
  add-local-binding!
  
@@ -33,7 +35,6 @@
                          nominal-import-phase)
         #:transparent)
 (struct local-binding (key))
-(struct top-level-binding (module phase sym))
 
 (struct core-form (expander) #:transparent)
 (struct local-transformer (value))
@@ -48,7 +49,8 @@
    [(module-binding? b)
     (define m (namespace->module-namespace ns
                                            (module-binding-module b)
-                                           (module-binding-nominal-import-phase b)))
+                                           (- phase
+                                              (module-binding-phase b))))
     (lookup-in-namespace m (module-binding-phase b) (module-binding-sym b) id)]
    [(local-binding? b)
     (define l (hash-ref env
@@ -62,11 +64,6 @@
        [(transformer? tr) tr]
        [else (lambda (s) (error "bad syntax:" id))])]
      [else 'variable])]
-   [(top-level-binding? b)
-    (lookup-in-namespace ns
-                         (top-level-binding-phase b) 
-                         (top-level-binding-sym b)
-                         id)]
    [else (error "unknown binding for lookup:" b)]))
 
 (define not-found (gensym))
@@ -78,6 +75,31 @@
    [(transformer? tr) tr]
    [(core-form? tr) tr]
    [else (lambda (s) (error "bad syntax: " id))]))
+
+;; ----------------------------------------
+
+(define (free-identifier=? a b phase)
+  (unless (identifier? a)
+    (raise-argument-error 'free-identifier=? "identifier?" a))
+  (unless (identifier? b)
+    (raise-argument-error 'free-identifier=? "identifier?" b))
+  (unless (phase? phase)
+    (raise-argument-error 'free-identifier=? "phase?" phase))
+  (define ab (resolve a phase))
+  (define bb (resolve a phase))
+  (cond
+   [(module-binding? ab)
+    (and (module-binding? bb)
+         (eq? (module-binding-sym ab)
+              (module-binding-sym bb))
+         (eqv? (module-binding-phase ab)
+               (module-binding-phase bb))
+         (equal? (module-binding-module ab)
+                 (module-binding-module bb)))]
+   [(local-binding? ab)
+    (and (local-binding? bb)
+         (eq? (local-binding-key ab)
+              (local-binding-key bb)))]))
 
 ;; ----------------------------------------
 

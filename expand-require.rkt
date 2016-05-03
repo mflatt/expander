@@ -1,6 +1,7 @@
 #lang racket/base
 (require racket/set
          "syntax.rkt"
+         "phase.rkt"
          "scope.rkt"
          "binding.rkt"
          "pattern.rkt"
@@ -17,11 +18,11 @@
 
 (define layers '(raw raw/no-just-meta phaseless path))
 
-(define (parse-and-perform-requires! reqs m-ns phase
+(define (parse-and-perform-requires! reqs m-ns phase-shift
                                      add-defined-or-imported-id!)
   (let loop ([reqs reqs]
              [top-req #f]
-             [phase-shift 0]
+             [phase-shift phase-shift]
              [just-meta 'all]
              [adjust #f]
              [layer 'raw])
@@ -133,7 +134,7 @@
          (define mp (syntax->datum req))
          (unless (module-path? mp)
            (error "bad require spec:" req))
-         (perform-require! mp (or req top-req) m-ns phase phase-shift just-meta adjust
+         (perform-require! mp (or req top-req) m-ns phase-shift just-meta adjust
                            add-defined-or-imported-id!)]))))
 
 ;; ----------------------------------------
@@ -141,21 +142,20 @@
 (define (perform-initial-require! mod-path in-stx m-ns
                                   add-defined-or-imported-id!)
   (perform-require! mod-path in-stx m-ns
-                    0 0 'all #f
+                    0 'all #f
                     add-defined-or-imported-id!))
 
 ;; ----------------------------------------
         
-(define (perform-require! mod-path in-stx m-ns to-phase phase-shift just-meta adjust
+(define (perform-require! mod-path in-stx m-ns phase-shift just-meta adjust
                           add-defined-or-imported-id!)
   (define module-name (resolve-module-path mod-path))
   (define bind-in-stx (if (adjust-rename? adjust)
                           (adjust-rename-to-id adjust)
                           in-stx))
-  (define phase (phase+ to-phase phase-shift))
   (define done-syms (make-hash))
   (syntax-context-require/expansion-time!
-   bind-in-stx phase m-ns module-name
+   bind-in-stx phase-shift m-ns module-name
    #:filter (lambda (binding)
               (define sym (module-binding-nominal-sym binding))
               (define export-phase (module-binding-nominal-phase binding))
@@ -182,7 +182,7 @@
                        (adjust-rename-to-id adjust))]))
               (when adjusted-sym
                 (define s (datum->syntax bind-in-stx adjusted-sym))
-                (define bind-phase (phase+ phase export-phase))
+                (define bind-phase (phase+ phase-shift export-phase))
                 (when (resolve s bind-phase #:exactly? #t)
                   (error "already imported or defined:" s))
                 (add-defined-or-imported-id! s bind-phase binding))

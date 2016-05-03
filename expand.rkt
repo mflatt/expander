@@ -271,13 +271,15 @@
 
 ;; This list will need to be a lot longer...
 (add-core-primitive! 'syntax-e syntax-e)
+(add-core-primitive! 'datum->syntax datum->syntax)
 (add-core-primitive! 'car car)
 (add-core-primitive! 'cdr cdr)
 (add-core-primitive! 'values values)
 (add-core-primitive! 'println println)
+(add-core-primitive! 'random random)
 
 (define core-module
-  (make-module null
+  (make-module #hasheq()
                (hasheqv 0 (for/hasheq ([sym (in-sequences
                                              (in-hash-keys core-primitives)
                                              (in-hash-keys core-transformers))])

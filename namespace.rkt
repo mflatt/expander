@@ -1,4 +1,5 @@
 #lang racket/base
+(require "phase.rkt")
 
 (provide make-empty-namespace
          current-namespace
@@ -29,7 +30,7 @@
                      transformers   ; sym -> val
                      [instantiated? #:mutable]))
 
-(struct module (requires        ; phase -> resolved-module-name
+(struct module (requires        ; phase -> list of resolved-module-name
                 provides        ; phase-level -> sym -> binding
                 min-phase-level ; phase-level
                 max-phase-level ; phase-level
@@ -64,16 +65,25 @@
 (define (declare-module! ns name m)
   (hash-set! (namespace-module-declarations ns) name m))
 
-(define (namespace-module-instantiate! ns name phase phase-level)
-  (define m-ns (namespace->module-namespace ns name phase #:create? #t))
+(define (namespace-module-instantiate! ns name phase-shift [min-phase 0])
+  (define m-ns (namespace->module-namespace ns name phase-shift #:create? #t))
   (define m (namespace->module ns name))
-  (define defs (namespace->definitions m-ns phase-level))
-  (unless (definitions-instantiated? defs)
-    (set-definitions-instantiated?! defs #t)
-    ((module-instantiate m) m-ns phase phase-level)))
+  (for ([(req-phase mods) (in-hash (module-requires m))])
+    (for ([mod (in-list mods)])
+      (namespace-module-instantiate! ns mod
+                                     (phase+ phase-shift req-phase)
+                                     min-phase)))
+  (for ([phase-level (in-range (module-min-phase-level m)
+                               (add1 (module-max-phase-level m)))])
+    (define phase (phase+ phase-level phase-shift))
+    (when (phase . >= . min-phase)
+      (define defs (namespace->definitions m-ns phase-level))
+      (unless (definitions-instantiated? defs)
+        (set-definitions-instantiated?! defs #t)
+        ((module-instantiate m) m-ns phase-shift phase-level)))))
 
-(define (namespace-module-visit! ns name phase phase-level)
-  (namespace-module-instantiate! ns name phase (add1 phase-level)))
+(define (namespace-module-visit! ns name phase)
+  (namespace-module-instantiate! ns name phase 1))
 
 (define (namespace->module-namespace ns name phase #:create? [create? #f])
   (or (hash-ref (namespace-module-instances ns) (cons name phase) #f)
