@@ -36,7 +36,7 @@
                                        'self))
    
    (define enclosing-scopes
-     (expand-context-current-module-scopes ctx))
+     (expand-context-module-scopes ctx))
    (define (apply-module-scopes s)
      (define s-without-enclosing
        (for/fold ([s s]) ([sc (in-list enclosing-scopes)])
@@ -74,7 +74,7 @@
                                              [namespace m-ns]
                                              [only-immediate? #t]
                                              [add-scope inside-scope]
-                                             [current-module-scopes
+                                             [module-scopes
                                               (list inside-scope outside-scope)]))
        
        ;; Symbol picked for each binding in this module:

@@ -15,22 +15,139 @@
 (syntax-context-require! demo-stx 0 (current-namespace) '#%core)
 (syntax-context-require/expansion-time! demo-stx 1 (current-namespace) '#%core)
 
-(expand (datum->syntax demo-stx '(lambda (x) x)))
-(compile (expand (datum->syntax demo-stx '(case-lambda
-                                           [(x) (set! x 5)]
-                                           [(x y) (begin0 y x)]
-                                           [() (with-continuation-mark 1 2 3)]))))
-(compile (expand (datum->syntax demo-stx '(lambda (x) (define-values (y) x) y))))
-(compile (expand (datum->syntax demo-stx '(lambda (x)
-                                           (define-syntaxes (y) (lambda (stx) (quote-syntax 7)))
-                                           y))))
+(define (compile+eval-expression e)
+  (define c
+    (compile (expand (datum->syntax demo-stx e))))
+  (values c
+          (run-time-eval c)))
 
-(compile (expand (datum->syntax demo-stx '(let-values ([(z) 9])
-                                           (letrec-syntaxes+values
-                                            ([(m) (lambda (stx) (car (cdr (syntax-e stx))))])
-                                            ([(x) 5] [(y) (lambda (z) z)])
-                                            (let-values ([(z) 10])
-                                              (begin z (if (m 10) 1 2))))))))
+(define (eval-expression e)
+  (define-values (c v) (compile+eval-expression e))
+  v)
+  
+(compile+eval-expression
+ '(case-lambda
+   [(x) (set! x 5)]
+   [(x y) (begin0 y x)]
+   [() (with-continuation-mark 1 2 3)]))
+
+(compile+eval-expression
+ '(lambda (x) (define-values (y) x) y))
+
+(compile+eval-expression
+ '(lambda (x)
+   (define-syntaxes (y) (lambda (stx) (quote-syntax 7)))
+   y))
+
+(compile+eval-expression
+ '(let-values ([(z) 9])
+   (letrec-syntaxes+values
+    ([(m) (lambda (stx) (car (cdr (syntax-e stx))))])
+    ([(x) 5] [(y) (lambda (z) z)])
+    (let-values ([(z) 10])
+      (begin z (if (m 10) 1 2))))))
+
+"expansion not captured; result is 'x-1"
+(eval-expression
+ '(let-values ([(x) 'x-1])
+   (letrec-syntaxes+values
+    ([(m) (lambda (stx) (quote-syntax x))])
+    ()
+    (let-values ([(x) 'x-3])
+      (m)))))
+
+"non-capturing expansion; result is 'x-3"
+(eval-expression
+ '(let-values ([(x) 'x-1])
+   (letrec-syntaxes+values
+    ([(m) (lambda (stx)
+            (datum->syntax
+             #f
+             (list (quote-syntax let-values)
+                   (list (list (list (quote-syntax x))
+                               (quote-syntax 'x-2)))
+                   (car (cdr (syntax-e stx))))))])
+    ()
+    (let-values ([(x) 'x-3])
+      (m x)))))
+
+"distinct generated variables; result is '(2 1)"
+(eval-expression
+ '(letrec-syntaxes+values
+   ([(gen) (lambda (stx)
+             (let-values ([(vals) (syntax-e (car (cdr (syntax-e stx))))]
+                          [(binds) (syntax-e (car (cdr (cdr (syntax-e stx)))))]
+                          [(refs) (syntax-e (car (cdr (cdr (cdr (syntax-e stx))))))])
+               (datum->syntax
+                #f
+                (if (null? vals)
+                    (list (quote-syntax bind) binds refs)
+                    (list (quote-syntax gen)
+                          (cdr vals)
+                          (cons (list (list (quote-syntax x))
+                                      (car vals))
+                                binds)
+                          (cons (quote-syntax x)
+                                refs))))))]
+    [(bind) (lambda (stx)
+              (let-values ([(binds) (car (cdr (syntax-e stx)))]
+                           [(refs) (car (cdr (cdr (syntax-e stx))))])
+                (datum->syntax
+                 (quote-syntax here)
+                 (list (quote-syntax let-values)
+                       binds
+                       (cons (quote-syntax list)
+                             refs)))))])
+   ()
+   (gen (1 2) () ())))
+
+"use-site scopes ('ok instead of ambiguous)"
+(eval-expression
+ '((let-values ()
+     (define-syntaxes (identity)
+       (lambda (stx)
+         (let-values ([(misc-id) (car (cdr (syntax-e stx)))])
+           (datum->syntax
+            (quote-syntax here)
+            (list 'lambda '(x)
+                  (list 'let-values (list
+                                     (list (list misc-id) ''other))
+                        'x))))))
+     (identity x))
+   'ok))
+
+"use-site scope remove from binding position"
+(eval-expression
+ '(let-values ()
+   (define-syntaxes (define-identity)
+     (lambda (stx)
+       (let-values ([(id) (car (cdr (syntax-e stx)))])
+         (datum->syntax
+          (quote-syntax here)
+          (list 'define-values (list id) '(lambda (x) x))))))
+   (define-identity f)
+   (f 'still-ok)))
+
+"compile-time scopes pruned by `quote-syntax`"
+(syntax-context-require/expansion-time! demo-stx 2 (current-namespace) '#%core)
+(eval-expression
+ '(letrec-syntaxes+values
+   ([(m)
+     (lambda (stx)
+       (let-values ([(id1) (let-values ([(x) 1])
+                             (define-syntaxes (wrap) ; to provoke a use-site scope
+                               (lambda (stx) (car (cdr (syntax-e stx)))))
+                             (wrap (quote-syntax x)))]
+                    [(id2) (let-values ([(x) 1])
+                             (define-syntaxes (wrap)
+                               (lambda (stx) (car (cdr (syntax-e stx)))))
+                             (wrap (quote-syntax x)))])
+         (datum->syntax
+          (quote-syntax here)
+          (list 'let-values (list (list (list id1) ''bound))
+                id2))))])
+   ()
+   (m)))
 
 ;; ----------------------------------------
 
@@ -40,7 +157,7 @@
     (expand (datum->syntax demo-stx mod) 
             (struct-copy expand-context (current-expand-context)
                          [context 'top-level]
-                         [current-module-scopes (list demo-scope)])))))
+                         [module-scopes (list demo-scope)])))))
 
 (eval-module-declaration '(module m1 '#%core
                            (#%require (for-syntax '#%core))

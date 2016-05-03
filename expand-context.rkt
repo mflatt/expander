@@ -5,20 +5,24 @@
 (provide (struct-out expand-context)
          current-expand-context)
 
-(struct expand-context (context    ; 'expression, 'module, or 'top-level
+(struct expand-context (scopes     ; list of scopes that should be pruned by `quote-syntax`
+                        use-site-scopes ; #f or boxed list: scopes that should be pruned from binders
+                        module-scopes ; list of scopes for enclosing module ot top level
+                        context    ; 'expression, 'module, or 'top-level
                         phase      ; current expansion phase
                         namespace  ; namespace for modules and top-levels
                         env        ; environment for local bindings
                         only-immediate? ; #t => stop at core forms
                         add-scope  ; scope to add to every expansion; #f if none
-                        current-module-scopes ; list of scopes for enclosing module ot top level
                         ))
 
 (define current-expand-context (make-parameter
-                                (expand-context 'expression
+                                (expand-context null ; scopes
+                                                #f ; use-site scopes
+                                                null ; module-scopes
+                                                'expression
                                                 0
                                                 (current-namespace)
                                                 empty-env
                                                 #f
-                                                #f
-                                                null)))
+                                                #f)))

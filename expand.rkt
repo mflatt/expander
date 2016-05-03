@@ -1,5 +1,6 @@
 #lang racket/base
-(require racket/unit
+(require racket/set
+         racket/unit
          "syntax.rkt"
          "scope.rkt"
          "pattern.rkt"
@@ -70,17 +71,37 @@
         ((core-form-expander t) s ctx))]
    [(transformer? t)
     ;; Apply transformer and expand again
-    (define exp-s (parameterize ([current-expand-context ctx])
-                    (t s)))
-    (define next-s (if (expand-context-add-scope ctx)
-                       (add-scope exp-s (expand-context-add-scope ctx))
-                       exp-s))
-    (expand next-s ctx)]
+    (expand (apply-transformer t s ctx) ctx)]
    [(variable? t)
     ;; A reference to a variable expands to itself
     s]
    [else
     (error "internal error: unknown transformer for dispatch:" t)]))
+
+(define (apply-transformer t s ctx)
+  (define intro-scope (new-scope))
+  (define input-s (add-scope (maybe-add-use-site-scope s ctx)
+                             intro-scope))
+  (define output-s (parameterize ([current-expand-context ctx])
+                     (t input-s)))
+  (unless (syntax? output-s)
+    (error "transformer produced non-syntax:" output-s))
+  (define exp-s (flip-scope output-s intro-scope))
+  (if (expand-context-add-scope ctx)
+      (add-scope exp-s (expand-context-add-scope ctx))
+      exp-s))
+
+(define (maybe-add-use-site-scope s ctx)
+  (cond
+   [(expand-context-use-site-scopes ctx)
+    ;; We're in a recursive definition context where
+    ;; use-site scopes are needed. Create one, record 
+    ;; it, and add to the given syntax.
+    (define sc (new-scope))
+    (define b (expand-context-use-site-scopes ctx))
+    (set-box! b (cons sc (unbox b)))
+    (add-scope s sc)]
+   [else s]))
 
 (define (lookup b ctx id)
   (binding-lookup b
@@ -97,7 +118,11 @@
   (define phase (expand-context-phase ctx))
   (define body-ctx (struct-copy expand-context ctx
                                 [only-immediate? #t]
-                                [add-scope inside-sc]))
+                                [add-scope inside-sc]
+                                [scopes (list* outside-sc
+                                               inside-sc
+                                               (expand-context-scopes ctx))]
+                                [use-site-scopes (box null)]))
   (let loop ([body-ctx body-ctx]
              [bodys (for/list ([body (in-list bodys)])
                       (add-scope (add-scope (add-scope body sc) outside-sc) inside-sc))]
@@ -121,7 +146,7 @@
                dups)]
         [(define-values)
          (define m (parse-syntax exp-body '(define-values (id ...) rhs)))
-         (define ids (m 'id))
+         (define ids (remove-use-site-scopes (m 'id) body-ctx))
          (define new-dups (check-no-duplicate-ids ids phase exp-body dups))
          (define keys (for/list ([id (in-list ids)])
                         (add-local-binding! id phase)))
@@ -140,7 +165,7 @@
                new-dups)]
         [(define-syntaxes)
          (define m (parse-syntax exp-body '(define-syntaxes (id ...) rhs)))
-         (define ids (m 'id))
+         (define ids (remove-use-site-scopes (m 'id) body-ctx))
          (define new-dups (check-no-duplicate-ids ids phase exp-body dups))
          (define keys (for/list ([id (in-list ids)])
                         (add-local-binding! id phase)))
@@ -159,7 +184,7 @@
         [else
          (loop body-ctx
                (cdr bodys)
-               (cons (car bodys) done-bodys)
+               (cons exp-body done-bodys)
                trans-binds
                val-binds
                dups)])])))
@@ -178,6 +203,10 @@
   (define s-core-stx
     (syntax-shift-phase-level core-stx (expand-context-phase body-ctx)))
   (define finish-ctx (struct-copy expand-context body-ctx
+                                  [use-site-scopes #f]
+                                  [scopes (append
+                                           (unbox (expand-context-use-site-scopes body-ctx))
+                                           (expand-context-scopes body-ctx))]
                                   [only-immediate? #f]
                                   [add-scope #f]))
   (define (finish-bodys)
@@ -203,15 +232,20 @@
        ,(finish-bodys))
      s)]))
 
+(define (remove-use-site-scopes s ctx)
+  (for/fold ([s s]) ([sc (in-list (unbox (expand-context-use-site-scopes ctx)))])
+    (remove-scope s sc)))
+
 ;; ----------------------------------------
 
 (define (expand-transformer s ctx)
   (expand s (struct-copy expand-context ctx
+                         [scopes null]
                          [phase (add1 (expand-context-phase ctx))]
                          [env empty-env]
                          [only-immediate? #f]
                          [add-scope #f]
-                         [current-module-scopes null])))
+                         [module-scopes null])))
 
 (define (expand+eval-for-syntaxes-binding rhs ids ctx)
   (define exp-rhs (expand-transformer rhs ctx))
@@ -272,8 +306,11 @@
 ;; This list will need to be a lot longer...
 (add-core-primitive! 'syntax-e syntax-e)
 (add-core-primitive! 'datum->syntax datum->syntax)
+(add-core-primitive! 'cons cons)
+(add-core-primitive! 'list list)
 (add-core-primitive! 'car car)
 (add-core-primitive! 'cdr cdr)
+(add-core-primitive! 'null? null?)
 (add-core-primitive! 'values values)
 (add-core-primitive! 'println println)
 (add-core-primitive! 'random random)

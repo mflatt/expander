@@ -19,7 +19,13 @@
          bound-identifier=?)
 
 (struct scope (id          ; internal scope identity; used for sorting
-               bindings))  ; sym -> scope-set -> binding
+               bindings)   ; sym -> scope-set -> binding
+        ;; Custom printer:
+        #:property prop:custom-write
+        (lambda (sc port mode)
+          (write-string "#<scope:" port)
+          (display (scope-id sc) port)
+          (write-string ">" port)))
 (struct representative-scope scope (owner   ; a multi-scope for which this one is a phase-specific identity
                                     phase)) ; phase of this scope
 (struct multi-scope (scopes)) ; phase -> representative-scope
@@ -78,17 +84,17 @@
 ;; When a representative-scope is manipulated, we want to
 ;; manipulate the multi scope, instead (at a particular
 ;; phase shift)
-(define (generalize-scope sc s)
+(define (generalize-scope sc)
   (if (representative-scope? sc)
       (shifted-multi-scope (representative-scope-phase sc)
                            (representative-scope-owner sc))
       sc))
 
 (define (add-scope s sc)
-  (apply-scope s (generalize-scope sc s) set-add))
+  (apply-scope s (generalize-scope sc) set-add))
 
 (define (remove-scope s sc)
-  (apply-scope s (generalize-scope sc s) set-remove))
+  (apply-scope s (generalize-scope sc) set-remove))
 
 (define (set-flip s e)
   (if (set-member? s e)
@@ -162,7 +168,7 @@
    [max-candidate
     (for ([c (in-list candidates)])
       (unless (subset? (car c) (car max-candidate))
-        (error "ambiguous:" s)))
+        (error "ambiguous:" s scopes)))
     (and (or (not exactly?)
              (equal? (set-count scopes)
                      (set-count (car max-candidate))))
