@@ -55,168 +55,266 @@
                              add-defined-or-required-id!)
    
    (define bodys (map apply-module-scopes (m 'body)))
-
+   
    (define phase 0)
    
-   ;; Phases 1 and 2 are nested via `begin-for-syntax`:
-   (define expression-expanded-bodys
-     (let phase-1-and-2-loop ([bodys bodys] [phase phase])
+   ;; The primitive `#%module-body` form calls this function to expand the
+   ;; current module's body
+   (define (module-begin-k mb ctx)
+     (define m (match-syntax mb '(#%module-begin body ...)))
+     
+     ;; In case the module body is expanded multiple times, we clear
+     ;; the set of provides each time (but we accumulate requires, since those
+     ;; may have been used for earlier expansions)
+     (reset-provides! require-provide)
+     
+     ;; In case `#%module-begin` expansion is forced on syntax that
+     ;; that wasn't already introduced into the mdoule's inside scope,
+     ;; add it to all the given body forms
+     (define bodys
+       (for/list ([body (in-list (m 'body))])
+         (add-scope body inside-scope)))
+     
+     ;; The expansion of the module body happens in 3 passes:
+     ;;  Pass 1: Partial expansion to determine imports and definitions
+     ;;  Pass 2: Complete expansion of remaining expressions
+     ;;  Pass 3: Parsing of provide forms
+     
+     ;; Passes 1 and 2 are nested via `begin-for-syntax`:
+     (define expression-expanded-bodys
+       (let phase-1-and-2-loop ([bodys bodys] [phase phase])
 
-       ;; ------------------------------------------------------------
-       ;; Pass 1: partially expand to discover all bindings and install all 
-       ;; defined macro transformers
-       
-       (define partial-body-ctx (struct-copy expand-context ctx
-                                             [context 'module]
-                                             [phase phase]
-                                             [namespace m-ns]
-                                             [only-immediate? #t]
-                                             [post-expansion-scope inside-scope]
-                                             [module-scopes
-                                              (list inside-scope outside-scope)]))
-       
-       ;; Symbol picked for each binding in this module:
-       (define local-names (make-hasheq))
+         ;; ------------------------------------------------------------
+         ;; Pass 1: partially expand to discover all bindings and install all 
+         ;; defined macro transformers
+         
+         (define partial-body-ctx (struct-copy expand-context ctx
+                                               [context 'module]
+                                               [phase phase]
+                                               [namespace m-ns]
+                                               [only-immediate? #t]
+                                               [post-expansion-scope inside-scope]
+                                               [module-scopes
+                                                (list inside-scope outside-scope)]))
+         
+         ;; Symbol picked for each binding in this module:
+         (define local-names (make-hasheq))
 
-       (define partially-expanded-bodys
-         (let loop ([bodys bodys] [done-bodys null])
-           (cond
-            [(null? bodys) (reverse done-bodys)]
-            [else
-             (define exp-body (expand (car bodys) partial-body-ctx))
-             (case (core-form-sym exp-body phase)
-               [(begin)
-                (define m (match-syntax exp-body '(begin e ...)))
-                (loop (append (m 'e) (cdr bodys))
-                      done-bodys)]
-               [(begin-for-syntax)
-                (define m (match-syntax exp-body '(begin-for-syntax e ...)))
-                (define nested-bodys (phase-1-and-2-loop (m 'e) (add1 phase)))
-                (eval-nested-bodys nested-bodys (add1 phase) m-ns self)
-                (loop (cdr bodys)
-                      (cons
-                       (rebuild
-                        s
-                        `(,(m 'begin-for-syntax) ,@nested-bodys))
-                       done-bodys))]
-               [(define-values)
-                (define m (match-syntax exp-body '(define-values (id ...) rhs)))
-                (define ids (m 'id))
-                (check-ids-unbound ids phase)
-                (define syms (select-local-names-and-bind ids local-names self phase
-                                                          add-defined-or-required-id!))
-                (loop (cdr bodys)
-                      (cons (car bodys) done-bodys))]
-               [(define-syntaxes)
-                (define m (match-syntax exp-body '(define-syntaxes (id ...) rhs)))
-                (define ids (m 'id))
-                (check-ids-unbound ids phase)
-                (define syms (select-local-names-and-bind ids local-names self phase
-                                                          add-defined-or-required-id!))
-                ;; Expand and evaluate RHS:
-                (define-values (exp-rhs vals)
-                  (expand+eval-for-syntaxes-binding (m 'rhs) ids partial-body-ctx))
-                ;; Install transformers in the namespace for expansion:
-                (for ([key (in-list syms)]
-                      [val (in-list vals)])
-                  (namespace-set-transformer! m-ns phase key val))
-                (loop (cdr bodys)
-                      (cons (rebuild (car bodys)
-                                     `(,(m 'define-syntaxes) ,ids ,exp-rhs))
-                            done-bodys))]
-               [(#%require)
-                (define m (match-syntax exp-body '(#%require req ...)))
-                (parse-and-perform-requires! (m 'req) m-ns phase
-                                             add-defined-or-required-id!)
-                (loop (cdr bodys)
-                      (cons (car bodys)
-                            done-bodys))]
-               [(#%provide)
-                ;; save for last pass
-                (loop (cdr bodys)
-                      (cons (car bodys)
-                            done-bodys))]
-               [else
-                ;; save expression for next pass
-                (loop (cdr bodys)
-                      (cons (car bodys)
-                            done-bodys))])])))
+         (define partially-expanded-bodys
+           (let loop ([bodys bodys] [done-bodys null])
+             (cond
+              [(null? bodys) (reverse done-bodys)]
+              [else
+               (define exp-body (expand (car bodys) partial-body-ctx))
+               (case (core-form-sym exp-body phase)
+                 [(begin)
+                  (define m (match-syntax exp-body '(begin e ...)))
+                  (loop (append (m 'e) (cdr bodys))
+                        done-bodys)]
+                 [(begin-for-syntax)
+                  (define m (match-syntax exp-body '(begin-for-syntax e ...)))
+                  (define nested-bodys (phase-1-and-2-loop (m 'e) (add1 phase)))
+                  (eval-nested-bodys nested-bodys (add1 phase) m-ns self)
+                  (loop (cdr bodys)
+                        (cons
+                         (rebuild
+                          s
+                          `(,(m 'begin-for-syntax) ,@nested-bodys))
+                         done-bodys))]
+                 [(define-values)
+                  (define m (match-syntax exp-body '(define-values (id ...) rhs)))
+                  (define ids (m 'id))
+                  (check-ids-unbound ids phase)
+                  (define syms (select-local-names-and-bind ids local-names self phase
+                                                            add-defined-or-required-id!))
+                  (loop (cdr bodys)
+                        (cons (car bodys) done-bodys))]
+                 [(define-syntaxes)
+                  (define m (match-syntax exp-body '(define-syntaxes (id ...) rhs)))
+                  (define ids (m 'id))
+                  (check-ids-unbound ids phase)
+                  (define syms (select-local-names-and-bind ids local-names self phase
+                                                            add-defined-or-required-id!))
+                  ;; Expand and evaluate RHS:
+                  (define-values (exp-rhs vals)
+                    (expand+eval-for-syntaxes-binding (m 'rhs) ids partial-body-ctx))
+                  ;; Install transformers in the namespace for expansion:
+                  (for ([key (in-list syms)]
+                        [val (in-list vals)])
+                    (namespace-set-transformer! m-ns phase key val))
+                  (loop (cdr bodys)
+                        (cons (rebuild (car bodys)
+                                       `(,(m 'define-syntaxes) ,ids ,exp-rhs))
+                              done-bodys))]
+                 [(#%require)
+                  (define m (match-syntax exp-body '(#%require req ...)))
+                  (parse-and-perform-requires! (m 'req) m-ns phase
+                                               add-defined-or-required-id!)
+                  (loop (cdr bodys)
+                        (cons (car bodys)
+                              done-bodys))]
+                 [(#%provide)
+                  ;; save for last pass
+                  (loop (cdr bodys)
+                        (cons (car bodys)
+                              done-bodys))]
+                 [else
+                  ;; save expression for next pass
+                  (loop (cdr bodys)
+                        (cons (car bodys)
+                              done-bodys))])])))
 
-       ;; ------------------------------------------------------------
-       ;; Pass 2: finish expanding expressions
-       
-       (define body-ctx (struct-copy expand-context partial-body-ctx
-                                     [only-immediate? #f]
-                                     [post-expansion-scope #f]))
-       
-       (define expression-expanded-bodys
-         (let loop ([bodys partially-expanded-bodys] [done-bodys null])
-           (cond
-            [(null? bodys) (reverse done-bodys)]
-            [else
-             (case (core-form-sym (car bodys) phase)
-               [(define-values)
-                (define m (match-syntax (car bodys) '(define-values (id ...) rhs)))
-                (define exp-rhs (expand (m 'rhs) body-ctx))
-                (loop (cdr bodys)
-                      (cons (rebuild (car bodys)
-                                     `(,(m 'define-values) ,(m 'id) ,exp-rhs))
-                            done-bodys))]
-               [(define-syntaxes #%require #%provide begin-for-syntax)
-                (loop (cdr bodys)
-                      (cons (car bodys)
-                            done-bodys))]
-               [else
-                (loop (cdr bodys)
-                      (cons (expand (car bodys) body-ctx)
-                            done-bodys))])])))
-       
-       expression-expanded-bodys))
+         ;; ------------------------------------------------------------
+         ;; Pass 2: finish expanding expressions
+         
+         (define body-ctx (struct-copy expand-context partial-body-ctx
+                                       [only-immediate? #f]
+                                       [post-expansion-scope #f]))
+         
+         (define expression-expanded-bodys
+           (let loop ([bodys partially-expanded-bodys] [done-bodys null])
+             (cond
+              [(null? bodys) (reverse done-bodys)]
+              [else
+               (case (core-form-sym (car bodys) phase)
+                 [(define-values)
+                  (define m (match-syntax (car bodys) '(define-values (id ...) rhs)))
+                  (define exp-rhs (expand (m 'rhs) body-ctx))
+                  (loop (cdr bodys)
+                        (cons (rebuild (car bodys)
+                                       `(,(m 'define-values) ,(m 'id) ,exp-rhs))
+                              done-bodys))]
+                 [(define-syntaxes #%require #%provide begin-for-syntax)
+                  (loop (cdr bodys)
+                        (cons (car bodys)
+                              done-bodys))]
+                 [else
+                  (loop (cdr bodys)
+                        (cons (expand (car bodys) body-ctx)
+                              done-bodys))])])))
+         
+         expression-expanded-bodys))
+
+     ;; ------------------------------------------------------------
+     ;; Pass 3: resolve provides at all phases
+     
+     (define fully-expanded-bodys
+       (let loop ([bodys expression-expanded-bodys] [phase phase] [done-bodys null])
+         (cond
+          [(null? bodys) (reverse done-bodys)]
+          [else
+           (case (core-form-sym (car bodys) phase)
+             [(#%provide)
+              (define m (match-syntax (car bodys) '(#%provide spec ...)))
+              (define specs
+                (parse-and-expand-provides! (m 'spec)
+                                            require-provide self
+                                            phase ctx
+                                            expand rebuild))
+              (loop (cdr bodys)
+                    phase
+                    (cons (rebuild (car bodys)
+                                   `(,(m '#%provide) ,@specs))
+                          done-bodys))]
+             [(begin-for-syntax)
+              (define m (match-syntax (car bodys) '(begin-for-syntax e ...)))
+              (define nested-bodys (loop (m 'e) (add1 phase) null))
+              (loop (cdr bodys)
+                    phase
+                    (cons (rebuild s `(,(m 'begin-for-syntax) ,@nested-bodys))
+                          done-bodys))]
+             [else
+              (loop (cdr bodys)
+                    phase
+                    (cons (car bodys)
+                          done-bodys))])])))
+     
+     ;; Assemble the module-body result:
+     (rebuild
+      mb
+      `(,(m '#%module-body) ,@fully-expanded-bodys)))
 
    ;; ------------------------------------------------------------
-   ;; Pass 3: resolve provides at all phases
+   ;; Actually expand the `#%module-body` form
    
-   (define fully-expanded-bodys
-     (let loop ([bodys expression-expanded-bodys] [phase phase] [done-bodys null])
-       (cond
-        [(null? bodys) (reverse done-bodys)]
-        [else
-         (case (core-form-sym (car bodys) phase)
-           [(#%provide)
-            (define m (match-syntax (car bodys) '(#%provide spec ...)))
-            (define specs
-              (parse-and-expand-provides! (m 'spec)
-                                          require-provide self
-                                          phase ctx
-                                          expand rebuild))
-            (loop (cdr bodys)
-                  phase
-                  (cons (rebuild (car bodys)
-                                 `(,(m '#%provide) ,@specs))
-                        done-bodys))]
-           [(begin-for-syntax)
-            (define m (match-syntax (car bodys) '(begin-for-syntax e ...)))
-            (define nested-bodys (loop (m 'e) (add1 phase) null))
-            (loop (cdr bodys)
-                  phase
-                  (cons (rebuild s `(,(m 'begin-for-syntax) ,@nested-bodys))
-                        done-bodys))]
-           [else
-            (loop (cdr bodys)
-                  phase
-                  (cons (car bodys)
-                        done-bodys))])])))
-           
+   ;; The preceding function performs the expansion; here's where we
+   ;; trigger it
+      
+   ;; Add `#%module-begin` around the body if it's not already present
+   (define mb
+     (ensure-module-begin bodys inside-scope outside-scope ctx phase s))
+   
+   ;; Expand the body
+   (define expanded-mb
+     (expand mb
+             (struct-copy expand-context ctx
+                          [context 'module-begin]
+                          [namespace m-ns]
+                          [module-scopes
+                           (list inside-scope outside-scope)]
+                          [module-begin-k module-begin-k])))
+   
    ;; ------------------------------------------------------------
    ;; Assemble the result
 
    (attach-require-provide-properties
     (rebuild
      s
-     `(,(m 'module) ,(m 'id:module-name) ,(m 'initial-require) ,@fully-expanded-bodys))
+     `(,(m 'module) ,(m 'id:module-name) ,(m 'initial-require) ,expanded-mb))
     require-provide
     self)))
 
+;; ----------------------------------------
+
+(add-core-form!
+ '#%module-begin
+ (lambda (s ctx)
+   (unless (eq? (expand-context-context ctx) 'module-begin)
+     (error "not in a module-definition context:" s))
+   ((expand-context-module-begin-k ctx)
+    s
+    (struct-copy expand-context ctx
+                 [module-begin-k #f]))))
+
+;; ----------------------------------------
+
+;; Add `#%module-begin` to `bodys`, if needed
+(define (ensure-module-begin bodys inside-scope outside-scope ctx phase s)
+  (or (cond
+       [(= 1 (length bodys))
+        (cond
+         [(eq? '#%module-begin (core-form-sym (car bodys) phase))
+          (car bodys)]
+         [else
+          ;; A single body form might be a macro that expands to
+          ;; the primitive `#%module-begin` form:
+          (define partly-expanded-body
+            (expand (car bodys) (struct-copy expand-context ctx
+                                             [context 'module-begin]
+                                             [only-immediate? #t]
+                                             [post-expansion-scope inside-scope]
+                                             [module-scopes
+                                              (list inside-scope outside-scope)])))
+          (cond
+           [(eq? '#%module-begin (core-form-sym partly-expanded-body))
+            ;; Yes, it expanded to `#%module-begin`
+            partly-expanded-body]
+           [else
+            ;; No, it didn't expand to `#%module-begin`
+            #f])])]
+       [else
+        ;; Multiple body forms definitely need a `#%module-begin` wrapper
+        #f])
+      (let ([mb-id (add-scope (add-scope (datum->syntax #f '#%module-begin)
+                                         outside-scope)
+                              inside-scope)])
+        ;; If `mb-id` is not bound, we'd like to give a clear error message
+        (unless (resolve mb-id phase)
+          (error "no #%module-begin binding in the module's language" s))
+        (rebuild
+         s
+         `(,mb-id ,@bodys)))))
+           
 ;; ----------------------------------------
 
 (define (check-ids-unbound ids phase)

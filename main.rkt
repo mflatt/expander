@@ -22,9 +22,11 @@
 (add-core-primitive! 'car car)
 (add-core-primitive! 'cdr cdr)
 (add-core-primitive! 'null? null?)
+(add-core-primitive! 'map map)
 (add-core-primitive! 'values values)
 (add-core-primitive! 'println println)
 (add-core-primitive! 'random random)
+(add-core-primitive! '+ +)
 
 ;; ----------------------------------------
 

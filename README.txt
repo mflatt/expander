@@ -4,7 +4,6 @@ See "demo.rkt" for examples.
 
 TODO:
  Racket-style local definition contexts
- #%module-begin
  submodules
  top level
  module path indexes
@@ -15,6 +14,7 @@ TODO:
  rename transformers
  source locations
  syntax-local-...
+ taints
  lift syntax objects with shifts
  compile to serializable form
 

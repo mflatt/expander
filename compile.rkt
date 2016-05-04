@@ -32,7 +32,8 @@
         [(#f)
          (error "not a core form:" s)]
         [(module)
-         (define m (match-syntax s '(module name initial-require form ...)))
+         (define m (match-syntax s '(module name initial-require
+                                     (#%module-begin form ...))))
          (compile-module (syntax-e (m 'name))
                          (syntax-property s 'module-requires)
                          (syntax-property s 'module-provides)
@@ -198,7 +199,7 @@
                   (add1 phase)
                   `(let-values ([,syms ,(compile (m 'rhs) ns (add1 phase) self)])
                     ,@(for/list ([sym (in-list syms)])
-                        `(namespace-set-transformer! ,ns-id ,(sub1 phase) ',sym ,sym)))))]
+                        `(namespace-set-transformer! ,ns-id ,phase ',sym ,sym)))))]
           [(begin-for-syntax)
            (define m (match-syntax (car bodys) `(begin-for-syntax e ...)))
            (loop (cdr bodys)

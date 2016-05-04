@@ -68,7 +68,7 @@
 (define (expand-implicit sym s ctx)
   (define id (datum->syntax s sym))
   ;; Instead of calling `expand` with a new form that starts `id`,
-  ;; we implement the "applicaiton"-form case of `expand` so that
+  ;; we reimplement the "applicaiton"-form case of `expand` so that
   ;; we provide an error if the implicit form is not suitably bound
   (define b (resolve id (expand-context-phase ctx)))
   (define t (and b (lookup b ctx id)))

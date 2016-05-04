@@ -13,6 +13,7 @@
 (provide parse-and-expand-provides!
          
          make-require-provide-registry
+         reset-provides!
          register-defined-or-required-id!
          attach-require-provide-properties)
 
@@ -79,7 +80,7 @@
                                                  layer))))]
          [(rename)
           (check-nested 'phaseless)
-          (define m (match-syntax spec '(rename id:<from id:to)))
+          (define m (match-syntax spec '(rename id:from id:to)))
           (parse-identifier! (m 'id:from) (syntax-e (m 'id:to)) at-phase rp)
           (list spec)]
          [(struct)
@@ -217,12 +218,15 @@
 
 (struct required (id phase))
 
-(struct require-provide (module-to-ids      ; resolved-module-name-> require-phase -> list of (required id phase)
-                       phase-to-provides)) ; phase -> sym -> binding
+(struct require-provide (module-to-ids       ; resolved-module-name-> require-phase -> list of (required id phase)
+                         phase-to-provides)) ; phase -> sym -> binding
 
 (define (make-require-provide-registry)
   (require-provide (make-hash)
                    (make-hasheqv)))
+
+(define (reset-provides! rp)
+  (hash-clear! (require-provide-phase-to-provides rp)))
 
 (define (register-defined-or-required-id! rp id phase binding)
   (unless (equal? phase (phase+ (module-binding-nominal-phase binding)
@@ -254,7 +258,7 @@
                     ;; the first once.
                     at-phase]
                    [else
-                    (error "identifier already provided as a different binding:" id)]))
+                    (error "name already provided as a different binding:" sym)]))
                 #hasheq()))
 
 (define (register-extract-module-requires rp mod-path phase)

@@ -279,3 +279,29 @@
 
 "print 1 then 0"
 (namespace-require ''use-x-ref demo-ns)
+
+;; ----------------------------------------
+
+;; Custom `#%module-begin'
+(eval-module-declaration '(module printing-mb '#%core
+                           (#%require (for-syntax '#%core))
+                           (#%provide (all-from-except '#%core #%module-begin)
+                                      (rename module-begin #%module-begin))
+                           (define-syntaxes (module-begin)
+                             (lambda (stx)
+                               (datum->syntax
+                                (quote-syntax here)
+                                (cons
+                                 (quote-syntax #%module-begin)
+                                 (map (lambda (b)
+                                        (datum->syntax
+                                         (quote-syntax here)
+                                         (list (quote-syntax println) b)))
+                                      (cdr (syntax-e stx)))))))))
+
+(eval-module-declaration '(module printed 'printing-mb
+                           (+ 1 2)
+                           (+ 3 4)))
+
+"print 3 then 7"
+(namespace-require ''printed demo-ns)

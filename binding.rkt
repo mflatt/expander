@@ -46,7 +46,7 @@
   (unless (phase? phase)
     (raise-argument-error 'free-identifier=? "phase?" phase))
   (define ab (resolve a phase))
-  (define bb (resolve a phase))
+  (define bb (resolve b phase))
   (cond
    [(module-binding? ab)
     (and (module-binding? bb)
@@ -76,14 +76,14 @@
   (hash-set env key val))
 
 ;; `variable` is a token to represent a binding to a run-time variable
-(define variable (gensym))
+(define variable (gensym 'variable))
 (define (variable? t) (eq? t variable))
 
 ;; `unbound` is a token to represent the absence of a binding (which
 ;; is not always an error) as a result from `binding-lookup`; a
 ;; distinct token is needed so that it's distinct from all compile-time
 ;; values
-(define unbound (gensym))
+(define unbound (gensym 'unbound))
 (define (unbound? t) (eq? t unbound))
 
 ;; A subset of compile-time values are macro transformers
