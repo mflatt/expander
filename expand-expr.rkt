@@ -12,36 +12,27 @@
 
 ;; ----------------------------------------
 
+;; Common expansion for `lambda` and `case-lambda`
 (define (make-lambda-expander s formals bodys ctx)
   (define sc (new-scope))
-  (define ids (let loop ([formals formals])
-                (cond
-                 [(identifier? formals) (list (add-scope formals sc))]
-                 [(syntax? formals)
-                  (define p (syntax-e formals))
-                  (cond
-                   [(pair? p) (loop p)]
-                   [(null? p) null]
-                   [else (error "not an identifier:" p)])]
-                 [(pair? formals)
-                  (unless (identifier? (car formals))
-                    (error "not an identifier:" (car formals)))
-                  (cons (add-scope (car formals) sc)
-                        (loop (cdr formals)))]
-                 [(null? formals)
-                  null]
-                 [else (error "huh?" formals)])))
   (define phase (expand-context-phase ctx))
+  ;; Parse and check formal arguments:
+  (define ids (parse-and-flatten-formals formals sc))
   (check-no-duplicate-ids ids phase s)
+  ;; Bind each argument and generate a corresponding key fo the
+  ;; expand-time environment:
   (define keys (for/list ([id (in-list ids)])
                  (add-local-binding! id phase)))
   (define body-env (for*/fold ([env (expand-context-env ctx)]) ([key (in-list keys)])
                      (env-extend env key variable)))
+  ;; Expand the function body:
   (define body-ctx (struct-copy expand-context ctx
                                 [env body-env]
                                 [scopes (cons sc (expand-context-scopes ctx))]))
-  (values (add-scope (datum->syntax #f formals s) sc)
-          (expand-body bodys sc s body-ctx)))
+  (define exp-body (expand-body bodys sc s body-ctx))
+  ;; Return formals (with new scope) and expanded body:
+  (values (add-scope formals sc)
+          exp-body))
 
 (add-core-form!
  'lambda
@@ -68,8 +59,29 @@
             (make-lambda-expander s formals bodys ctx))
           (rebuild clause `[,exp-formals ,exp-body]))))))
 
+(define (parse-and-flatten-formals all-formals sc)
+  (let loop ([formals all-formals])
+    (cond
+     [(identifier? formals) (list (add-scope formals sc))]
+     [(syntax? formals)
+      (define p (syntax-e formals))
+      (cond
+       [(pair? p) (loop p)]
+       [(null? p) null]
+       [else (error "not an identifier:" p)])]
+     [(pair? formals)
+      (unless (identifier? (car formals))
+        (error "not an identifier:" (car formals)))
+      (cons (add-scope (car formals) sc)
+            (loop (cdr formals)))]
+     [(null? formals)
+      null]
+     [else
+      (error "bad argument sequence:" all-formals)])))
+
 ;; ----------------------------------------
 
+;; Common expansion for `let[rec]-[syntaxes+]values`
 (define (make-let-values-form syntaxes? rec?)
   (lambda (s ctx)
     (define m (if syntaxes?
@@ -80,23 +92,28 @@
                   (parse-syntax s '(let-values ([(val-id ...) val-rhs] ...)
                                     body ...+))))
    (define sc (new-scope))
+   (define phase (expand-context-phase ctx))
+   ;; Add the new scope to each binding identifier:
    (define trans-idss (for/list ([ids (in-list (m 'trans-id))])
                         (for/list ([id (in-list ids)])
                           (add-scope id sc))))
    (define val-idss (for/list ([ids (in-list (m 'val-id))])
                       (for/list ([id (in-list ids)])
                         (add-scope id sc))))
-   (define phase (expand-context-phase ctx))
    (check-no-duplicate-ids (list trans-idss val-idss) phase s)
+   ;; Bind each left-hand identifier and generate a corresponding key
+   ;; fo the expand-time environment:
    (define trans-keyss (for/list ([ids (in-list trans-idss)])
                          (for/list ([id (in-list ids)])
                            (add-local-binding! id phase))))
    (define val-keyss (for/list ([ids (in-list val-idss)])
                        (for/list ([id (in-list ids)])
                          (add-local-binding! id phase))))
+   ;; Evaluate compile-time expressions (if any):
    (define trans-valss (for/list ([rhs (in-list (m 'trans-rhs))]
                                   [ids (in-list trans-idss)])
                          (eval-for-syntaxes-binding (add-scope rhs sc) ids ctx)))
+   ;; Fill expansion-time environment:
    (define rec-val-env
      (for*/fold ([env (expand-context-env ctx)]) ([keys (in-list val-keyss)]
                                                   [key (in-list keys)])
@@ -106,6 +123,7 @@
                      (for/fold ([env env]) ([key (in-list keys)]
                                             [val (in-list vals)])
                        (env-extend env key val))))
+   ;; Expand right-hand sides and bodyL
    (define rec-ctx (struct-copy expand-context ctx
                                 [env rec-env]
                                 [scopes (cons sc (expand-context-scopes ctx))]))

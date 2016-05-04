@@ -7,6 +7,10 @@
 
 (define (make-check-no-duplicate-table) #hasheq())
 
+;; Check for duplicates, returning a table on success that can be
+;; used for further checking.
+;; The `ids` argument can be a single identifier, a list, a list of
+;; lists, etc.
 (define (check-no-duplicate-ids ids phase s [ht (make-check-no-duplicate-table)])
   (let loop ([v ids] [ht ht])
     (cond
@@ -20,6 +24,3 @@
       (loop (cdr v) (loop (car v) ht))]
      [else
       ht])))
-
-  
-  
