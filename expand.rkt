@@ -24,7 +24,7 @@
 
 ;; ----------------------------------------
 
-(define (expand s [ctx (current-expand-context)])
+(define (expand s ctx)
   (cond
    [(identifier? s)
     (define binding (resolve s (expand-context-phase ctx)))
@@ -343,9 +343,9 @@
 ;; ensuring that the number of returned values matches the number of
 ;; target identifiers; return the values
 (define (eval-for-bindings ids s phase ns)
-  (define compiled (compile s phase ns))
+  (define compiled (compile s ns phase))
   (define vals
-    (call-with-values (lambda () (expand-time-eval `(#%expression ,compiled)))
+    (call-with-values (lambda () (expand-time-eval compiled))
       list))
   (unless (= (length vals) (length ids))
     (error "wrong number of results (" (length vals) "vs." (length ids) ")"

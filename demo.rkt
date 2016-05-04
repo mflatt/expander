@@ -1,29 +1,22 @@
 #lang racket/base
-(require "syntax.rkt"
-         "scope.rkt"
-         "namespace.rkt"
-         "expand-context.rkt"
-         "expand.rkt"
-         "require.rkt"
-         "compile.rkt"
-         "core.rkt"
-         "expander.rkt")
+(require "main.rkt")
 
 ;; ----------------------------------------
 
-(declare-core-module! (current-namespace))
+(define demo-ns (make-empty-core-namespace))
 
-(define demo-scope (new-multi-scope))
-(define demo-stx (add-scope empty-syntax demo-scope))
+(namespace-require ''#%core demo-ns)
+(namespace-require '(for-syntax '#%core) demo-ns)
 
-(syntax-context-require! demo-stx 0 (current-namespace) '#%core)
-(syntax-context-require/expansion-time! demo-stx 1 (current-namespace) '#%core)
+(define (expand-expression e)
+  (expand (namespace-syntax-introduce (datum->syntax #f e) demo-ns)
+          demo-ns))
 
 (define (compile+eval-expression e)
   (define c
-    (compile (expand (datum->syntax demo-stx e))))
+    (compile (expand-expression e) demo-ns))
   (values c
-          (run-time-eval c)))
+          (eval c)))
 
 (define (eval-expression e #:check [check-val #f])
   (define-values (c v) (compile+eval-expression e))
@@ -31,7 +24,7 @@
     (unless (equal? v check-val)
       (error "check failed")))
   v)
-  
+
 (compile+eval-expression
  '(case-lambda
    [(x) (set! x 5)]
@@ -141,7 +134,7 @@
    (f 'still-ok)))
 
 "compile-time scopes pruned by `quote-syntax`"
-(syntax-context-require/expansion-time! demo-stx 2 (current-namespace) '#%core)
+(namespace-require '(for-meta 2 '#%core) demo-ns)
 (eval-expression
  #:check 'bound
  '(letrec-syntaxes+values
@@ -188,22 +181,17 @@
                                                     (exn-message exn))
                                (error "wrong error"))
                              'illegal-use)])
-  (expand (datum->syntax demo-stx
-                         '(letrec-syntaxes+values
-                           ([(v) 1])
-                           ()
-                           v)))
+  (expand-expression '(letrec-syntaxes+values
+                       ([(v) 1])
+                       ()
+                       v))
   (error "shouldn't get here"))
 
 ;; ----------------------------------------
 
 (define (eval-module-declaration mod)
-  (run-time-eval
-   (compile
-    (expand (datum->syntax demo-stx mod) 
-            (struct-copy expand-context (current-expand-context)
-                         [context 'top-level]
-                         [module-scopes (list demo-scope)])))))
+  (parameterize ([current-namespace demo-ns])
+    (eval-expression mod)))
 
 (eval-module-declaration '(module m1 '#%core
                            (#%require (for-syntax '#%core))
@@ -221,7 +209,7 @@
                            (println def:x)))
 
 "print 1 10 1"
-(syntax-context-require! demo-stx 0 (current-namespace) 'm2)
+(namespace-require ''m2 demo-ns)
 
 ;; ----------------------------------------
 
@@ -242,7 +230,7 @@
                            (println n)))
 
 "print same number twive, then different number twice"
-(syntax-context-require! demo-stx 0 (current-namespace) 'use-random-n)
+(namespace-require ''use-random-n demo-ns)
 
 ;; ----------------------------------------
 
@@ -258,7 +246,7 @@
                            (println n)))
 
 "first number is fresh, second number is same"
-(syntax-context-require! demo-stx 0 (current-namespace) 'use-random-n-again)
+(namespace-require ''use-random-n-again demo-ns)
 
 ;; ----------------------------------------
 
@@ -290,4 +278,4 @@
                            (println (rt-m))))
 
 "print 1 then 0"
-(syntax-context-require! demo-stx 0 (current-namespace) 'use-x-ref)
+(namespace-require ''use-x-ref demo-ns)

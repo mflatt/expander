@@ -4,6 +4,7 @@
          "phase.rkt"
          "scope.rkt"
          "binding.rkt"
+         "namespace.rkt"
          "match.rkt"
          "require.rkt"
          "module-path.rkt")
@@ -19,7 +20,8 @@
 (define layers '(raw raw/no-just-meta phaseless path))
 
 (define (parse-and-perform-requires! reqs m-ns phase-shift
-                                     add-defined-or-required-id!)
+                                     add-defined-or-required-id!
+                                     #:run? [run? #f])
   (let loop ([reqs reqs]
              [top-req #f]
              [phase-shift phase-shift]
@@ -135,7 +137,8 @@
          (unless (module-path? mp)
            (error "bad require spec:" req))
          (perform-require! mp (or req top-req) m-ns phase-shift just-meta adjust
-                           add-defined-or-required-id!)]))))
+                           add-defined-or-required-id!
+                           run?)]))))
 
 ;; ----------------------------------------
 
@@ -143,12 +146,14 @@
                                   add-defined-or-required-id!)
   (perform-require! mod-path in-stx m-ns
                     0 'all #f
-                    add-defined-or-required-id!))
+                    add-defined-or-required-id!
+                    #f))
 
 ;; ----------------------------------------
         
 (define (perform-require! mod-path in-stx m-ns phase-shift just-meta adjust
-                          add-defined-or-required-id!)
+                          add-defined-or-required-id!
+                          run?)
   (define module-name (resolve-module-path mod-path))
   (define bind-in-stx (if (adjust-rename? adjust)
                           (adjust-rename-to-id adjust)
@@ -187,6 +192,8 @@
                   (error "already required or defined:" s))
                 (add-defined-or-required-id! s bind-phase binding))
               adjusted-sym))
+  (when run?
+    (namespace-module-instantiate! m-ns module-name phase-shift))
   ;; check that we covered all expected ids:
   (define need-syms (cond
                     [(adjust-only? adjust)

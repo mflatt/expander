@@ -1,10 +1,14 @@
 #lang racket/base
-(require "phase.rkt")
+(require "phase.rkt"
+         "scope.rkt")
 
 (provide make-empty-namespace
          current-namespace
          make-module-namespace
          namespace->module
+         
+         namespace-syntax-introduce
+         namespace-scope
          
          make-module
          declare-module!
@@ -19,7 +23,8 @@
          namespace-get-variable
          namespace-get-transformer)
 
-(struct namespace (phases              ; phase-level -> definitions
+(struct namespace (scope               ; scope for top-level bindings
+                   phases              ; phase-level -> definitions
                    module-declarations ; resolved-module-name -> module
                    module-instances))  ; (cons resolved-module-name phase) -> namespace
 
@@ -35,11 +40,15 @@
                 instantiate))  ; namespace phase phase-level ->
 
 (define (make-empty-namespace)
-  (namespace (make-hasheqv)
+  (namespace (new-multi-scope)
+             (make-hasheqv)
              (make-hasheq)
              (make-hash)))
 
 (define current-namespace (make-parameter (make-empty-namespace)))
+
+(define (namespace-syntax-introduce s [ns (current-namespace)])
+  (add-scope s (namespace-scope ns)))
 
 (define (make-module-namespace ns name)
   (define m-ns
@@ -88,7 +97,8 @@
            (let ([m (namespace->module ns name)])
              (unless m
                (error "no module declared to instantiate:" name))
-             (define m-ns (namespace (make-hasheqv)
+             (define m-ns (namespace (new-multi-scope)
+                                     (make-hasheqv)
                                      (namespace-module-declarations ns)
                                      (namespace-module-instances ns)))
              (hash-set! (namespace-module-instances ns) (cons name phase) m-ns)

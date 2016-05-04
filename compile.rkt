@@ -5,7 +5,8 @@
          "namespace.rkt"
          "binding.rkt"
          "match.rkt"
-         "core.rkt")
+         "core.rkt"
+         "expand-require.rkt")
 
 (provide compile
          expand-time-eval
@@ -20,10 +21,10 @@
 ;; at run time by the amount bound to `phase-shift-id`. Module bindings
 ;; are accessed through a namespace that is bound to `ns-id` at run time.
 (define (compile s
-                 [phase 0]      ; phase (top level) or phase-level (within a module)
                  [ns (current-namespace)] ; compile-time namespace
+                 [phase 0]      ; phase (top level) or phase-level (within a module)
                  [self-name #f]) ; if non-#f, compiling the body of a module
-  (let ([compile (lambda (s) (compile s phase ns self-name))])
+  (let ([compile (lambda (s) (compile s ns phase self-name))])
     (cond
      [(pair? (syntax-e s))
       (define core-sym (core-form-sym s phase))
@@ -37,6 +38,13 @@
                          (syntax-property s 'module-provides)
                          (m 'form)
                          ns)]
+        [(#%require)
+         (define m (match-syntax s '(#%require req ...)))
+         ;; Running the compiled code will trigger expander work ---
+         ;; which is strange, and that reflects how a top-level
+         ;; `#%require` is strange
+         `(,(lambda ()
+              (parse-and-perform-requires! #:run? #t (m 'req) ns phase void)))]
         [(lambda)
          (define m (match-syntax s '(lambda formals body)))
          `(lambda ,@(compile-lambda (m 'formals) (m 'body) phase ns self-name))]
@@ -135,7 +143,7 @@
        [(pair? formals) (cons (loop (car formals))
                               (loop (cdr formals)))]
        [else null])))
-  `(,gen-formals ,(compile body phase ns self-name)))
+  `(,gen-formals ,(compile body ns phase self-name)))
 
 (define (compile-let core-sym s phase ns self-name)
   (define rec? (eq? core-sym 'letrec-values))
@@ -147,8 +155,8 @@
                     (local->symbol id phase))))
   `(,core-sym ,(for/list ([syms (in-list symss)]
                           [rhs (in-list (m 'rhs))])
-                 `[,syms ,(compile rhs phase ns self-name)])
-    ,(compile (m 'body) phase ns self-name)))
+                 `[,syms ,(compile rhs ns phase self-name)])
+    ,(compile (m 'body) ns phase self-name)))
 
 ;; ----------------------------------------
                        
@@ -177,7 +185,7 @@
                   phase-to-body
                   phase
                   `(begin
-                    (define-values ,syms ,(compile (m 'rhs) phase ns self))
+                    (define-values ,syms ,(compile (m 'rhs) ns phase self))
                     ,@(for/list ([sym (in-list syms)])
                         `(namespace-set-variable! ,ns-id ,phase ',sym ,sym)))))]
           [(define-syntaxes)
@@ -188,7 +196,7 @@
                  (add-body
                   phase-to-body
                   (add1 phase)
-                  `(let-values ([,syms ,(compile (m 'rhs) (add1 phase) ns self)])
+                  `(let-values ([,syms ,(compile (m 'rhs) ns (add1 phase) self)])
                     ,@(for/list ([sym (in-list syms)])
                         `(namespace-set-transformer! ,ns-id ,(sub1 phase) ',sym ,sym)))))]
           [(begin-for-syntax)
@@ -206,7 +214,7 @@
                  (add-body
                   phase-to-body
                   phase
-                  (compile (car bodys) phase ns self)))])])))
+                  (compile (car bodys) ns phase self)))])])))
   
   (define-values (min-phase max-phase)
     (for/fold ([min-phase 0] [max-phase 0]) ([phase (in-hash-keys phase-to-bodys)])

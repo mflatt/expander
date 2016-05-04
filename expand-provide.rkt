@@ -222,7 +222,7 @@
 
 (define (make-require-provide-registry)
   (require-provide (make-hash)
-                 (make-hasheqv)))
+                   (make-hasheqv)))
 
 (define (register-defined-or-required-id! rp id phase binding)
   (unless (equal? phase (phase+ (module-binding-nominal-phase binding)

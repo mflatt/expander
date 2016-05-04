@@ -13,6 +13,29 @@ TODO:
  lazy scope propagation
  use-site scope "optimization"
  rename transformers
+ source locations
  syntax-local-...
  lift syntax objects with shifts
  compile to serializable form
+
+----------------------------------------
+
+Roadmap to the main pieces:
+
+ syntax.rkt - syntax-object structure
+
+ scope.rkt - scope sets and binding
+
+ binding.rkt - binding representations
+
+ namespace.rkt - namespaces
+
+ require.rkt - module require and instantiation
+
+ expand[-....].rkt - expander loop and core forms
+
+ compile.rkt - from expanded to raw S-expression
+
+ main.rkt - public interface
+
+ demo.rkt - exercises the expander and compiler

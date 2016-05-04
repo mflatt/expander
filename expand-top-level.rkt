@@ -1,6 +1,10 @@
 #lang racket/base
-(require "core.rkt"
-         "expand.rkt")
+(require "scope.rkt"
+         "core.rkt"
+         "match.rkt"
+         "expand.rkt"
+         "expand-context.rkt"
+         "expand-require.rkt")
 
 (add-core-form!
  'define-values
@@ -20,7 +24,19 @@
 (add-core-form!
  '#%require
  (lambda (s ctx)
-   (error "not yet supported here:" s)))
+   (unless (eq? (expand-context-context ctx) 'top-level)
+     (error "allowed only in a module or the top level:" s))
+   (define m (match-syntax s '(#%require req ...)))
+   (define sc (new-scope)) ; to hide bindings
+   ;; Check the `#%require` form syntax and trigger compile-time
+   ;; instanations
+   (parse-and-perform-requires! (for ([req (in-list (m 'req))])
+                                  (add-scope req sc))
+                                (expand-context-namespace ctx)
+                                (expand-context-phase ctx)
+                                void)
+   ;; Nothing to expand
+   s))
 
 (add-core-form!
  '#%provide
