@@ -22,23 +22,19 @@
 (define core-scope (new-scope))
 (define core-stx (add-scope empty-syntax core-scope))
 
-;; Core forms are added by `require`s in "expander.rkt"
+;; Core forms are added by `require`s in "main.rkt"
 
 ;; Accumulate added core forms and primitives:
-(define core-forms #hasheq())
-(define core-primitives #hasheq())
+(define core-forms (make-hasheq))
+(define core-primitives (make-hasheq))
 
 (define (add-core-form! sym proc)
   (add-core-binding! sym)
-  (set! core-forms (hash-set core-forms
-                             sym
-                             proc)))
+  (hash-set! core-forms sym proc))
 
 (define (add-core-primitive! sym val)
   (add-core-binding! sym)
-  (set! core-primitives (hash-set core-primitives
-                                  sym
-                                  val)))
+  (hash-set! core-primitives sym val))
 
 (define (add-core-binding! sym)
   (add-binding! (datum->syntax core-stx sym)

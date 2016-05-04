@@ -1,13 +1,13 @@
 This simplified variant of the Racket expander demonstrates definition
 contexts and use-site scopes.
 
-Relative to the "small" expander:
+Relative to the "demi" expander:
 
  * omits modules
 
  * omits phasing
 
- * omits namespaces
+ * omits general namespaces
 
 Relative to the "micro" expander:
 
@@ -21,6 +21,8 @@ Relative to the "micro" expander:
 
  * adds implicit forms: `#%app`, `#%top`, and `#%datum`
 
+ * adds stub namespace layer
+
 ----------------------------------------
 
 Roadmap to the main pieces:
@@ -32,8 +34,6 @@ Roadmap to the main pieces:
  binding.rkt - binding representations
 
  namespace.rkt - ties recursive knot for the expander
-
- require.rkt - module require and instantiation
 
  expand[-....].rkt - expander loop and core forms
 

@@ -12,7 +12,6 @@
                         post-expansion-scope ; scope to add to every expansion; #f if none
                         ))
 
-
 (define (make-expand-context ns)
   (expand-context #f ; use-site scopes
                   ns
