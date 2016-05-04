@@ -36,7 +36,7 @@
 
 (define (free-identifier=? a b)
   (define ab (resolve a))
-  (define bb (resolve a))
+  (define bb (resolve b))
   (cond
    [(top-level-binding? ab)
     (and (top-level-binding? bb)
