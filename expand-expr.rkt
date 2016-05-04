@@ -2,7 +2,7 @@
 (require racket/set
          "syntax.rkt"
          "scope.rkt"
-         "pattern.rkt"
+         "match.rkt"
          "namespace.rkt"
          "binding.rkt"
          "dup-check.rkt"
@@ -19,7 +19,7 @@
   ;; Parse and check formal arguments:
   (define ids (parse-and-flatten-formals formals sc))
   (check-no-duplicate-ids ids phase s)
-  ;; Bind each argument and generate a corresponding key fo the
+  ;; Bind each argument and generate a corresponding key for the
   ;; expand-time environment:
   (define keys (for/list ([id (in-list ids)])
                  (add-local-binding! id phase)))
@@ -37,7 +37,7 @@
 (add-core-form!
  'lambda
  (lambda (s ctx)
-   (define m (parse-syntax s '(lambda formals body ...+)))
+   (define m (match-syntax s '(lambda formals body ...+)))
    (define-values (formals body)
      (make-lambda-expander s (m 'formals) (m 'body) ctx))
    (rebuild
@@ -47,8 +47,8 @@
 (add-core-form!
  'case-lambda
  (lambda (s ctx)
-   (define m (parse-syntax s '(case-lambda [formals body ...+] ...)))
-   (define cm (parse-syntax s '(case-lambda clause ...)))
+   (define m (match-syntax s '(case-lambda [formals body ...+] ...)))
+   (define cm (match-syntax s '(case-lambda clause ...)))
    (rebuild
     s
     `(,(m 'case-lambda)
@@ -85,11 +85,11 @@
 (define (make-let-values-form syntaxes? rec?)
   (lambda (s ctx)
     (define m (if syntaxes?
-                  (parse-syntax s '(letrec-syntaxes+values
+                  (match-syntax s '(letrec-syntaxes+values
                                     ([(trans-id ...) trans-rhs] ...)
                                     ([(val-id ...) val-rhs] ...)
                                     body ...+))
-                  (parse-syntax s '(let-values ([(val-id ...) val-rhs] ...)
+                  (match-syntax s '(let-values ([(val-id ...) val-rhs] ...)
                                     body ...+))))
    (define sc (new-scope))
    (define phase (expand-context-phase ctx))
@@ -155,7 +155,7 @@
 (add-core-form!
  '#%datum
  (lambda (s ctx)
-   (define m (parse-syntax s '(#%datum . datum)))
+   (define m (match-syntax s '(#%datum . datum)))
    (when (keyword? (syntax-e (m 'datum)))
      (error "keyword misused as an expression:" (m 'datum)))
    (define phase (expand-context-phase ctx))
@@ -167,7 +167,7 @@
 (add-core-form!
  '#%app
  (lambda (s ctx)
-   (define m (parse-syntax s '(#%app rator rand ...)))
+   (define m (match-syntax s '(#%app rator rand ...)))
    (rebuild
     s
     (list* (m '#%app)
@@ -178,15 +178,15 @@
 (add-core-form!
  'quote
  (lambda (s ctx)
-   (parse-syntax s '(quote datum))
+   (match-syntax s '(quote datum))
    s))
 
 (add-core-form!
  'quote-syntax
  (lambda (s ctx)
-   (define m-local (try-parse-syntax s '(quote-syntax datum #:local)))
+   (define m-local (try-match-syntax s '(quote-syntax datum #:local)))
    (define m (or m-local
-                 (parse-syntax s '(quote-syntax datum))))
+                 (match-syntax s '(quote-syntax datum))))
    (rebuild
     s
     `(,(m 'quote-syntax)
@@ -199,7 +199,7 @@
 (add-core-form!
  'if
  (lambda (s ctx)
-   (define m (parse-syntax s '(if tst thn els)))
+   (define m (match-syntax s '(if tst thn els)))
    (rebuild
     s
     (list (m 'if)
@@ -210,7 +210,7 @@
 (add-core-form!
  'with-continuation-mark
  (lambda (s ctx)
-   (define m (parse-syntax s '(with-continuation-mark key val body)))
+   (define m (match-syntax s '(with-continuation-mark key val body)))
    (rebuild
     s
     (list (m 'with-continuation-mark)
@@ -220,7 +220,7 @@
 
 (define (make-begin)
  (lambda (s ctx)
-   (define m (parse-syntax s '(begin e ...+)))
+   (define m (match-syntax s '(begin e ...+)))
    (rebuild
     s
     (cons (m 'begin)
@@ -238,7 +238,7 @@
 (add-core-form!
  'set!
  (lambda (s ctx)
-   (define m (parse-syntax s '(set! id rhs)))
+   (define m (match-syntax s '(set! id rhs)))
    (define binding (resolve (m 'id) (expand-context-phase ctx)))
    (unless binding
      (error "no binding for assignment:" s))

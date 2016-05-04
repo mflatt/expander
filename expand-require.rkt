@@ -4,7 +4,7 @@
          "phase.rkt"
          "scope.rkt"
          "binding.rkt"
-         "pattern.rkt"
+         "match.rkt"
          "require.rkt"
          "module-path.rkt")
 
@@ -36,7 +36,7 @@
       (case fm
         [(for-meta)
          (check-nested 'raw/no-just-meta)
-         (define m (parse-syntax req '(for-meta phase-level spec ...)))
+         (define m (match-syntax req '(for-meta phase-level spec ...)))
          (define p (syntax-e (m 'phase-level)))
          (unless (phase? p)
            (error "bad phase:" req))
@@ -48,7 +48,7 @@
                'phaseless)]
         [(for-syntax)
          (check-nested 'raw/no-just-meta)
-         (define m (parse-syntax req '(for-syntax spec ...)))
+         (define m (match-syntax req '(for-syntax spec ...)))
          (loop (m 'spec)
                (or top-req req)
                (phase+ phase-shift 1)
@@ -57,7 +57,7 @@
                'phaseless)]
         [(for-template)
          (check-nested 'raw/no-just-meta)
-         (define m (parse-syntax req '(for-template spec ...)))
+         (define m (match-syntax req '(for-template spec ...)))
          (loop (m 'spec)
                (or top-req req)
                (phase+ phase-shift -1)
@@ -66,7 +66,7 @@
                'phaseless)]
         [(for-label)
          (check-nested 'raw/no-just-meta)
-         (define m (parse-syntax req '(for-label spec ...)))
+         (define m (match-syntax req '(for-label spec ...)))
          (loop (m 'spec)
                (or top-req req)
                (phase+ phase-shift #f)
@@ -75,7 +75,7 @@
                'phaseless)]
         [(just-meta)
          (check-nested 'raw)
-         (define m (parse-syntax req '(just-meta phase-level spec ...)))
+         (define m (match-syntax req '(just-meta phase-level spec ...)))
          (define p (syntax-e (m 'phase-level)))
          (unless (phase? p)
            (error "bad phase:" req))
@@ -87,7 +87,7 @@
                'raw/no-just-meta)]
         [(only)
          (check-nested 'phaseless)
-         (define m (parse-syntax req '(only spec id ...)))
+         (define m (match-syntax req '(only spec id ...)))
          (loop (list (m 'spec))
                (or top-req req)
                phase-shift
@@ -96,7 +96,7 @@
                'path)]
         [(prefix)
          (check-nested 'phaseless)
-         (define m (parse-syntax req '(prefix id:prefix spec)))
+         (define m (match-syntax req '(prefix id:prefix spec)))
          (loop (list (m 'spec))
                (or top-req req)
                phase-shift
@@ -105,7 +105,7 @@
                'path)]
         [(all-except)
          (check-nested 'phaseless)
-         (define m (parse-syntax req '(all-except spec id ...)))
+         (define m (match-syntax req '(all-except spec id ...)))
          (loop (list (m 'spec))
                (or top-req req)
                phase-shift
@@ -114,7 +114,7 @@
                'path)]
         [(prefix-all-except)
          (check-nested 'phaseless)
-         (define m (parse-syntax req '(prefix-all-except id:prefix spec id ...)))
+         (define m (match-syntax req '(prefix-all-except id:prefix spec id ...)))
          (loop (list (m 'spec))
                (or top-req req)
                phase-shift
@@ -123,7 +123,7 @@
                'path)]
         [(rename)
          (check-nested 'phaseless)
-         (define m (parse-syntax req '(rename spec id:to id:from)))
+         (define m (match-syntax req '(rename spec id:to id:from)))
          (loop (list (m 'spec))
                (or top-req req)
                phase-shift

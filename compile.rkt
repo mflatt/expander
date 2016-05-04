@@ -4,7 +4,7 @@
          "scope.rkt"
          "namespace.rkt"
          "binding.rkt"
-         "pattern.rkt"
+         "match.rkt"
          "core.rkt")
 
 (provide compile
@@ -31,52 +31,52 @@
         [(#f)
          (error "not a core form:" s)]
         [(module)
-         (define m (parse-syntax s '(module name initial-require form ...)))
+         (define m (match-syntax s '(module name initial-require form ...)))
          (compile-module (syntax-e (m 'name))
                          (syntax-property s 'module-requires)
                          (syntax-property s 'module-provides)
                          (m 'form)
                          ns)]
         [(lambda)
-         (define m (parse-syntax s '(lambda formals body)))
+         (define m (match-syntax s '(lambda formals body)))
          `(lambda ,@(compile-lambda (m 'formals) (m 'body) phase ns self-name))]
         [(case-lambda)
-         (define m (parse-syntax s '(case-lambda [formals body] ...)))
+         (define m (match-syntax s '(case-lambda [formals body] ...)))
          `(case-lambda ,@(for/list ([formals (in-list (m 'formals))]
                                [body (in-list (m 'body))])
                       (compile-lambda formals body phase ns self-name)))]
         [(#%app)
-         (define m (parse-syntax s '(#%app . rest)))
+         (define m (match-syntax s '(#%app . rest)))
          (for/list ([s (in-list (m 'rest))])
            (compile s))]
         [(if)
-         (define m (parse-syntax s '(if tst thn els)))
+         (define m (match-syntax s '(if tst thn els)))
          `(if
            ,(compile (m 'tst))
            ,(compile (m 'thn))
            ,(compile (m 'els)))]
         [(with-continuation-mark)
-         (define m (parse-syntax s '(if key val body)))
+         (define m (match-syntax s '(if key val body)))
          `(with-continuation-mark
            ,(compile (m 'key))
            ,(compile (m 'val))
            ,(compile (m 'body)))]
         [(begin begin0)
-         (define m (parse-syntax s '(begin e ...+)))
+         (define m (match-syntax s '(begin e ...+)))
          `(,core-sym ,@(for/list ([e (in-list (m 'e))])
                          (compile e)))]
         [(set!)
-         (define m (parse-syntax s '(set! id rhs)))
+         (define m (match-syntax s '(set! id rhs)))
          `(set!
            ,(compile (m 'id))
            ,(compile (m 'rhs)))]
         [(let-values letrec-values)
          (compile-let core-sym s phase ns self-name)]
         [(quote)
-         (define m (parse-syntax s '(quote datum)))
+         (define m (match-syntax s '(quote datum)))
          `(quote ,(syntax->datum (m 'datum)))]
         [(quote-syntax)
-         (define m (parse-syntax s '(quote datum)))
+         (define m (match-syntax s '(quote datum)))
          (define q `(quote ,(m 'datum)))
          (if self-name
              `(syntax-shift-phase-level ,q ,phase-shift-id)
@@ -139,7 +139,7 @@
 
 (define (compile-let core-sym s phase ns self-name)
   (define rec? (eq? core-sym 'letrec-values))
-  (define m (parse-syntax s '(let-values ([(id ...) rhs] ...) body)))
+  (define m (match-syntax s '(let-values ([(id ...) rhs] ...) body)))
   (define sc (new-scope))
   (define idss (m 'id))
   (define symss (for/list ([ids (in-list idss)])
@@ -169,7 +169,7 @@
        [else
         (case (core-form-sym (car bodys) phase)
           [(define-values)
-           (define m (parse-syntax (car bodys) '(define-values (id ...) rhs)))
+           (define m (match-syntax (car bodys) '(define-values (id ...) rhs)))
            (define syms (def-ids-to-syms (m 'id) phase))
            (loop (cdr bodys)
                  phase
@@ -181,7 +181,7 @@
                     ,@(for/list ([sym (in-list syms)])
                         `(namespace-set-variable! ,ns-id ,phase ',sym ,sym)))))]
           [(define-syntaxes)
-           (define m (parse-syntax (car bodys) '(define-syntaxes (id ...) rhs)))
+           (define m (match-syntax (car bodys) '(define-syntaxes (id ...) rhs)))
            (define syms (def-ids-to-syms (m 'id) phase))
            (loop (cdr bodys)
                  phase
@@ -192,7 +192,7 @@
                     ,@(for/list ([sym (in-list syms)])
                         `(namespace-set-transformer! ,ns-id ,(sub1 phase) ',sym ,sym)))))]
           [(begin-for-syntax)
-           (define m (parse-syntax (car bodys) `(begin-for-syntax e ...)))
+           (define m (match-syntax (car bodys) `(begin-for-syntax e ...)))
            (loop (cdr bodys)
                  phase
                  (loop (m 'e) (add1 phase) phase-to-body))]

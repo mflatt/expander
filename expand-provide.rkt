@@ -3,7 +3,7 @@
          "syntax.rkt"
          "phase.rkt"
          "scope.rkt"
-         "pattern.rkt"
+         "match.rkt"
          "binding.rkt"
          "require.rkt"
          "expand-context.rkt"
@@ -39,7 +39,7 @@
        (case fm
          [(for-meta)
           (check-nested 'raw)
-          (define m (parse-syntax spec '(for-meta phase-level spec ...)))
+          (define m (match-syntax spec '(for-meta phase-level spec ...)))
           (define p (syntax-e (m 'phase-level)))
           (unless (phase? p)
             (error "bad phase:" spec))
@@ -52,7 +52,7 @@
                                                        'phaseless))))]
          [(for-syntax)
           (check-nested 'raw)
-          (define m (parse-syntax spec '(for-syntax spec ...)))
+          (define m (match-syntax spec '(for-syntax spec ...)))
           (rebuild
            spec
            `(,(m 'for-syntax) ,@(loop (m 'spec)
@@ -61,7 +61,7 @@
                                       'phaseless)))]
          [(for-label)
           (check-nested 'raw)
-          (define m (parse-syntax spec '(for-label spec ...)))
+          (define m (match-syntax spec '(for-label spec ...)))
           (list
            (rebuild spec `(,(m 'for-label) ,@(loop (m 'spec)
                                                    #f
@@ -71,7 +71,7 @@
           (check-nested 'phaseless)
           (when protected?
             (error "invalid nesting:" spec))
-          (define m (parse-syntax spec '(protect spec ...)))
+          (define m (match-syntax spec '(protect spec ...)))
           (list
            (rebuild spec `(,(m 'protect) ,@(loop (m 'spec)
                                                  at-phase
@@ -79,54 +79,54 @@
                                                  layer))))]
          [(rename)
           (check-nested 'phaseless)
-          (define m (parse-syntax spec '(rename id:<from id:to)))
+          (define m (match-syntax spec '(rename id:<from id:to)))
           (parse-identifier! (m 'id:from) (syntax-e (m 'id:to)) at-phase rp)
           (list spec)]
          [(struct)
           (check-nested 'phaseless)
-          (define m (parse-syntax spec '(struct id:struct (id:field ...))))
+          (define m (match-syntax spec '(struct id:struct (id:field ...))))
           (parse-struct! (m 'id:struct) (m 'id:field) at-phase rp)
           (list spec)]
          [(all-from)
           (check-nested 'phaseless)
-          (define m (parse-syntax spec '(all-from mod-path)))
+          (define m (match-syntax spec '(all-from mod-path)))
           (parse-all-from (m 'mod-path) null at-phase rp)
           (list spec)]
          [(all-from-except)
           (check-nested 'phaseless)
-          (define m (parse-syntax spec '(all-from-except mod-path id ...)))
+          (define m (match-syntax spec '(all-from-except mod-path id ...)))
           (parse-all-from (m 'mod-path) (m 'id) at-phase rp)
           (list spec)]
          [(all-defined)
           (check-nested 'phaseless)
-          (define m (parse-syntax spec '(all-defined)))
+          (define m (match-syntax spec '(all-defined)))
           (parse-all-from-module self spec null #f at-phase rp)
           (list spec)]
          [(all-defined-except)
           (check-nested 'phaseless)
-          (define m (parse-syntax spec '(all-defined-except id ...)))
+          (define m (match-syntax spec '(all-defined-except id ...)))
           (parse-all-from-module self spec (m 'id) #f at-phase rp)
           (list spec)]
          [(prefix-all-defined)
           (check-nested 'phaseless)
-          (define m (parse-syntax spec '(prefix-all-defined id:prefix)))
+          (define m (match-syntax spec '(prefix-all-defined id:prefix)))
           (parse-all-from-module self spec null (syntax-e (m 'id:prefix)) at-phase rp)
           (list spec)]
          [(prefix-all-defined-except)
           (check-nested 'phaseless)
-          (define m (parse-syntax spec '(prefix-all-defined-except id:prefix id ...)))
+          (define m (match-syntax spec '(prefix-all-defined-except id:prefix id ...)))
           (parse-all-from-module self spec (m 'id) (syntax-e (m 'id:prefix)) at-phase rp)
           (list spec)]
          [(expand)
-          (void (parse-syntax spec '(expand (id . datum))))
-          (define m (parse-syntax spec '(expand form)))
+          (void (match-syntax spec '(expand (id . datum))))
+          (define m (match-syntax spec '(expand form)))
           (define exp-spec (expand (m 'form) (struct-copy expand-context ctx
                                                           [phase phase])))
           (unless (and (pair? (syntax-e exp-spec))
                        (identifier? (car (syntax-e exp-spec)))
                        (eq? 'begin (core-form-sym (car (syntax-e exp-spec)))))
             (error "expansion of `provide` spec does not start `begin`:" spec))
-          (define e-m (parse-syntax exp-spec '(begin spec ...)))
+          (define e-m (match-syntax exp-spec '(begin spec ...)))
           (loop (e-m 'spec)
                 at-phase
                 protected?

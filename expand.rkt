@@ -3,7 +3,7 @@
          racket/unit
          "syntax.rkt"
          "scope.rkt"
-         "pattern.rkt"
+         "match.rkt"
          "namespace.rkt"
          "binding.rkt"
          "dup-check.rkt"
@@ -191,7 +191,7 @@
       (case (core-form-sym exp-body phase)
         [(begin)
          ;; Splice a `begin` form
-         (define m (parse-syntax exp-body '(begin e ...)))
+         (define m (match-syntax exp-body '(begin e ...)))
          (loop body-ctx
                (append (m 'e) (cdr bodys))
                done-bodys
@@ -200,7 +200,7 @@
         [(define-values)
          ;; Found a variable definition; add bindings, extend the
          ;; environment, and continue
-         (define m (parse-syntax exp-body '(define-values (id ...) rhs)))
+         (define m (match-syntax exp-body '(define-values (id ...) rhs)))
          (define ids (remove-use-site-scopes (m 'id) body-ctx))
          (define new-dups (check-no-duplicate-ids ids phase exp-body dups))
          (define keys (for/list ([id (in-list ids)])
@@ -226,7 +226,7 @@
          ;; Found a macro definition; add bindings, evaluate the
          ;; compile-time right-hand side, install the compile-time
          ;; values in the environment, and continue
-         (define m (parse-syntax exp-body '(define-syntaxes (id ...) rhs)))
+         (define m (match-syntax exp-body '(define-syntaxes (id ...) rhs)))
          (define ids (remove-use-site-scopes (m 'id) body-ctx))
          (define new-dups (check-no-duplicate-ids ids phase exp-body dups))
          (define keys (for/list ([id (in-list ids)])

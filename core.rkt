@@ -4,6 +4,7 @@
          "syntax.rkt"
          "scope.rkt"
          "binding.rkt"
+         "match.rkt"
          "namespace.rkt")
 
 (provide core-stx
@@ -69,12 +70,9 @@
 
 ;; Helper for recognizing and dispatching on core forms:
 (define (core-form-sym s phase)
-  (and (pair? (syntax-e s))
-       (let ()
-         (define id (car (syntax-e s)))
-         (and (identifier? id)
-              (let ()
-                (define b (resolve id phase))
-                (and (module-binding? b)
-                     (eq? '#%core (module-binding-module b))
-                     (module-binding-sym b)))))))
+  (define m (try-match-syntax s '(id . _)))
+  (and m
+       (let ([b (resolve (m 'id) phase)])
+         (and (module-binding? b)
+              (eq? '#%core (module-binding-module b))
+              (module-binding-sym b)))))

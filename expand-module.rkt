@@ -1,7 +1,7 @@
 #lang racket/base
 (require "syntax.rkt"
          "scope.rkt"
-         "pattern.rkt"
+         "match.rkt"
          "namespace.rkt"
          "binding.rkt"
          "require.rkt"
@@ -19,7 +19,7 @@
    (unless (eq? (expand-context-context ctx) 'top-level)
      (error "allowed only at the top level:" s))
    
-   (define m (parse-syntax s '(module id:module-name initial-require body ...)))
+   (define m (match-syntax s '(module id:module-name initial-require body ...)))
    
    (define initial-require (syntax->datum (m 'initial-require)))
    (unless (module-path? initial-require)
@@ -86,11 +86,11 @@
              (define exp-body (expand (car bodys) partial-body-ctx))
              (case (core-form-sym exp-body phase)
                [(begin)
-                (define m (parse-syntax exp-body '(begin e ...)))
+                (define m (match-syntax exp-body '(begin e ...)))
                 (loop (append (m 'e) (cdr bodys))
                       done-bodys)]
                [(begin-for-syntax)
-                (define m (parse-syntax exp-body '(begin-for-syntax e ...)))
+                (define m (match-syntax exp-body '(begin-for-syntax e ...)))
                 (define nested-bodys (phase-1-and-2-loop (m 'e) (add1 phase)))
                 (eval-nested-bodys nested-bodys (add1 phase) m-ns self)
                 (loop (cdr bodys)
@@ -100,7 +100,7 @@
                         `(,(m 'begin-for-syntax) ,@nested-bodys))
                        done-bodys))]
                [(define-values)
-                (define m (parse-syntax exp-body '(define-values (id ...) rhs)))
+                (define m (match-syntax exp-body '(define-values (id ...) rhs)))
                 (define ids (m 'id))
                 (check-ids-unbound ids phase)
                 (define syms (select-local-names-and-bind ids local-names self phase
@@ -108,7 +108,7 @@
                 (loop (cdr bodys)
                       (cons (car bodys) done-bodys))]
                [(define-syntaxes)
-                (define m (parse-syntax exp-body '(define-syntaxes (id ...) rhs)))
+                (define m (match-syntax exp-body '(define-syntaxes (id ...) rhs)))
                 (define ids (m 'id))
                 (check-ids-unbound ids phase)
                 (define syms (select-local-names-and-bind ids local-names self phase
@@ -125,7 +125,7 @@
                                      `(,(m 'define-syntaxes) ,ids ,exp-rhs))
                             done-bodys))]
                [(#%require)
-                (define m (parse-syntax exp-body '(#%require req ...)))
+                (define m (match-syntax exp-body '(#%require req ...)))
                 (parse-and-perform-requires! (m 'req) m-ns phase
                                              add-defined-or-required-id!)
                 (loop (cdr bodys)
@@ -156,7 +156,7 @@
             [else
              (case (core-form-sym (car bodys) phase)
                [(define-values)
-                (define m (parse-syntax (car bodys) '(define-values (id ...) rhs)))
+                (define m (match-syntax (car bodys) '(define-values (id ...) rhs)))
                 (define exp-rhs (expand (m 'rhs) body-ctx))
                 (loop (cdr bodys)
                       (cons (rebuild (car bodys)
@@ -183,7 +183,7 @@
         [else
          (case (core-form-sym (car bodys) phase)
            [(#%provide)
-            (define m (parse-syntax (car bodys) '(#%provide spec ...)))
+            (define m (match-syntax (car bodys) '(#%provide spec ...)))
             (define specs
               (parse-and-expand-provides! (m 'spec)
                                           require-provide self
@@ -195,7 +195,7 @@
                                  `(,(m '#%provide) ,@specs))
                         done-bodys))]
            [(begin-for-syntax)
-            (define m (parse-syntax (car bodys) '(begin-for-syntax e ...)))
+            (define m (match-syntax (car bodys) '(begin-for-syntax e ...)))
             (define nested-bodys (loop (m 'e) (add1 phase) null))
             (loop (cdr bodys)
                   phase
@@ -252,7 +252,7 @@
   (for ([body (in-list bodys)])
     (case (core-form-sym body phase)
       [(define-values)
-       (define m (parse-syntax body '(define-values (id ...) rhs)))
+       (define m (match-syntax body '(define-values (id ...) rhs)))
        (define ids (m 'id))
        (define vals (eval-for-bindings ids (m 'rhs) phase m-ns))
        (for ([id (in-list ids)]
