@@ -59,7 +59,11 @@
    [(local-binding? ab)
     (and (local-binding? bb)
          (eq? (local-binding-key ab)
-              (local-binding-key bb)))]))
+              (local-binding-key bb)))]
+   [else
+    (and (not ab)
+         (not bb)
+         (eq? (syntax-e a) (syntax-e b)))]))
 
 ;; Helper for registering a local binding in a set of scopes:
 (define (add-local-binding! id phase)
