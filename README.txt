@@ -19,12 +19,6 @@ Relative to the "mini" expander:
 
  * no expand-context layer (just an expand-time environment)
 
-Relative to the "small" expander:
-
- * omits modules
-
- * omits phases
-
 ----------------------------------------
 
 Roadmap to the main pieces:
