@@ -1,6 +1,10 @@
 This simplified variant of the Racket expander demonstrates the basics
 of set-of-scopes expansion.
 
+Relative to the "pico" expander:
+
+ * split into modules and uses more abstraction
+
 Relative to the "mini" expander:
 
  * simpler scope and binding representation
