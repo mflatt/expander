@@ -12,12 +12,13 @@
   (define m (namespace->module ns module-name))
   (unless m
     (error "module not declared:" module-name))
+  (define self (module-self-name m))
   (for ([(provide-phase-level provides) (in-hash (module-provides m))])
     (define phase (phase+ phase-shift provide-phase-level))
     (for ([(sym binding) (in-hash provides)])
       (define from-mod (module-binding-module binding))
       (define b (struct-copy module-binding binding
-                             [module (if (eq? from-mod 'self)
+                             [module (if (eq? from-mod self)
                                          module-name
                                          from-mod)]
                              [nominal-module module-name]

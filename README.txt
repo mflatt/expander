@@ -4,7 +4,6 @@ See "demo.rkt" for examples.
 
 TODO:
  Racket-style local definition contexts
- submodules
  top level
  module path indexes
  module resolver

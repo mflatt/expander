@@ -6,9 +6,11 @@
          "binding.rkt"
          "match.rkt"
          "core.rkt"
+         "module-path.rkt"
          "expand-require.rkt")
 
 (provide compile
+         compile-module
          expand-time-eval
          run-time-eval)
 
@@ -22,7 +24,7 @@
 ;; are accessed through a namespace that is bound to `ns-id` at run time.
 (define (compile s
                  [ns (current-namespace)] ; compile-time namespace
-                 [phase 0]      ; phase (top level) or phase-level (within a module)
+                 [phase 0]       ; phase (top level) or phase-level (within a module)
                  [self-name #f]) ; if non-#f, compiling the body of a module
   (let ([compile (lambda (s) (compile s ns phase self-name))])
     (cond
@@ -31,21 +33,15 @@
       (case core-sym
         [(#f)
          (error "not a core form:" s)]
-        [(module)
-         (define m (match-syntax s '(module name initial-require
-                                     (#%module-begin form ...))))
-         (compile-module (syntax-e (m 'name))
-                         (syntax-property s 'module-requires)
-                         (syntax-property s 'module-provides)
-                         (m 'form)
-                         ns)]
+        [(module module*)
+         (compile-module s self-name ns)]
         [(#%require)
          (define m (match-syntax s '(#%require req ...)))
          ;; Running the compiled code will trigger expander work ---
          ;; which is strange, and that reflects how a top-level
          ;; `#%require` is strange
          `(,(lambda ()
-              (parse-and-perform-requires! #:run? #t (m 'req) ns phase void)))]
+              (parse-and-perform-requires! #:run? #t (m 'req) #f ns phase void)))]
         [(lambda)
          (define m (match-syntax s '(lambda formals body)))
          `(lambda ,@(compile-lambda (m 'formals) (m 'body) phase ns self-name))]
@@ -106,6 +102,7 @@
          [(equal? mod-name '#%core)
           ;; Inline a core binding:
           (define m-ns (namespace->module-namespace ns mod-name phase))
+          (namespace-module-instantiate! m-ns '#%core (module-binding-phase b))
           (or (namespace-get-variable m-ns (module-binding-phase b) (module-binding-sym b) #f)
               (error "internal error: bad #%core reference:"
                      phase (module-binding-sym b) (module-binding-phase b)))]
@@ -161,10 +158,17 @@
 
 ;; ----------------------------------------
                        
-(define (compile-module name requires provides bodys ns)
+(define (compile-module s enclosing-self ns
+                        #:as-submodule? [as-submodule? #f])
+  (define m (match-syntax s '(module name initial-require
+                              (#%module-begin body ...))))
+  (define self (build-module-name (syntax-e (m 'name))
+                                  enclosing-self))
+  (define requires (syntax-property s 'module-requires))
+  (define provides (syntax-property s 'module-provides))
+  (define bodys (m 'body))
+
   (define phase-level-id (gensym 'phase-level))
-  
-  (define self 'self)
   
   (define (add-body phase-to-body phase body)
     (hash-update phase-to-body phase (lambda (l) (cons body l)) null))
@@ -179,7 +183,7 @@
         (case (core-form-sym (car bodys) phase)
           [(define-values)
            (define m (match-syntax (car bodys) '(define-values (id ...) rhs)))
-           (define syms (def-ids-to-syms (m 'id) phase))
+           (define syms (def-ids-to-syms (m 'id) phase self))
            (loop (cdr bodys)
                  phase
                  (add-body
@@ -191,7 +195,7 @@
                         `(namespace-set-variable! ,ns-id ,phase ',sym ,sym)))))]
           [(define-syntaxes)
            (define m (match-syntax (car bodys) '(define-syntaxes (id ...) rhs)))
-           (define syms (def-ids-to-syms (m 'id) phase))
+           (define syms (def-ids-to-syms (m 'id) phase self))
            (loop (cdr bodys)
                  phase
                  (add-body
@@ -209,6 +213,11 @@
            (loop (cdr bodys)
                  phase
                  phase-to-body)]
+          [(module module*)
+           ;; Submodules are handled separately below
+           (loop (cdr bodys)
+                 phase
+                 phase-to-body)]
           [else
            (loop (cdr bodys)
                  phase
@@ -217,25 +226,60 @@
                   phase
                   (compile (car bodys) ns phase self)))])])))
   
+  (define (compile-submodules form-name)
+    (cond
+     [as-submodule?
+      null]
+     [else
+      (let loop ([bodys bodys]
+                 [phase 0])
+        (cond
+         [(null? bodys) null]
+         [else
+          (define f (core-form-sym (car bodys) phase))
+          (cond
+           [(eq? f form-name)
+            (define s-shifted
+              (cond
+               [(try-match-syntax (car bodys) '(module* name #f . _))
+                (syntax-shift-phase-level (car bodys) (phase- 0 phase))]
+               [else (car bodys)]))
+            (cons (compile-module s-shifted self ns)
+                  (loop (cdr bodys) phase))]
+           [(eq? f 'begin-for-syntax)
+            (define m (match-syntax (car bodys) `(begin-for-syntax e ...)))
+            (append (loop (m 'e) (add1 phase))
+                    (loop (cdr bodys) phase))]
+          [else
+           (loop (cdr bodys) phase)])]))]))
+
+  (define pre-submodules (compile-submodules 'module))
+  (define post-submodules (compile-submodules 'module*))
+
   (define-values (min-phase max-phase)
     (for/fold ([min-phase 0] [max-phase 0]) ([phase (in-hash-keys phase-to-bodys)])
       (values (min min-phase phase)
               (max max-phase phase))))
 
-  `(declare-module!
-    (current-namespace)
-    ',name
-    (make-module
-     ,requires
-     ,provides
-     ,min-phase
-     ,max-phase
-     (lambda (,ns-id ,phase-shift-id ,phase-level-id)
-       (case ,phase-level-id
-         ,@(for/list ([(phase bodys) (in-hash phase-to-bodys)])
-             `[(,phase)
-               ,@(reverse bodys)]))
-       (void)))))
+  `(begin
+    ,@pre-submodules
+    (declare-module!
+     #:as-submodule? ,as-submodule?
+     (current-namespace)
+     ',self
+     (make-module
+      ',self
+      ,requires
+      ,provides
+      ,min-phase
+      ,max-phase
+      (lambda (,ns-id ,phase-shift-id ,phase-level-id)
+        (case ,phase-level-id
+          ,@(for/list ([(phase bodys) (in-hash phase-to-bodys)])
+              `[(,phase)
+                ,@(reverse bodys)]))
+        (void))))
+    ,@post-submodules))
 
 ;; ----------------------------------------
          
@@ -249,11 +293,11 @@
   ;; A local-binding key is already a symbol
   key)
  
-(define (def-ids-to-syms ids phase)
+(define (def-ids-to-syms ids phase self)
   (for/list ([id (in-list ids)])
     (define b (resolve id phase))
     (unless (and (module-binding? b)
-                 (eq? 'self (module-binding-module b))
+                 (equal? self (module-binding-module b))
                  (eqv? phase (module-binding-phase b)))
       (error "bad binding for module definition:" id))
     (module-binding-sym b)))

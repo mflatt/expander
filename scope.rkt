@@ -6,6 +6,7 @@
 (provide new-scope
          new-multi-scope
          add-scope
+         add-scopes
          remove-scope
          remove-scopes
          flip-scope
@@ -107,6 +108,10 @@
 
 (define (add-scope s sc)
   (apply-scope s (generalize-scope sc) set-add))
+
+(define (add-scopes s scs)
+  (for/fold ([s s]) ([sc (in-list scs)])
+    (add-scope s sc)))
 
 (define (remove-scope s sc)
   (apply-scope s (generalize-scope sc) set-remove))

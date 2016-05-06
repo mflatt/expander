@@ -39,7 +39,7 @@
   (parse-and-perform-requires! #:run? #t
                                (list (add-scope (datum->syntax #f req)
                                                 (namespace-scope ns)))
-                               ns
+                               #f ns
                                0
                                void))
 

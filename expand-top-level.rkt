@@ -32,6 +32,7 @@
    ;; instanations
    (parse-and-perform-requires! (for ([req (in-list (m 'req))])
                                   (add-scope req sc))
+                                #f ; no enclosing module
                                 (expand-context-namespace ctx)
                                 (expand-context-phase ctx)
                                 void)

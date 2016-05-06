@@ -47,7 +47,8 @@
       (cond
        [(null? s) null]
        [else (error "bad syntax:" orig-s)])]
-     [(and (keyword? pattern)
+     [(and (or (keyword? pattern)
+               (boolean? pattern))
            (eq? pattern s))
       null]
      [else

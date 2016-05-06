@@ -91,12 +91,12 @@
          [(all-from)
           (check-nested 'phaseless)
           (define m (match-syntax spec '(all-from mod-path)))
-          (parse-all-from (m 'mod-path) null at-phase rp)
+          (parse-all-from (m 'mod-path) self null at-phase rp)
           (list spec)]
          [(all-from-except)
           (check-nested 'phaseless)
           (define m (match-syntax spec '(all-from-except mod-path id ...)))
-          (parse-all-from (m 'mod-path) (m 'id) at-phase rp)
+          (parse-all-from (m 'mod-path) self (m 'id) at-phase rp)
           (list spec)]
          [(all-defined)
           (check-nested 'phaseless)
@@ -169,16 +169,17 @@
     (parse-identifier! get-id (syntax-e get-id) at-phase rp)
     (parse-identifier! set-id (syntax-e set-id) at-phase rp)))
   
-(define (parse-all-from mod-path-stx except-ids at-phase rp)
+(define (parse-all-from mod-path-stx self except-ids at-phase rp)
   (define mod-path (syntax->datum mod-path-stx))
   (unless (module-path? mod-path)
     (error "not a module path:" mod-path-stx))
-  (parse-all-from-module (resolve-module-path mod-path) #f except-ids #f at-phase rp))
+  (define mod-name (resolve-module-path mod-path self))
+  (parse-all-from-module mod-name #f except-ids #f at-phase rp))
   
-(define (parse-all-from-module mod-path matching-stx except-ids prefix-sym at-phase rp)
-  (define requireds (register-extract-module-requires rp mod-path at-phase))
+(define (parse-all-from-module mod-name matching-stx except-ids prefix-sym at-phase rp)
+  (define requireds (register-extract-module-requires rp mod-name at-phase))
   (unless requireds
-    (error "no requires from module path:" mod-path "at phase:" at-phase))
+    (error "no requires from module path:" mod-name "at phase:" at-phase))
   
   (define (add-prefix sym)
     (if prefix-sym
@@ -228,19 +229,32 @@
 (define (reset-provides! rp)
   (hash-clear! (require-provide-phase-to-provides rp)))
 
-(define (register-defined-or-required-id! rp id phase binding)
-  (unless (equal? phase (phase+ (module-binding-nominal-phase binding)
-                                (module-binding-nominal-require-phase binding)))
-    (error "internal error: binding phase does not match nominal info"))
-  
-  (hash-update! (require-provide-module-to-ids rp)
-                (module-binding-nominal-module binding)
-                (lambda (at-mod)
-                  (hash-update at-mod
-                               (module-binding-nominal-require-phase binding)
-                               (lambda (l) (cons (required id phase) l))
-                               null))
-                #hasheqv()))
+(define register-defined-or-required-id!
+  (case-lambda
+    [(rp mod-name phase)
+     ;; Register module require
+     (hash-update! (require-provide-module-to-ids rp)
+                   mod-name
+                   (lambda (at-mod)
+                     (hash-update at-mod
+                                  phase
+                                  (lambda (l) l)
+                                  null))
+                   #hasheqv())]
+    [(rp id phase binding)
+     ;; Register specific required identifier
+     (unless (equal? phase (phase+ (module-binding-nominal-phase binding)
+                                   (module-binding-nominal-require-phase binding)))
+       (error "internal error: binding phase does not match nominal info"))
+     
+     (hash-update! (require-provide-module-to-ids rp)
+                   (module-binding-nominal-module binding)
+                   (lambda (at-mod)
+                     (hash-update at-mod
+                                  (module-binding-nominal-require-phase binding)
+                                  (lambda (l) (cons (required id phase) l))
+                                  null))
+                   #hasheqv())]))
 
 (define (register-provide! rp sym phase binding id)
   (hash-update! (require-provide-phase-to-provides rp)

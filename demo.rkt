@@ -305,3 +305,53 @@
 
 "print 3 then 7"
 (namespace-require ''printed demo-ns)
+
+;; ----------------------------------------
+
+;; Submodule
+
+(eval-module-declaration '(module with-pre-submodule '#%core
+                           (module a '#%core
+                             (#%provide a)
+                             (define-values (a) 'a))
+                           (#%require (submod "." a))
+                           (println a)))
+
+"pre submodule; print 'a"
+(namespace-require ''with-pre-submodule demo-ns)
+
+(eval-module-declaration '(module with-post-submodule '#%core
+                           (#%provide b)
+                           (define-values (b) 'b)
+                           (module* b '#%core
+                             (#%require (submod ".."))
+                             (println b))))
+
+"post submodule; print 'b"
+(namespace-require '(submod 'with-post-submodule b) demo-ns)
+
+(eval-module-declaration '(module with-#f-submodule '#%core
+                           (define-values (c) 'c)
+                           (module* c #f
+                             (println c))))
+
+"post submodule in enclosing scope; print 'c"
+(namespace-require '(submod 'with-#f-submodule c) demo-ns)
+
+(eval-module-declaration '(module with-shifted-#f-submodule '#%core
+                           (#%require (for-syntax '#%core))
+                           (define-values (d) 'd)
+                           (begin-for-syntax
+                             (define-values (d-stx) (quote-syntax d))
+                             (module* d #f
+                               (#%provide get-d-stx)
+                               (define-values (get-d-stx) (lambda () d-stx))))))
+
+(eval-module-declaration '(module use-shifted-#f-submodule '#%core
+                           (#%require (for-syntax '#%core
+                                                  (submod 'with-shifted-#f-submodule d)))
+                           (define-syntaxes (m) (lambda (stx) (get-d-stx)))
+                           (println (m))))
+
+"shifted submodule in enclosing scope; print 'd"
+(namespace-require ''use-shifted-#f-submodule demo-ns)

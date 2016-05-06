@@ -12,6 +12,7 @@
          
          make-module
          declare-module!
+         module-self-name
          module-provides
          
          namespace-module-instantiate!
@@ -26,13 +27,15 @@
 (struct namespace (scope               ; scope for top-level bindings
                    phases              ; phase-level -> definitions
                    module-declarations ; resolved-module-name -> module
+                   submodule-declarations ; resolved-module-name -> module
                    module-instances))  ; (cons resolved-module-name phase) -> namespace
 
 (struct definitions (variables      ; sym -> val
                      transformers   ; sym -> val
                      [instantiated? #:mutable]))
 
-(struct module (requires        ; phase -> list of resolved-module-name
+(struct module (self-name       ; symbol used for a self reference
+                requires        ; phase -> list of resolved-module-name
                 provides        ; phase-level -> sym -> binding
                 min-phase-level ; phase-level
                 max-phase-level ; phase-level
@@ -42,7 +45,8 @@
 (define (make-empty-namespace)
   (namespace (new-multi-scope)
              (make-hasheqv)
-             (make-hasheq)
+             (make-hash)
+             (make-hash)
              (make-hash)))
 
 (define current-namespace (make-parameter (make-empty-namespace)))
@@ -50,26 +54,36 @@
 (define (namespace-syntax-introduce s [ns (current-namespace)])
   (add-scope s (namespace-scope ns)))
 
-(define (make-module-namespace ns name)
+(define (make-module-namespace ns name for-submodule?)
   (define m-ns
     ;; Keeps all module declarations, but makes a fresh space of instances
     (struct-copy namespace (make-empty-namespace)
-                 [module-declarations (namespace-module-declarations ns)]))
+                 [module-declarations (namespace-module-declarations ns)]
+                 [submodule-declarations (if for-submodule?
+                                             ;; Same set of submodules:
+                                             (namespace-submodule-declarations ns)
+                                             ;; Fresh set of submodules:
+                                             (make-hash))]))
   (hash-set! (namespace-module-instances m-ns) (cons name 0) m-ns)
   m-ns)
 
 (define (namespace->module ns name)
-  (hash-ref (namespace-module-declarations ns) name #f))
+  (or (hash-ref (namespace-submodule-declarations ns) name #f)
+      (hash-ref (namespace-module-declarations ns) name #f)))
 
-(define (make-module requires provides
+(define (make-module self-name requires provides
                      min-phase-level max-phase-level
                      instantiate)
-  (module requires provides
+  (module self-name requires provides
           min-phase-level max-phase-level
           instantiate))
 
-(define (declare-module! ns name m)
-  (hash-set! (namespace-module-declarations ns) name m))
+(define (declare-module! ns name m #:as-submodule? [as-submodule? #f])
+  (hash-set! (if as-submodule?
+                 (namespace-submodule-declarations ns)
+                 (namespace-module-declarations ns))
+             name
+             m))
 
 (define (namespace-module-instantiate! ns name phase-shift [min-phase 0])
   (define m-ns (namespace->module-namespace ns name phase-shift #:create? #t))
@@ -100,6 +114,7 @@
              (define m-ns (namespace (new-multi-scope)
                                      (make-hasheqv)
                                      (namespace-module-declarations ns)
+                                     (namespace-submodule-declarations ns)
                                      (namespace-module-instances ns)))
              (hash-set! (namespace-module-instances ns) (cons name phase) m-ns)
              m-ns))))
