@@ -8,7 +8,6 @@
          "binding.rkt"
          "dup-check.rkt"
          "compile.rkt"
-         "require.rkt"
          "core.rkt"
          "expand-context.rkt")
 

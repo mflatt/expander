@@ -6,7 +6,7 @@
          "binding.rkt"
          "namespace.rkt"
          "match.rkt"
-         "require.rkt"
+         "require+provide.rkt"
          "module-path.rkt")
 
 (provide parse-and-perform-requires!
@@ -20,7 +20,7 @@
 (define layers '(raw raw/no-just-meta phaseless path))
 
 (define (parse-and-perform-requires! reqs self m-ns phase-shift
-                                     add-defined-or-required-id!
+                                     requires+provides
                                      #:run? [run? #f])
   (let loop ([reqs reqs]
              [top-req #f]
@@ -138,32 +138,37 @@
            (error "bad require spec:" req))
          (perform-require! mp self
                            (or req top-req) m-ns phase-shift just-meta adjust
-                           add-defined-or-required-id!
-                           run?)]))))
+                           requires+provides
+                           #:run? run?)]))))
+
+(define (ids->sym-set ids)
+  (for/set ([id (in-list ids)])
+    (syntax-e id)))
 
 ;; ----------------------------------------
 
 (define (perform-initial-require! mod-path self
                                   in-stx m-ns
-                                  add-defined-or-required-id!)
+                                  requires+provides)
   (perform-require! mod-path self
                     in-stx m-ns 0 'all #f
-                    add-defined-or-required-id!
-                    #f))
+                    requires+provides
+                    #:can-shadow? #t))
 
 ;; ----------------------------------------
 
 (define (perform-require! mod-path self
                           in-stx m-ns phase-shift just-meta adjust
-                          add-defined-or-required-id!
-                          run?)
+                          requires+provides
+                          #:run? [run? #f]
+                          #:can-shadow? [can-shadow? #f])
   (define module-name (resolve-module-path mod-path self))
   (define bind-in-stx (if (adjust-rename? adjust)
                           (adjust-rename-to-id adjust)
                           in-stx))
   (define done-syms (make-hash))
-  (add-defined-or-required-id! module-name phase-shift)
-  (syntax-context-require/expansion-time!
+  (add-required-module! requires+provides module-name phase-shift)
+  (bind-all-provides!
    bind-in-stx phase-shift m-ns module-name
    #:filter (lambda (binding)
               (define sym (module-binding-nominal-sym binding))
@@ -188,14 +193,18 @@
                         (format "~a~a" (adjust-all-except-prefix-sym adjust) sym)))]
                  [(adjust-rename? adjust)
                   (and (eq? sym (adjust-rename-from-sym adjust))
+                       (hash-set! done-syms sym #t)
                        (adjust-rename-to-id adjust))]))
               (when adjusted-sym
                 (define s (datum->syntax bind-in-stx adjusted-sym))
                 (define bind-phase (phase+ phase-shift provide-phase))
-                (when (resolve s bind-phase #:exactly? #t)
-                  (error "already required or defined:" s))
-                (add-defined-or-required-id! s bind-phase binding))
+                (check-required-or-defined requires+provides
+                                           s bind-phase)
+                (add-defined-or-required-id! requires+provides
+                                             s bind-phase binding
+                                             #:can-shadow? can-shadow?))
               adjusted-sym))
+  (namespace-module-visit! m-ns module-name phase-shift)
   (when run?
     (namespace-module-instantiate! m-ns module-name phase-shift))
   ;; check that we covered all expected ids:
@@ -213,7 +222,26 @@
       (unless (hash-ref done-syms sym #f)
         (error "not in nested spec:" sym)))))
 
+;; ----------------------------------------
 
-(define (ids->sym-set ids)
-  (for/set ([id (in-list ids)])
-    (syntax-e id)))
+(define (bind-all-provides! in-stx phase-shift ns module-name
+                            #:filter filter)
+  (define m (namespace->module ns module-name))
+  (unless m
+    (error "module not declared:" module-name))
+  (define self (module-self-name m))
+  (for ([(provide-phase-level provides) (in-hash (module-provides m))])
+    (define phase (phase+ phase-shift provide-phase-level))
+    (for ([(sym binding) (in-hash provides)])
+      (define from-mod (module-binding-module binding))
+      (define b (struct-copy module-binding binding
+                             [module (if (eq? from-mod self)
+                                         module-name
+                                         from-mod)]
+                             [nominal-module module-name]
+                             [nominal-phase provide-phase-level]
+                             [nominal-sym sym]
+                             [nominal-require-phase phase-shift]))
+      (let-values ([(sym) (filter b)])
+        (when sym
+          (add-binding! (datum->syntax in-stx sym) b phase))))))

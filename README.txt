@@ -36,11 +36,11 @@ Roadmap to the main pieces:
 
  namespace.rkt - namespaces and modules
 
- require.rkt - module require and instantiation
-
  expand[-....].rkt - expander loop and core forms
 
  expand-{module,require,provide}.rkt - module expander
+
+ require+provide.rkt - require and provide tracking
 
  compile.rkt - from expanded to raw S-expression
 

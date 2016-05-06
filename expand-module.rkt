@@ -6,7 +6,7 @@
          "phase.rkt"
          "namespace.rkt"
          "binding.rkt"
-         "require.rkt"
+         "require+provide.rkt"
          "module-path.rkt"
          "core.rkt"
          "expand-context.rkt"
@@ -75,14 +75,7 @@
                            outside-scope)
                 inside-scope))
 
-   ;; To track requires and provides:
-   (define require-provide (make-require-provide-registry))
-   (define add-defined-or-required-id!
-     (case-lambda
-       [(mod-name phase)
-        (register-defined-or-required-id! require-provide mod-name phase)]
-       [(id phase binding)
-        (register-defined-or-required-id! require-provide id phase binding)]))
+   (define requires+provides (make-requires+provides))
 
    ;; Initial require:
    (cond
@@ -91,11 +84,13 @@
      (perform-initial-require! initial-require self
                                (apply-module-scopes (m 'initial-require))
                                m-ns
-                               add-defined-or-required-id!)]
+                               requires+provides)]
     [else
      ;; For `(module* name #f ....)`, just register the enclosing module
      ;; as an import and visit it
-     (add-defined-or-required-id! enclosing-self keep-enclosing-scope-at-phase)
+     (add-required-module! requires+provides
+                           enclosing-self
+                           keep-enclosing-scope-at-phase)
      (namespace-module-visit! m-ns enclosing-self keep-enclosing-scope-at-phase)])
    
    ;; Add the module's scope to the bodies
@@ -111,7 +106,7 @@
      ;; In case the module body is expanded multiple times, we clear
      ;; the set of provides each time (but we accumulate requires, since those
      ;; may have been used for earlier expansions)
-     (reset-provides! require-provide)
+     (reset-provides! requires+provides)
      
      ;; In case `#%module-begin` expansion is forced on syntax that
      ;; that wasn't already introduced into the mdoule's inside scope,
@@ -150,7 +145,7 @@
                                    #:ctx partial-body-ctx
                                    #:namespace m-ns
                                    #:self self
-                                   #:defined-and-required add-defined-or-required-id!
+                                   #:requires-and-provides requires+provides
                                    #:loop phase-1-and-2-loop))
 
          ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -170,7 +165,7 @@
      (define fully-expanded-bodys-except-post-submodules
        (resolve-provides expression-expanded-bodys
                          #:original s
-                         #:registered-requires-and-provides require-provide
+                         #:requires-and-provides requires+provides
                          #:phase phase
                          #:self self
                          #:ctx ctx))
@@ -187,7 +182,7 @@
        (delay (declare-module-for-expansion fully-expanded-bodys-except-post-submodules
                                             #:module-match m
                                             #:module-begin-match mb-m
-                                            #:registered-requires-and-provides require-provide
+                                            #:requires-and-provides requires+provides
                                             #:namespace m-ns
                                             #:self self
                                             #:enclosing enclosing-self)))
@@ -228,10 +223,10 @@
    ;; Assemble the `module` result
 
    (attach-require-provide-properties
+    requires+provides
     (rebuild
      s
      `(,(m 'module) ,(m 'id:module-name) ,(m 'initial-require) ,expanded-mb))
-    require-provide
     self))
 
 ;; ----------------------------------------
@@ -287,7 +282,7 @@
                                 #:ctx partial-body-ctx
                                 #:namespace m-ns
                                 #:self self
-                                #:defined-and-required add-defined-or-required-id!
+                                #:requires-and-provides requires+provides
                                 #:loop phase-1-and-2-loop)
   ;; Table of symbol picked for each binding in this module:
   (define local-names (make-hasheq))
@@ -313,17 +308,17 @@
         [(define-values)
          (define m (match-syntax exp-body '(define-values (id ...) rhs)))
          (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
-         (check-ids-unbound ids phase)
+         (check-ids-unbound ids phase requires+provides)
          (define syms (select-local-names-and-bind ids local-names self phase
-                                                   add-defined-or-required-id!))
+                                                   requires+provides))
          (cons exp-body
                (loop (cdr bodys)))]
         [(define-syntaxes)
          (define m (match-syntax exp-body '(define-syntaxes (id ...) rhs)))
          (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
-         (check-ids-unbound ids phase)
+         (check-ids-unbound ids phase requires+provides)
          (define syms (select-local-names-and-bind ids local-names self phase
-                                                   add-defined-or-required-id!))
+                                                   requires+provides))
          ;; Expand and evaluate RHS:
          (define-values (exp-rhs vals)
            (expand+eval-for-syntaxes-binding (m 'rhs) ids partial-body-ctx))
@@ -338,7 +333,7 @@
          (define m (match-syntax exp-body '(#%require req ...)))
          (parse-and-perform-requires! (m 'req) self
                                       m-ns phase
-                                      add-defined-or-required-id!)
+                                      requires+provides)
          (cons exp-body
                (loop (cdr bodys)))]
         [(#%provide)
@@ -390,7 +385,7 @@
 ;; matches them up with defintiions and requires
 (define (resolve-provides expression-expanded-bodys
                           #:original s
-                          #:registered-requires-and-provides require-provide
+                          #:requires-and-provides requires+provides
                           #:phase phase
                           #:self self
                           #:ctx ctx)
@@ -403,7 +398,7 @@
          (define m (match-syntax (car bodys) '(#%provide spec ...)))
          (define specs
            (parse-and-expand-provides! (m 'spec)
-                                       require-provide self
+                                       requires+provides self
                                        phase ctx
                                        expand rebuild))
          (cons (rebuild (car bodys)
@@ -425,17 +420,17 @@
 (define (declare-module-for-expansion fully-expanded-bodys-except-post-submodules
                                       #:module-match m
                                       #:module-begin-match mb-m
-                                      #:registered-requires-and-provides require-provide
+                                      #:requires-and-provides requires+provides
                                       #:namespace m-ns
                                       #:self self
                                       #:enclosing enclosing-self)
   (define tmp-mod (attach-require-provide-properties
+                   requires+provides
                    (datum->syntax
                     #f
                     `(,(datum->syntax core-stx 'module) ,(m 'id:module-name) ,(m 'initial-require)
                       (,(mb-m '#%module-begin)
                        ,@fully-expanded-bodys-except-post-submodules)))
-                   require-provide
                    self))
   
   (parameterize ([current-namespace m-ns])
@@ -486,13 +481,12 @@
 
 ;; ----------------------------------------
 
-(define (check-ids-unbound ids phase)
+(define (check-ids-unbound ids phase requires+provides)
   (for ([id (in-list ids)])
-    (when (resolve id phase #:exactly? #t)
-      (error "identifier is already defined or required:" id))))
+    (check-required-or-defined requires+provides id phase)))
 
 (define (select-local-names-and-bind ids local-names self phase
-                                     add-defined-or-required-id!)
+                                     requires+provides)
   (for/list ([id (in-list ids)])
     (define sym (syntax-e id))
     (define local-sym
@@ -508,7 +502,7 @@
                               self phase local-sym
                               0))
     (add-binding! id b phase)
-    (add-defined-or-required-id! id phase b)
+    (add-defined-or-required-id! requires+provides id phase b)
     local-sym))
 
 ;; ----------------------------------------
