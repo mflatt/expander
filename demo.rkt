@@ -25,6 +25,22 @@
       (error "check failed")))
   v)
 
+(define-syntax-rule (check-print expr out ...)
+  (check-thunk-print (lambda () expr) out ...))
+
+(define (check-thunk-print t . outs)
+  (define o (open-output-bytes))
+  (parameterize ([current-output-port o])
+    (t))
+  (write-bytes (get-output-bytes o))
+  (define o-expected (open-output-bytes))
+  (for ([out (in-list outs)]) (println out o-expected))
+  (unless (equal? (get-output-bytes o)
+                  (get-output-bytes o-expected))
+    (error "output check failed")))
+
+;; ----------------------------------------
+
 (compile+eval-expression
  '(case-lambda
    [(x) (set! x 5)]
@@ -208,8 +224,11 @@
                            (#%require 'm1)
                            (println def:x)))
 
-"print 1 10 1"
-(namespace-require ''m2 demo-ns)
+(check-print
+ (namespace-require ''m2 demo-ns)
+ 1
+ 10
+ 1)
 
 ;; ----------------------------------------
 
@@ -277,8 +296,10 @@
                            (println (ct-m))
                            (println (rt-m))))
 
-"print 1 then 0"
-(namespace-require ''use-x-ref demo-ns)
+(check-print
+ (namespace-require ''use-x-ref demo-ns)
+ 1
+ 0)
 
 ;; ----------------------------------------
 
@@ -303,8 +324,10 @@
                            (+ 1 2)
                            (+ 3 4)))
 
-"print 3 then 7"
-(namespace-require ''printed demo-ns)
+(check-print
+ (namespace-require ''printed demo-ns)
+ 3
+ 7)
 
 ;; ----------------------------------------
 
@@ -317,8 +340,9 @@
                            (#%require (submod "." a))
                            (println a)))
 
-"pre submodule; print 'a"
-(namespace-require ''with-pre-submodule demo-ns)
+(check-print
+ (namespace-require ''with-pre-submodule demo-ns)
+ 'a)
 
 (eval-module-declaration '(module with-post-submodule '#%core
                            (#%provide b)
@@ -327,16 +351,18 @@
                              (#%require (submod ".."))
                              (println b))))
 
-"post submodule; print 'b"
-(namespace-require '(submod 'with-post-submodule b) demo-ns)
+(check-print
+ (namespace-require '(submod 'with-post-submodule b) demo-ns)
+ 'b)
 
 (eval-module-declaration '(module with-#f-submodule '#%core
                            (define-values (c) 'c)
                            (module* c #f
                              (println c))))
 
-"post submodule in enclosing scope; print 'c"
-(namespace-require '(submod 'with-#f-submodule c) demo-ns)
+(check-print
+ (namespace-require '(submod 'with-#f-submodule c) demo-ns)
+ 'c)
 
 (eval-module-declaration '(module with-shifted-#f-submodule '#%core
                            (#%require (for-syntax '#%core))
@@ -353,5 +379,7 @@
                            (define-syntaxes (m) (lambda (stx) (get-d-stx)))
                            (println (m))))
 
-"shifted submodule in enclosing scope; print 'd"
-(namespace-require ''use-shifted-#f-submodule demo-ns)
+(check-print
+ (namespace-require ''use-shifted-#f-submodule demo-ns)
+ 'd)
+
