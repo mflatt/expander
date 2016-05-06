@@ -1,24 +1,28 @@
-This is a work-in-progress reimplementation of Racket's macro expander.
+This simplified variant of the Racket expander demonstrates modules
+and submodules.
 
-See "demo.rkt" for examples.
+Relative to the full expander:
 
-TODO:
- Racket-style local definition contexts
- shadowing of initial require by other requires
- mutual references in `begin-for-syntax`
- top level
- module path indexes
- module resolver
- cross-phase persistent modules
- lazy module instantiation
- lazy scope propagation
- use-site scope "optimization"
- rename transformers
- source locations
- syntax-local-...
- taints
- lift syntax objects with shifts
- compile to serializable form
+ * omits the top level
+
+ * disallows mutual reference across `begin-for-syntax`es
+
+ * disallows shadoing of a module's initial require
+
+ * omit cross-phase persistent modules
+
+ * no rename transformers, syntax taints, `local-expand`,
+   `syntax-local-....`, source locations, module path indices
+
+ * non-lazy representations of syntax and module instances
+
+Relative to the "mini" expander:
+
+ * adds modules
+
+ * adds phasing
+
+ * adds general namespaces
 
 ----------------------------------------
 
@@ -30,11 +34,13 @@ Roadmap to the main pieces:
 
  binding.rkt - binding representations
 
- namespace.rkt - namespaces
+ namespace.rkt - namespaces and modules
 
  require.rkt - module require and instantiation
 
  expand[-....].rkt - expander loop and core forms
+
+ expand-{module,require,provide}.rkt - module expander
 
  compile.rkt - from expanded to raw S-expression
 
