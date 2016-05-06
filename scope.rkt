@@ -215,12 +215,6 @@
 ;; ----------------------------------------
 
 (define (bound-identifier=? a b phase)
-  (unless (identifier? a)
-    (raise-argument-error 'bound-identifier=? "identifier?" a))
-  (unless (identifier? b)
-    (raise-argument-error 'bound-identifier=? "identifier?" b))
-  (unless (phase? phase)
-    (raise-argument-error 'bound-identifier=? "phase?" phase))
   (and (eq? (syntax-e a)
             (syntax-e b))
        (equal? (syntax-scope-set a phase)

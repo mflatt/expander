@@ -21,7 +21,7 @@
 (define core-scope (new-multi-scope))
 (define core-stx (add-scope empty-syntax core-scope))
 
-;; Core forms are added by `require`s in "expander.rkt"
+;; Core forms and primitives are added by `require`s in "expander.rkt"
 
 ;; Accumulate added core forms and primitives:
 (define core-forms #hasheq())
