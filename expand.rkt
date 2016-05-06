@@ -113,7 +113,7 @@
   ;; In a definition context, we need use-site scopes
   (define use-s (maybe-add-use-site-scope intro-s ctx))
   ;; Call the transformer; the current expansion context may be needed
-  ;; for `syntax-local-....` functions
+  ;; for `{free,bound}-identifier=?`
   (define transformed-s (parameterize ([current-expand-context ctx])
                           (t use-s)))
   (unless (syntax? transformed-s)
