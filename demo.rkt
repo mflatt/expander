@@ -22,7 +22,7 @@
   (define-values (c v) (compile+eval-expression e))
   (when check-val
     (unless (equal? v check-val)
-      (error "check failed")))
+      (error "check failed:" v "vs." check-val)))
   v)
 
 (define-syntax-rule (check-print expr out ...)
@@ -202,6 +202,73 @@
                        ()
                        v))
   (error "shouldn't get here"))
+
+"free-identifier=? and bound-identifier=?"
+(eval-expression
+ #:check '(a (#t #f #t)
+           b (#f #f #t)
+           c (#t #f #t)
+           d (#t #f #f)
+           e (#f #f #t) (#f #f #f)
+           f ((#t #f) (#f #f)))
+ '(let-values ([(x) 0])
+   (letrec-syntaxes+values
+    ([(m) (lambda (stx)
+            (datum->syntax
+             (quote-syntax here)
+             (list (quote-syntax quote)
+                   (list
+                    (free-identifier=? (quote-syntax x) (car (cdr (syntax-e stx))))
+                    (bound-identifier=? (quote-syntax x) (car (cdr (syntax-e stx))))
+                    (bound-identifier=? (car (cdr (syntax-e stx)))
+                                        (car (cdr (cdr (syntax-e stx)))))))))])
+    ()
+    (list 
+     'a
+     (m x x)
+     'b
+     (let-values ([(x) 1])
+       (m x x))
+     'c
+     (letrec-syntaxes+values
+      ([(n) (lambda (stx)
+              (quote-syntax (m x x)))])
+      ()
+      (n))
+     'd
+     (letrec-syntaxes+values
+      ([(o) (lambda (stx)
+              (datum->syntax
+               (quote-syntax here)
+               (list (quote-syntax m)
+                     (car (cdr (syntax-e stx)))
+                     (quote-syntax x))))])
+      ()
+      (o x))
+     'e
+     (m not-x not-x)
+     (m not-x also-not-x)
+     'f
+     (letrec-syntaxes+values
+      ([(p) (lambda (stx)
+              (letrec-syntaxes+values
+               ([(q) (lambda (nested-stx)
+                       (datum->syntax
+                        (quote-syntax here)
+                        (list (quote-syntax quote)
+                              ;; These `free-identifier=?` test should be at phase 1:
+                              (list
+                               (free-identifier=? (quote-syntax stx) (car (cdr (syntax-e nested-stx))))
+                               (free-identifier=? (quote-syntax stx) (car (cdr (cdr (syntax-e nested-stx)))))))))])
+               ()
+               (datum->syntax
+                (quote-syntax here)
+                (list (quote-syntax quote)
+                      (list (q stx not-stx)
+                            (let-values ([(stx) 0])
+                              (q stx stx)))))))])
+      ()
+      (p))))))
 
 ;; ----------------------------------------
 

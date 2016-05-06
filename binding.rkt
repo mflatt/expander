@@ -39,12 +39,6 @@
 (struct local-binding (key))
 
 (define (free-identifier=? a b phase)
-  (unless (identifier? a)
-    (raise-argument-error 'free-identifier=? "identifier?" a))
-  (unless (identifier? b)
-    (raise-argument-error 'free-identifier=? "identifier?" b))
-  (unless (phase? phase)
-    (raise-argument-error 'free-identifier=? "phase?" phase))
   (define ab (resolve a phase))
   (define bb (resolve b phase))
   (cond
