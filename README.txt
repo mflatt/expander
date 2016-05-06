@@ -36,6 +36,8 @@ Roadmap to the main pieces:
 
  expand[-....].rkt - expander loop and core forms
 
+ expand-{module,require,provide}.rkt - module expander
+
  compile.rkt - from expanded to raw S-expression
 
  main.rkt - public interface
