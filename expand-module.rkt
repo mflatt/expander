@@ -139,6 +139,7 @@
                                                [phase phase]
                                                [namespace m-ns]
                                                [only-immediate? #t]
+                                               [use-site-scopes (box null)]
                                                [post-expansion-scope inside-scope]
                                                [module-scopes new-module-scopes]))
          
@@ -311,15 +312,15 @@
           (loop (cdr bodys)))]
         [(define-values)
          (define m (match-syntax exp-body '(define-values (id ...) rhs)))
-         (define ids (m 'id))
+         (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
          (check-ids-unbound ids phase)
          (define syms (select-local-names-and-bind ids local-names self phase
                                                    add-defined-or-required-id!))
-         (cons (car bodys)
+         (cons exp-body
                (loop (cdr bodys)))]
         [(define-syntaxes)
          (define m (match-syntax exp-body '(define-syntaxes (id ...) rhs)))
-         (define ids (m 'id))
+         (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
          (check-ids-unbound ids phase)
          (define syms (select-local-names-and-bind ids local-names self phase
                                                    add-defined-or-required-id!))
@@ -330,7 +331,7 @@
          (for ([key (in-list syms)]
                [val (in-list vals)])
            (namespace-set-transformer! m-ns phase key val))
-         (cons (rebuild (car bodys)
+         (cons (rebuild exp-body
                         `(,(m 'define-syntaxes) ,ids ,exp-rhs))
                (loop (cdr bodys)))]
         [(#%require)
@@ -338,25 +339,25 @@
          (parse-and-perform-requires! (m 'req) self
                                       m-ns phase
                                       add-defined-or-required-id!)
-         (cons (car bodys)
+         (cons exp-body
                (loop (cdr bodys)))]
         [(#%provide)
          ;; save for last pass
-         (cons (car bodys)
+         (cons exp-body
                (loop (cdr bodys)))]
         [(module)
          ;; Submodule to parse immediately
          (define submod
-           (expand-submodule (car bodys) self partial-body-ctx))
+           (expand-submodule exp-body self partial-body-ctx))
          (cons submod
                (loop (cdr bodys)))]
         [(module*)
          ;; Submodule to save for after this module
-         (cons (car bodys)
+         (cons exp-body
                (loop (cdr bodys)))]
         [else
          ;; save expression for next pass
-         (cons (car bodys)
+         (cons exp-body
                (loop (cdr bodys)))])])))
 
 ;; ----------------------------------------

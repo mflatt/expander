@@ -20,6 +20,7 @@
          eval-for-syntaxes-binding
          eval-for-bindings
          
+         remove-use-site-scopes
          rebuild)
 
 ;; ----------------------------------------

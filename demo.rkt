@@ -230,6 +230,34 @@
  10
  1)
 
+(eval-module-declaration '(module with-use-site-scope '#%core
+                           (#%require (for-syntax '#%core))
+
+                           (define-syntaxes (identity)
+                             (lambda (stx)
+                               (let-values ([(misc-id) (car (cdr (syntax-e stx)))])
+                                 (datum->syntax
+                                  (quote-syntax here)
+                                  (list 'lambda '(x)
+                                        (list 'let-values (list
+                                                           (list (list misc-id) ''other))
+                                              'x))))))
+                           (identity x)
+
+                           (define-syntaxes (define-identity)
+                             (lambda (stx)
+                               (datum->syntax
+                                #f
+                                (list (quote-syntax define-values)
+                                      (list (car (cdr (syntax-e stx))))
+                                      (quote-syntax  (lambda (x) x))))))
+                           (define-identity f)
+                           (println (f 5))))
+
+(check-print
+ (namespace-require ''with-use-site-scope demo-ns)
+ 5)
+
 ;; ----------------------------------------
 
 (eval-module-declaration '(module random-n '#%core
@@ -382,4 +410,3 @@
 (check-print
  (namespace-require ''use-shifted-#f-submodule demo-ns)
  'd)
-
