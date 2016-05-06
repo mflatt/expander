@@ -2,6 +2,7 @@
 (require "scope.rkt"
          "core.rkt"
          "match.rkt"
+         "require+provide.rkt"
          "expand.rkt"
          "expand-context.rkt"
          "expand-require.rkt")
@@ -35,7 +36,7 @@
                                 #f ; no enclosing module
                                 (expand-context-namespace ctx)
                                 (expand-context-phase ctx)
-                                void)
+                                (make-requires+provides))
    ;; Nothing to expand
    s))
 

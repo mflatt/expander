@@ -4,7 +4,6 @@ See "demo.rkt" for examples.
 
 TODO:
  Racket-style local definition contexts
- shadowing of initial require by other requires
  mutual references in `begin-for-syntax`
  top level
  module path indexes
@@ -32,11 +31,11 @@ Roadmap to the main pieces:
 
  namespace.rkt - namespaces
 
- require.rkt - module require and instantiation
-
  expand[-....].rkt - expander loop and core forms
 
  expand-{module,require,provide}.rkt - module expander
+
+ require+provide.rkt - require and provide tracking
 
  compile.rkt - from expanded to raw S-expression
 

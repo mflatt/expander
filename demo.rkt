@@ -39,6 +39,18 @@
                   (get-output-bytes o-expected))
     (error "output check failed")))
 
+(define-syntax-rule (check-error expr rx)
+  (check-thunk-error (lambda () expr) rx))
+
+(define (check-thunk-error t rx)
+  (void)
+  (with-handlers ([exn:fail? (lambda (exn)
+                               (unless (regexp-match? rx (exn-message exn))
+                                 (error "wrong error"))
+                               `(ok ,(exn-message exn)))])
+    (t)
+    (error "shouldn't get here")))
+
 ;; ----------------------------------------
 
 (compile+eval-expression
@@ -192,16 +204,12 @@
    (m)))
 
 "non-transformer binding misuse"
-(with-handlers ([exn:fail? (lambda (exn)
-                             (unless (regexp-match? #rx"illegal use of syntax"
-                                                    (exn-message exn))
-                               (error "wrong error"))
-                             'illegal-use)])
-  (expand-expression '(letrec-syntaxes+values
-                       ([(v) 1])
-                       ()
-                       v))
-  (error "shouldn't get here"))
+(check-error
+ (expand-expression '(letrec-syntaxes+values
+                      ([(v) 1])
+                      ()
+                      v))
+ #rx"illegal use of syntax")
 
 "free-identifier=? and bound-identifier=?"
 (eval-expression
@@ -324,6 +332,29 @@
 (check-print
  (namespace-require ''with-use-site-scope demo-ns)
  5)
+
+(eval-module-declaration '(module definition-shadows-initial-require '#%core
+                           (#%require (rename '#%core orig:list list))
+                           (#%provide list)
+                           (define-values (list)
+                             (lambda (a b)
+                               (println a)
+                               (orig:list a b)))))
+
+(eval-module-declaration '(module require-shadows-initial-require '#%core
+                           (#%require 'definition-shadows-initial-require)
+                           (list 'a 'b)))
+
+(check-print
+ (namespace-require ''require-shadows-initial-require demo-ns)
+ 'a)
+
+(check-error
+ (eval-module-declaration '(module m '#%core
+                            (#%require '#%core)
+                            (#%provide list)
+                            (define-values (list) 0)))
+ #rx"already required or defined")
 
 ;; ----------------------------------------
 

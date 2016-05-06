@@ -1,21 +1,15 @@
 #lang racket/base
-(require racket/set
-         "syntax.rkt"
+(require "syntax.rkt"
          "phase.rkt"
          "scope.rkt"
          "match.rkt"
          "binding.rkt"
-         "require.rkt"
+         "require+provide.rkt"
          "expand-context.rkt"
          "core.rkt"
          "module-path.rkt")
 
-(provide parse-and-expand-provides!
-         
-         make-require-provide-registry
-         reset-provides!
-         register-defined-or-required-id!
-         attach-require-provide-properties)
+(provide parse-and-expand-provides!)
 
 (define layers '(raw phaseless id))
 
@@ -146,7 +140,7 @@
   (define b (resolve spec at-phase))
   (unless b
     (error "provided identifier is not defined or required:" spec))
-  (register-provide! rp sym at-phase b spec))
+  (add-provide! rp sym at-phase b spec))
 
 (define (parse-struct! id:struct fields at-phase rp)
   (define (mk fmt)
@@ -177,7 +171,7 @@
   (parse-all-from-module mod-name #f except-ids #f at-phase rp))
   
 (define (parse-all-from-module mod-name matching-stx except-ids prefix-sym at-phase rp)
-  (define requireds (register-extract-module-requires rp mod-name at-phase))
+  (define requireds (extract-module-requires rp mod-name at-phase))
   (unless requireds
     (error "no requires from module path:" mod-name "at phase:" at-phase))
   
@@ -200,7 +194,7 @@
                 (for/or ([except-id (in-list except-ids)])
                   (and (free-identifier=? id except-id phase)
                        (hash-set! found except-id #t))))
-      (register-provide! rp (add-prefix (syntax-e id)) phase (resolve id phase) id)))
+      (add-provide! rp (add-prefix (syntax-e id)) phase (resolve id phase) id)))
   
   ;; Check that all exclusions matched something to exclude:
   (unless (= (hash-count found) (length except-ids))
@@ -214,82 +208,3 @@
                    "excluded identifier was not defined in the module:"
                    "excluded identifier was not required from the module:")
                except-id)))))
-
-;; ----------------------------------------
-
-(struct required (id phase))
-
-(struct require-provide (module-to-ids       ; resolved-module-name-> require-phase -> list of (required id phase)
-                         phase-to-provides)) ; phase -> sym -> binding
-
-(define (make-require-provide-registry)
-  (require-provide (make-hash)
-                   (make-hasheqv)))
-
-(define (reset-provides! rp)
-  (hash-clear! (require-provide-phase-to-provides rp)))
-
-(define register-defined-or-required-id!
-  (case-lambda
-    [(rp mod-name phase)
-     ;; Register module require
-     (hash-update! (require-provide-module-to-ids rp)
-                   mod-name
-                   (lambda (at-mod)
-                     (hash-update at-mod
-                                  phase
-                                  (lambda (l) l)
-                                  null))
-                   #hasheqv())]
-    [(rp id phase binding)
-     ;; Register specific required identifier
-     (unless (equal? phase (phase+ (module-binding-nominal-phase binding)
-                                   (module-binding-nominal-require-phase binding)))
-       (error "internal error: binding phase does not match nominal info"))
-     
-     (hash-update! (require-provide-module-to-ids rp)
-                   (module-binding-nominal-module binding)
-                   (lambda (at-mod)
-                     (hash-update at-mod
-                                  (module-binding-nominal-require-phase binding)
-                                  (lambda (l) (cons (required id phase) l))
-                                  null))
-                   #hasheqv())]))
-
-(define (register-provide! rp sym phase binding id)
-  (hash-update! (require-provide-phase-to-provides rp)
-                phase
-                (lambda (at-phase)
-                  (define b (hash-ref at-phase sym #f))
-                  (cond
-                   [(not b)
-                    (hash-set at-phase sym binding)]
-                   [(and (equal? (module-binding-module b) (module-binding-module binding))
-                         (eqv? (module-binding-phase b) (module-binding-phase binding))
-                         (eq? (module-binding-sym b) (module-binding-sym binding)))
-                    ;; If `binding` has different nomina info (i.e., same binding
-                    ;; required from different syntactic sources), we keep only
-                    ;; the first once.
-                    at-phase]
-                   [else
-                    (error "name already provided as a different binding:" sym)]))
-                #hasheq()))
-
-(define (register-extract-module-requires rp mod-path phase)
-  (define at-mod (hash-ref (require-provide-module-to-ids rp) mod-path #f))
-  (and at-mod
-       (hash-ref at-mod phase #f)))
-
-(define (attach-require-provide-properties s rp self)
-  (define (extract-requires)
-    (define mht
-      (for/fold ([mht #hasheqv()]) ([(module-name ht) (in-hash (require-provide-module-to-ids rp))])
-        (for/fold ([mht mht]) ([phase (in-hash-keys ht)])
-          (if (eq? module-name self)
-              mht
-              (hash-update mht phase (lambda (s) (set-add s module-name)) (set))))))
-    (for/hasheqv ([(phase mods) (in-hash mht)])
-      (values phase (set->list mods))))
-  (let* ([s (syntax-property s 'module-requires (extract-requires))]
-         [s (syntax-property s 'module-provides (require-provide-phase-to-provides rp))])
-    s))

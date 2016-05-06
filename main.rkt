@@ -3,6 +3,7 @@
          "scope.rkt"
          "namespace.rkt"
          "core.rkt"
+         "require+provide.rkt"
          "expand-context.rkt"
          (rename-in "expand.rkt" [expand expand-in-context])
          "expand-require.rkt"
@@ -29,7 +30,7 @@
                                                 (namespace-scope ns)))
                                #f ns
                                0
-                               void))
+                               (make-requires+provides)))
 
 (define (expand s [ns (current-namespace)])
   (expand-in-context s (make-expand-context ns)))
