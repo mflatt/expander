@@ -4,9 +4,12 @@ See "demo.rkt" for examples.
 
 TODO:
  Racket-style local definition contexts
+ shadowing of initial require by other requires
+ mutual references in `begin-for-syntax`
  top level
  module path indexes
  module resolver
+ cross-phase persistent modules
  lazy module instantiation
  lazy scope propagation
  use-site scope "optimization"

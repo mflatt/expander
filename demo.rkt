@@ -410,3 +410,17 @@
 (check-print
  (namespace-require ''use-shifted-#f-submodule demo-ns)
  'd)
+
+(eval-module-declaration '(module with-#f-submodule-provide '#%core
+                           (define-values (e) 'e)
+                           (module* e #f
+                             (#%provide e))))
+
+(eval-module-declaration '(module use-submodule-provide '#%core
+                           (#%require (submod 'with-#f-submodule-provide e))
+                           (println e)))
+
+(check-print
+ (namespace-require ''use-submodule-provide demo-ns)
+ 'e)
+
