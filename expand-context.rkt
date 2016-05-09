@@ -19,6 +19,7 @@
                         module-begin-k ; expander for `#%module-begin` in a 'module-begin context
                         need-eventually-defined ; phase(>=1) -> variables expanded before binding
                         stops      ; free-id-set
+                        current-introduction-scopes ; scope for current macro expansion
                         ))
 
 (define (make-expand-context ns)
@@ -33,6 +34,7 @@
                   #f   ; post-expansion-scope
                   #f   ; module-begin-k
                   #f   ; need-eventually-defined
-                  empty-free-id-set))
+                  empty-free-id-set
+                  null)); current-introduction-scopes
 
 (define current-expand-context (make-parameter #f))

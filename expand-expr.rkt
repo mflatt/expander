@@ -123,7 +123,7 @@
                      (for/fold ([env env]) ([key (in-list keys)]
                                             [val (in-list vals)])
                        (env-extend env key val))))
-   ;; Expand right-hand sides and bodyL
+   ;; Expand right-hand sides and body
    (define rec-ctx (struct-copy expand-context ctx
                                 [env rec-env]
                                 [scopes (cons sc (expand-context-scopes ctx))]))

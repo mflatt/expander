@@ -10,6 +10,7 @@
          remove-scope
          remove-scopes
          flip-scope
+         flip-scopes
          
          syntax-shift-phase-level
          
@@ -127,6 +128,10 @@
 
 (define (flip-scope s sc)
   (apply-scope s (generalize-scope sc) set-flip))
+
+(define (flip-scopes s scs)
+  (for/fold ([s s]) ([sc (in-list scs)])
+    (flip-scope s sc)))
 
 ;; To shift a syntax's phase, we only have to shift the phase
 ;; of any phase-specific scopes. The bindings attached to a

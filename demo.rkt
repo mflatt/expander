@@ -309,6 +309,48 @@
        (n (m))))))
  #:check 10)
 
+"internal definition context"
+(eval-expression
+ '(let-values ([(x) 10])
+   (letrec-syntaxes+values
+    ([(m) (lambda (stx)
+            (let-values ([(id) (car (cdr (syntax-e stx)))]
+                         [(id2) (car (cdr (cdr (syntax-e stx))))]
+                         [(intdef) (syntax-local-make-definition-context)])
+              (syntax-local-bind-syntaxes (list id)
+                                          (quote-syntax (lambda (stx) (quote-syntax 5)))
+                                          intdef)
+              (syntax-local-bind-syntaxes (list id2)
+                                          #f
+                                          intdef)
+              (datum->syntax
+               (quote-syntax here)
+               (list (quote-syntax let-values)
+                     (list (list (list
+                                  (syntax-local-identifier-as-binding
+                                   (car
+                                    (cdr
+                                     (syntax-e (local-expand (datum->syntax
+                                                              #f
+                                                              (list (quote-syntax quote)
+                                                                    id2))
+                                                             (list 'intdef)
+                                                             (list (quote-syntax quote))
+                                                             intdef))))))
+                                 7))
+                     (local-expand (datum->syntax
+                                    (quote-syntax here)
+                                    (list (quote-syntax +)
+                                          (list id)
+                                          id2))
+                                   (list 'intdef)
+                                   (list)
+                                   intdef)))))])
+                          
+    ()
+    (m x y)))
+ #:check 12)
+
 ;; ----------------------------------------
 
 (define (eval-module-declaration mod)

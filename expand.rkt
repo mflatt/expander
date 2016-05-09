@@ -117,10 +117,13 @@
   (define intro-scope (new-scope))
   (define intro-s (add-scope s intro-scope))
   ;; In a definition context, we need use-site scopes
-  (define use-s (maybe-add-use-site-scope intro-s ctx))
+  (define-values (use-s use-scopes) (maybe-add-use-site-scope intro-s ctx))
   ;; Call the transformer; the current expansion context may be needed
   ;; for `syntax-local-....` functions
-  (define transformed-s (parameterize ([current-expand-context ctx])
+  (define m-ctx (struct-copy expand-context ctx
+                             [current-introduction-scopes (cons intro-scope
+                                                                use-scopes)]))
+  (define transformed-s (parameterize ([current-expand-context m-ctx])
                           (t use-s)))
   (unless (syntax? transformed-s)
     (error "transformer produced non-syntax:" transformed-s))
@@ -138,8 +141,8 @@
     (define sc (new-scope))
     (define b (expand-context-use-site-scopes ctx))
     (set-box! b (cons sc (unbox b)))
-    (add-scope s sc)]
-   [else s]))
+    (values (add-scope s sc) (list sc))]
+   [else (values s null)]))
 
 (define (maybe-add-post-expansion-scope s ctx)
   (cond
@@ -201,7 +204,7 @@
      [(null? bodys)
       ;; Partial expansion is complete, so finish by rewriting to
       ;; `letrec-values`
-      (finish-expanding-body body-ctx done-bodys val-binds s)]
+      (finish-expanding-body body-ctx (reverse done-bodys) val-binds s)]
      [else
       (define exp-body (expand (car bodys) body-ctx))
       (case (core-form-sym exp-body phase)
