@@ -291,6 +291,24 @@
        (m)))))
  #:check 1)
 
+"local-expand"
+(eval-expression
+ '(let-values ([(x) 10])
+   (letrec-syntaxes+values
+    ([(m) (lambda (stx) (quote-syntax (something x)))])
+    ()
+    (letrec-syntaxes+values
+     ([(n) (lambda (stx) (car
+                     (cdr
+                      (syntax-e
+                       (local-expand (car (cdr (syntax-e stx)))
+                                     'expression
+                                     (list (quote-syntax #%app)))))))])
+     ()
+     (let-values ([(x) 20])
+       (n (m))))))
+ #:check 10)
+
 ;; ----------------------------------------
 
 (define (eval-module-declaration mod)

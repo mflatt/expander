@@ -9,6 +9,7 @@
  (struct-out module-binding)
  (struct-out local-binding)
  free-identifier=?
+ identifier-binding-symbol
  add-local-binding!
  
  empty-env
@@ -58,6 +59,15 @@
     (and (not ab)
          (not bb)
          (eq? (syntax-e a) (syntax-e b)))]))
+
+(define (identifier-binding-symbol id phase)
+  (define b (resolve id phase))
+  (cond
+   [(module-binding? b)
+    (module-binding-sym b)]
+   [(local-binding? b)
+    (local-binding-key b)]
+   [else (syntax-e id)]))
 
 ;; Helper for registering a local binding in a set of scopes:
 (define (add-local-binding! id phase)

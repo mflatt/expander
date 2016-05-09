@@ -34,6 +34,7 @@
 (add-core-primitive! 'bound-identifier=? bound-identifier=?)
 (add-core-primitive! 'free-identifier=? free-identifier=?)
 (add-core-primitive! 'syntax-local-value syntax-local-value)
+(add-core-primitive! 'local-expand local-expand)
 (add-core-primitive! 'cons cons)
 (add-core-primitive! 'list list)
 (add-core-primitive! 'car car)

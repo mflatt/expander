@@ -6,6 +6,7 @@
          "match.rkt"
          "namespace.rkt"
          "binding.rkt"
+         "free-id-set.rkt"
          "dup-check.rkt"
          "compile.rkt"
          "core.rkt"
@@ -27,33 +28,37 @@
 (define (expand s ctx)
   (cond
    [(identifier? s)
-    (define binding (resolve s (expand-context-phase ctx)))
-    (cond
-     [(not binding)
-      ;; The implicit `#%top` form handles unbound identifiers
-      (expand-implicit '#%top s ctx)]
-     [else
-      ;; Variable or form as identifier macro
-      (dispatch (lookup binding ctx s) s ctx)])]
+    (guard-stop
+     s ctx s
+     (define binding (resolve s (expand-context-phase ctx)))
+     (cond
+      [(not binding)
+       ;; The implicit `#%top` form handles unbound identifiers
+       (expand-implicit '#%top s ctx)]
+      [else
+       ;; Variable or form as identifier macro
+       (dispatch (lookup binding ctx s) s ctx)]))]
    [(and (pair? (syntax-e s))
          (identifier? (car (syntax-e s))))
     ;; An "application" form that starts with an identifier
     (define id (car (syntax-e s)))
-    (define binding (resolve id (expand-context-phase ctx)))
-    (cond
-     [(not binding)
-      ;; The `#%app` binding might do something with unbound ids
-      (expand-implicit '#%app s ctx)]
-     [else
-      ;; Find out whether it's bound as a variable, syntax, or core form
-      (define t (lookup binding ctx id))
-      (cond
-       [(or (variable? t) (unbound? t))
-        ;; Not as syntax or core form, so use implicit `#%app`
-        (expand-implicit '#%app s ctx)]
-       [else
-        ;; Syntax or core form as "application"
-        (dispatch t s ctx)])])]
+    (guard-stop
+     id ctx s
+     (define binding (resolve id (expand-context-phase ctx)))
+     (cond
+      [(not binding)
+       ;; The `#%app` binding might do something with unbound ids
+       (expand-implicit '#%app s ctx)]
+      [else
+       ;; Find out whether it's bound as a variable, syntax, or core form
+       (define t (lookup binding ctx id))
+       (cond
+        [(or (variable? t) (unbound? t))
+         ;; Not as syntax or core form, so use implicit `#%app`
+         (expand-implicit '#%app s ctx)]
+        [else
+         ;; Syntax or core form as "application"
+         (dispatch t s ctx)])]))]
    [(or (pair? (syntax-e s))
         (null? (syntax-e s)))
     ;; An "application" form that doesn't start with an identifier, so
@@ -67,21 +72,23 @@
 ;; Handle an implicit: `#%app`, `#%top`, or `#%datum`
 (define (expand-implicit sym s ctx)
   (define id (datum->syntax s sym))
-  ;; Instead of calling `expand` with a new form that starts `id`,
-  ;; we reimplement the "applicaiton"-form case of `expand` so that
-  ;; we provide an error if the implicit form is not suitably bound
-  (define b (resolve id (expand-context-phase ctx)))
-  (define t (and b (lookup b ctx id)))
-  (cond
-   [(core-form? t)
-    (if (expand-context-only-immediate? ctx)
-        s
-        (dispatch t (datum->syntax s (cons sym s) s) ctx))]
-   [(transformer? t)
-    (dispatch t (datum->syntax s (cons sym s) s) ctx)]
-   [else
-    (error (format "no transformer binding for ~a:" sym)
-           s)]))
+  (guard-stop
+   id ctx s
+   ;; Instead of calling `expand` with a new form that starts `id`,
+   ;; we reimplement the "applicaiton"-form case of `expand` so that
+   ;; we provide an error if the implicit form is not suitably bound
+   (define b (resolve id (expand-context-phase ctx)))
+   (define t (and b (lookup b ctx id)))
+   (cond
+    [(core-form? t)
+     (if (expand-context-only-immediate? ctx)
+         s
+         (dispatch t (datum->syntax s (cons sym s) s) ctx))]
+    [(transformer? t)
+     (dispatch t (datum->syntax s (cons sym s) s) ctx)]
+    [else
+     (error (format "no transformer binding for ~a:" sym)
+            s)])))
 
 ;; Expand `s` given that the value `t` of the relevant binding,
 ;; where `t` is either a core form, a macro transformer, some
@@ -151,6 +158,15 @@
                   (expand-context-namespace ctx)
                   (expand-context-phase ctx)
                   id))
+
+(define-syntax-rule (guard-stop id ctx s otherwise ...)
+  (cond
+   [(free-id-set-member? (expand-context-stops ctx)
+                         (expand-context-phase ctx)
+                         id)
+    s]
+   [else
+    otherwise ...]))
 
 ;; ----------------------------------------
 

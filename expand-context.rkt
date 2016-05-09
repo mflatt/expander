@@ -1,6 +1,7 @@
 #lang racket/base
 (require "namespace.rkt"
-         "binding.rkt")
+         "binding.rkt"
+         "free-id-set.rkt")
 
 (provide (struct-out expand-context)
          make-expand-context
@@ -17,6 +18,7 @@
                         post-expansion-scope  ; scope to add to every expansion; #f if none
                         module-begin-k ; expander for `#%module-begin` in a 'module-begin context
                         need-eventually-defined ; phase(>=1) -> variables expanded before binding
+                        stops      ; free-id-set
                         ))
 
 (define (make-expand-context ns)
@@ -30,6 +32,7 @@
                   #f   ; only-immediate?
                   #f   ; post-expansion-scope
                   #f   ; module-begin-k
-                  #f)) ; need-eventually-defined
+                  #f   ; need-eventually-defined
+                  empty-free-id-set))
 
 (define current-expand-context (make-parameter #f))
