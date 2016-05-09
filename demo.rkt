@@ -278,6 +278,19 @@
       ()
       (p))))))
 
+"syntax-local-value"
+(eval-expression
+ '(let-values ([(x) 1])
+   (letrec-syntaxes+values
+    ([(x-id) (quote-syntax x)])
+    ()
+    (letrec-syntaxes+values
+     ([(m) (lambda (stx) (syntax-local-value (quote-syntax x-id)))])
+     ()
+     (let-values ([(x) 2])
+       (m)))))
+ #:check 1)
+
 ;; ----------------------------------------
 
 (define (eval-module-declaration mod)
@@ -531,3 +544,21 @@
  (namespace-require ''use-submodule-provide demo-ns)
  'e)
 
+;; ----------------------------------------
+;; syntax-local-value of module binding
+
+(eval-module-declaration '(module define-non-transformer '#%core
+                           (#%require (for-syntax '#%core))
+                           (#%provide car-id)
+                           (define-syntaxes (car-id) (quote-syntax car))))
+
+(eval-module-declaration '(module use-non-transformer '#%core
+                           (#%require (for-syntax '#%core)
+                                      'define-non-transformer)
+                           (define-syntaxes (m)
+                             (lambda (stx) (syntax-local-value (quote-syntax car-id))))
+                           (println ((m) '(1 2)))))
+
+(check-print
+ (namespace-require ''use-non-transformer demo-ns)
+ 1)

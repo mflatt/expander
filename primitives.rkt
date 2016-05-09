@@ -7,15 +7,7 @@
          (rename-in "binding.rkt"
                     [free-identifier=? raw:free-identifier=?])
          "core.rkt"
-         "expand-context.rkt")
-
-;; `bound-identifier=?` and `free-identifier=?` use the current
-;; context to determine the default phase
-(define (default-phase)
-  (define ctx (current-expand-context))
-  (if ctx
-      (expand-context-phase ctx)
-      0))
+         "syntax-local.rkt")
 
 (define (bound-identifier=? a b [phase (default-phase)])
   (unless (identifier? a)
@@ -41,6 +33,7 @@
 (add-core-primitive! 'datum->syntax datum->syntax)
 (add-core-primitive! 'bound-identifier=? bound-identifier=?)
 (add-core-primitive! 'free-identifier=? free-identifier=?)
+(add-core-primitive! 'syntax-local-value syntax-local-value)
 (add-core-primitive! 'cons cons)
 (add-core-primitive! 'list list)
 (add-core-primitive! 'car car)
