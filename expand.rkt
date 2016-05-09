@@ -306,7 +306,10 @@
 ;; side of a definition that was revealed by partial expansion in a
 ;; definition context
 (define (remove-use-site-scopes s ctx)
-  (remove-scopes s (unbox (expand-context-use-site-scopes ctx))))
+  (define use-sites (expand-context-use-site-scopes ctx))
+  (if use-sites
+      (remove-scopes s (unbox use-sites))
+      s))
 
 ;; ----------------------------------------
 

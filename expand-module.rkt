@@ -276,10 +276,12 @@
       (if keep-enclosing-scope-at-phase
           ;; Keep enclosing module scopes for `(module* _ #f ....)`
           s
-          ;; Remove the scopes of the top level or a module ouside of
-          ;; this module
-          (for/fold ([s s]) ([sc (in-list (expand-context-module-scopes ctx))])
-            (remove-scope s sc))))
+          ;; Remove the scopes of the top level or a module outside of
+          ;; this module, as well as any relevant use-site scopes
+          (remove-use-site-scopes
+           (for/fold ([s s]) ([sc (in-list (expand-context-module-scopes ctx))])
+             (remove-scope s sc))
+           ctx)))
     ;; Add outside- and inside-edge scopes
     (add-scope (add-scope s-without-enclosing
                           outside-scope)
