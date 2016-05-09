@@ -198,8 +198,8 @@
               (when adjusted-sym
                 (define s (datum->syntax bind-in-stx adjusted-sym))
                 (define bind-phase (phase+ phase-shift provide-phase))
-                (check-required-or-defined requires+provides
-                                           s bind-phase)
+                (check-not-required-or-defined requires+provides
+                                               s bind-phase)
                 (add-defined-or-required-id! requires+provides
                                              s bind-phase binding
                                              #:can-shadow? can-shadow?))

@@ -11,7 +11,7 @@
          (struct-out required)
          add-required-module!
          add-defined-or-required-id!
-         check-required-or-defined
+         check-not-required-or-defined
          extract-module-requires
          
          reset-provides!
@@ -62,7 +62,7 @@
 
 ;; Check whether an identifier has a binding that is from a non-shadowable
 ;; require
-(define (check-required-or-defined r+p id phase)
+(define (check-not-required-or-defined r+p id phase)
   (define b (resolve id phase #:exactly? #t))
   (when b
     (define at-mod (hash-ref (requires+provides-requires r+p)
