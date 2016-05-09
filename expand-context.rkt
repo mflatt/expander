@@ -15,7 +15,8 @@
                         env        ; environment for local bindings
                         only-immediate? ; #t => stop at core forms
                         post-expansion-scope  ; scope to add to every expansion; #f if none
-                        module-begin-k ; expander for `#%module-being` in a 'module-begin context
+                        module-begin-k ; expander for `#%module-begin` in a 'module-begin context
+                        need-eventually-defined ; phase(>=1) -> variables expanded before binding
                         ))
 
 (define (make-expand-context ns)
@@ -28,6 +29,7 @@
                   empty-env
                   #f   ; only-immediate?
                   #f   ; post-expansion-scope
-                  #f)) ; module-begin-k
+                  #f   ; module-begin-k
+                  #f)) ; need-eventually-defined
 
 (define current-expand-context (make-parameter #f))

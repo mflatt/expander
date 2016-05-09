@@ -358,6 +358,15 @@
 
 ;; ----------------------------------------
 
+(eval-module-declaration '(module forward-reference-in-begin-for-syntax '#%core
+                           (#%require (for-syntax '#%core))
+                           (begin-for-syntax
+                             (define-values (even) (lambda () odd)))
+                           (begin-for-syntax
+                             (define-values (odd) (lambda () even)))))
+
+;; ----------------------------------------
+
 (eval-module-declaration '(module random-n '#%core
                            (define-values (n) (random))
                            (#%provide n)))

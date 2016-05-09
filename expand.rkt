@@ -342,8 +342,12 @@
 ;; Expand and evaluate `s` as an expression in the given phase;
 ;; ensuring that the number of returned values matches the number of
 ;; target identifiers; return the values
-(define (eval-for-bindings ids s phase ns)
-  (define compiled (compile s ns phase))
+(define (eval-for-bindings ids s phase ns
+                           #:allow-unbound-as-variable? [allow-unbound-as-variable? #f])
+  (define compiled (compile s (make-compile-context
+                               #:namespace ns
+                               #:phase phase
+                               #:allow-unbound-as-variable? allow-unbound-as-variable?)))
   (define vals
     (call-with-values (lambda () (expand-time-eval compiled))
       list))

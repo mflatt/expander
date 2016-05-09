@@ -40,6 +40,23 @@
     (struct-copy expand-context ctx
                  [module-begin-k #f]))))
 
+(add-core-form!
+ '#%top
+ (lambda (s ctx)
+   (define m (match-syntax s '(#%top . id)))
+   (cond
+    [(expand-context-need-eventually-defined ctx)
+     ;; In top level or `begin-for-syntax`, encountered a reference to a
+     ;; variable that might be defined later; record it for later checking
+     (define id (m 'id))
+     (hash-update! (expand-context-need-eventually-defined ctx)
+                   (expand-context-phase ctx)
+                   (lambda (l) (cons id l))
+                   null)
+     id]
+    [else
+     (error "unbound identifier:" (m 'id))])))
+
 ;; ----------------------------------------
 
 (define (expand-module s ctx enclosing-self
@@ -63,21 +80,23 @@
                                        self
                                        (and enclosing-self #t)))
    
-   (define (apply-module-scopes s)
-     (define s-without-enclosing
-       (if keep-enclosing-scope-at-phase
-           s
-           ;; Remove the scopes of the top level or a module ouside of
-           ;; this one:
-           (for/fold ([s s]) ([sc (in-list (expand-context-module-scopes ctx))])
-             (remove-scope s sc))))
-     (add-scope (add-scope s-without-enclosing
-                           outside-scope)
-                inside-scope))
+   (define apply-module-scopes
+     (make-apply-module-scopes outside-scope inside-scope 
+                               ctx keep-enclosing-scope-at-phase))
 
+   ;; Add the module's scope to the bodies
+   (define bodys (map apply-module-scopes (m 'body)))
+   
+   ;; To keep track of all requires and provides
    (define requires+provides (make-requires+provides))
 
-   ;; Initial require:
+   ;; Table of symbol picked for each binding in this module:
+   (define defined-syms (make-hasheqv)) ; phase -> sym ->id
+
+   ;; For variable repeferences before corresponding binding (phase >= 1)
+   (define need-eventually-defined (make-hasheqv)) ; phase -> list of id
+
+   ;; Initial require
    (cond
     [(not keep-enclosing-scope-at-phase)
      ;; Install the initial require
@@ -93,9 +112,7 @@
                            keep-enclosing-scope-at-phase)
      (namespace-module-visit! m-ns enclosing-self keep-enclosing-scope-at-phase)])
    
-   ;; Add the module's scope to the bodies
-   (define bodys (map apply-module-scopes (m 'body)))
-   
+   ;; All module bodies start at phase 0
    (define phase 0)
    
    ;; The primitive `#%module-body` form calls this function to expand the
@@ -129,14 +146,17 @@
          ;; Pass 1: partially expand to discover all bindings and install all 
          ;; defined macro transformers
          
+         (define use-site-scopes (box null))
          (define partial-body-ctx (struct-copy expand-context ctx
                                                [context 'module]
                                                [phase phase]
                                                [namespace m-ns]
                                                [only-immediate? #t]
-                                               [use-site-scopes (box null)]
+                                               [use-site-scopes use-site-scopes]
                                                [post-expansion-scope inside-scope]
-                                               [module-scopes new-module-scopes]))
+                                               [module-scopes new-module-scopes]
+                                               [need-eventually-defined (and (phase . >= . 1)
+                                                                             need-eventually-defined)]))
          
          (define partially-expanded-bodys
            (partially-expand-bodys bodys
@@ -146,6 +166,8 @@
                                    #:namespace m-ns
                                    #:self self
                                    #:requires-and-provides requires+provides
+                                   #:module-scopes new-module-scopes
+                                   #:defined-syms defined-syms
                                    #:loop phase-1-and-2-loop))
 
          ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -159,6 +181,9 @@
                                            #:phase phase
                                            #:ctx body-ctx)))
 
+     ;; Check that any tentativey allowed reference at phase >= 1 is ok
+     (check-defined-by-now need-eventually-defined self)
+     
      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
      ;; Pass 3: resolve provides at all phases
      
@@ -271,7 +296,26 @@
   (rebuild
    s
    `(,mb-id ,@bodys)))
-           
+
+;; ----------------------------------------
+
+;; Make function to adjust syntax that appears in the original module body
+(define (make-apply-module-scopes inside-scope outside-scope
+                                  ctx keep-enclosing-scope-at-phase)
+  (lambda (s)
+    (define s-without-enclosing
+      (if keep-enclosing-scope-at-phase
+          ;; Keep enclosing module scopes for `(module* _ #f ....)`
+          s
+          ;; Remove the scopes of the top level or a module ouside of
+          ;; this module
+          (for/fold ([s s]) ([sc (in-list (expand-context-module-scopes ctx))])
+            (remove-scope s sc))))
+    ;; Add outside- and inside-edge scopes
+    (add-scope (add-scope s-without-enclosing
+                          outside-scope)
+               inside-scope)))
+
 ;; ----------------------------------------
 
 ;; Pass 1 of `module` expansion, which uncovers definitions,
@@ -283,10 +327,9 @@
                                 #:namespace m-ns
                                 #:self self
                                 #:requires-and-provides requires+provides
+                                #:module-scopes module-scopes
+                                #:defined-syms defined-syms
                                 #:loop phase-1-and-2-loop)
-  ;; Table of symbol picked for each binding in this module:
-  (define local-names (make-hasheq))
-  
   (let loop ([bodys bodys])
     (cond
      [(null? bodys) null]
@@ -309,16 +352,18 @@
          (define m (match-syntax exp-body '(define-values (id ...) rhs)))
          (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
          (check-ids-unbound ids phase requires+provides)
-         (define syms (select-local-names-and-bind ids local-names self phase
-                                                   requires+provides))
+         (define syms (select-defined-syms-and-bind ids defined-syms self phase
+                                                    module-scopes
+                                                    requires+provides))
          (cons exp-body
                (loop (cdr bodys)))]
         [(define-syntaxes)
          (define m (match-syntax exp-body '(define-syntaxes (id ...) rhs)))
          (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
          (check-ids-unbound ids phase requires+provides)
-         (define syms (select-local-names-and-bind ids local-names self phase
-                                                   requires+provides))
+         (define syms (select-defined-syms-and-bind ids defined-syms self phase
+                                                    module-scopes
+                                                    requires+provides))
          ;; Expand and evaluate RHS:
          (define-values (exp-rhs vals)
            (expand+eval-for-syntaxes-binding (m 'rhs) ids partial-body-ctx))
@@ -379,6 +424,17 @@
          (cons (expand (car bodys) body-ctx)
                (loop (cdr bodys)))])])))
 
+(define (check-defined-by-now need-eventually-defined self)
+  ;; If `need-eventually-defined` is not empty, report an error
+  (for ([(phase l) (in-hash need-eventually-defined)])
+    (for ([id (in-list l)])
+      (define b (resolve id phase))
+      (unless (and b
+                   (module-binding? b)
+                   (eq? (module-binding-sym b) (syntax-e id))
+                   (equal? (module-binding-module b) self))
+        (error "reference to an unbound identifier:" id)))))
+
 ;; ----------------------------------------
 
 ;; Pass 3 of `module` expansion, which parses `provide` forms and
@@ -434,7 +490,10 @@
                    self))
   
   (parameterize ([current-namespace m-ns])
-    (run-time-eval (compile-module tmp-mod enclosing-self m-ns #:as-submodule? #t))))
+    (run-time-eval (compile-module tmp-mod
+                                   (make-compile-context #:namespace m-ns
+                                                         #:self-name enclosing-self )
+                                   #:as-submodule? #t))))
 
 
 ;; ----------------------------------------
@@ -483,27 +542,39 @@
 
 (define (check-ids-unbound ids phase requires+provides)
   (for ([id (in-list ids)])
-    (check-required-or-defined requires+provides id phase)))
+    (check-not-required-or-defined requires+provides id phase)))
 
-(define (select-local-names-and-bind ids local-names self phase
-                                     requires+provides)
+(define (select-defined-syms-and-bind ids defined-syms self phase
+                                      module-scopes
+                                      requires+provides)
+  (define defined-syms-at-phase
+    (or (hash-ref defined-syms phase #f) (let ([ht (make-hasheq)])
+                                           (hash-set! defined-syms phase ht)
+                                           ht)))
   (for/list ([id (in-list ids)])
     (define sym (syntax-e id))
-    (define local-sym
-      (if (not (hash-ref local-names sym #f))
+    (define defined-sym
+      (if (and (not (hash-ref defined-syms-at-phase sym #f))
+               ;; Only use `sym` directly if there are no
+               ;; extra scopes on the binding form
+               (no-extra-scopes? id module-scopes phase))
           sym
           (let loop ([pos 1])
             (define s (string->symbol (format "~a~a" sym pos)))
-            (if (hash-ref local-names s #f)
+            (if (hash-ref defined-syms-at-phase s #f)
                 (loop (add1 pos))
                 s))))
-    (hash-set! local-names local-sym id)
-    (define b (module-binding self phase local-sym
-                              self phase local-sym
+    (hash-set! defined-syms-at-phase defined-sym id)
+    (define b (module-binding self phase defined-sym
+                              self phase defined-sym
                               0))
     (add-binding! id b phase)
     (add-defined-or-required-id! requires+provides id phase b)
-    local-sym))
+    (log-error "~s ~s => ~s" id phase defined-sym)
+    defined-sym))
+
+(define (no-extra-scopes? id module-scopes phase)
+  (bound-identifier=? id (add-scopes id module-scopes) phase))
 
 ;; ----------------------------------------
 
@@ -515,7 +586,11 @@
       [(define-values)
        (define m (match-syntax body '(define-values (id ...) rhs)))
        (define ids (m 'id))
-       (define vals (eval-for-bindings ids (m 'rhs) phase m-ns))
+       (define vals (eval-for-bindings ids (m 'rhs) phase m-ns
+                                       ;; In case we tentatively have to allow
+                                       ;; a reference to a variable defined in
+                                       ;; a later `begin-for-syntax`:
+                                       #:allow-unbound-as-variable? #t))
        (for ([id (in-list ids)]
              [val (in-list vals)])
          (define b (resolve id phase))
@@ -550,7 +625,9 @@
   ;; in the enclosing module:
   (define ns (expand-context-namespace ctx))
   (parameterize ([current-namespace ns])
-    (run-time-eval (compile-module submod self ns
+    (run-time-eval (compile-module submod 
+                                   (make-compile-context #:namespace ns
+                                                         #:self-name self)
                                    #:as-submodule? #t)))
 
   ;; Return the expanded submodule

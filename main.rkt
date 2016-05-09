@@ -41,7 +41,7 @@
           (fprintf port "#<compiled-expression:~.s>" (compiled-expression-s-expr c))))
 
 (define (compile s [ns (current-namespace)])
-  (compiled-expression (compile-in-namespace s ns)))
+  (compiled-expression (compile-in-namespace s (make-compile-context #:namespace ns))))
 
 (define (eval s [ns (current-namespace)])
   (if (compiled-expression? s)
@@ -52,7 +52,7 @@
                         (datum->syntax #f s)
                         ns)
                        (make-expand-context ns))
-                      ns))))
+                      (make-compile-context #:namespace ns)))))
 
 ;; ----------------------------------------
 

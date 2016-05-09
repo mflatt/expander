@@ -6,27 +6,43 @@
          "binding.rkt"
          "match.rkt"
          "core.rkt"
+         "require+provide.rkt"
          "module-path.rkt"
          "expand-require.rkt")
 
-(provide compile
+(provide make-compile-context
+         compile
          compile-module
          expand-time-eval
          run-time-eval)
 
+(struct compile-context (namespace   ; compile-time namespace
+                         phase       ; phase (top level) or phase level (within a module)
+                         self-name   ; if non-#f, compiling the body of a module
+                         allow-unbound-as-variable?))
+
+(define (make-compile-context #:namespace [namespace (current-namespace)]
+                              #:phase [phase 0]
+                              #:self-name [self-name #f]
+                              #:allow-unbound-as-variable? [allow-unbound-as-variable? #f])
+  (compile-context namespace 
+                   phase
+                   self-name
+                   allow-unbound-as-variable?))
+
 (define phase-shift-id (gensym 'phase))
 (define ns-id (gensym 'namespace))
+
+;; ----------------------------------------
 
 ;; Convert an expanded syntax object to an expression that is represented
 ;; by a plain S-expression. The expression is compiled for a particular
 ;; phase, but if the expression is in a module, its phase can be shifted
 ;; at run time by the amount bound to `phase-shift-id`. Module bindings
 ;; are accessed through a namespace that is bound to `ns-id` at run time.
-(define (compile s
-                 [ns (current-namespace)] ; compile-time namespace
-                 [phase 0]       ; phase (top level) or phase-level (within a module)
-                 [self-name #f]) ; if non-#f, compiling the body of a module
-  (let ([compile (lambda (s) (compile s ns phase self-name))])
+(define (compile s cctx)
+  (let ([compile (lambda (s) (compile s cctx))])
+    (define phase (compile-context-phase cctx))
     (cond
      [(pair? (syntax-e s))
       (define core-sym (core-form-sym s phase))
@@ -34,22 +50,24 @@
         [(#f)
          (error "not a core form:" s)]
         [(module module*)
-         (compile-module s self-name ns)]
+         (compile-module s cctx)]
         [(#%require)
          (define m (match-syntax s '(#%require req ...)))
          ;; Running the compiled code will trigger expander work ---
          ;; which is strange, and that reflects how a top-level
          ;; `#%require` is strange
          `(,(lambda ()
-              (parse-and-perform-requires! #:run? #t (m 'req) #f ns phase void)))]
+              (define ns (compile-context-namespace cctx))
+              (parse-and-perform-requires! #:run? #t (m 'req) #f ns phase 
+                                           (make-requires+provides))))]
         [(lambda)
          (define m (match-syntax s '(lambda formals body)))
-         `(lambda ,@(compile-lambda (m 'formals) (m 'body) phase ns self-name))]
+         `(lambda ,@(compile-lambda (m 'formals) (m 'body) cctx))]
         [(case-lambda)
          (define m (match-syntax s '(case-lambda [formals body] ...)))
          `(case-lambda ,@(for/list ([formals (in-list (m 'formals))]
                                [body (in-list (m 'body))])
-                      (compile-lambda formals body phase ns self-name)))]
+                      (compile-lambda formals body cctx)))]
         [(#%app)
          (define m (match-syntax s '(#%app . rest)))
          (for/list ([s (in-list (m 'rest))])
@@ -76,14 +94,14 @@
            ,(compile (m 'id))
            ,(compile (m 'rhs)))]
         [(let-values letrec-values)
-         (compile-let core-sym s phase ns self-name)]
+         (compile-let core-sym s cctx)]
         [(quote)
          (define m (match-syntax s '(quote datum)))
          `(quote ,(syntax->datum (m 'datum)))]
         [(quote-syntax)
          (define m (match-syntax s '(quote datum)))
          (define q `(quote ,(m 'datum)))
-         (if self-name
+         (if (compile-context-self-name cctx)
              `(syntax-shift-phase-level ,q ,phase-shift-id)
              q)]
         [else
@@ -101,24 +119,26 @@
         (cond
          [(equal? mod-name '#%core)
           ;; Inline a core binding:
+          (define ns (compile-context-namespace cctx))
           (define m-ns (namespace->module-namespace ns mod-name phase))
           (namespace-module-instantiate! m-ns '#%core (module-binding-phase b))
           (or (namespace-get-variable m-ns (module-binding-phase b) (module-binding-sym b) #f)
               (error "internal error: bad #%core reference:"
                      phase (module-binding-sym b) (module-binding-phase b)))]
-         [(equal? mod-name self-name)
+         [(equal? mod-name (compile-context-self-name cctx))
           ;; Direct reference to a variable defined in the same module:
           (module-binding-sym b)]
          [else
           ;; Reference to a variable defined in another module:
+          (define in-mod? (compile-context-self-name cctx))
           `(namespace-get-variable
-            (namespace->module-namespace ,(if self-name
+            (namespace->module-namespace ,(if in-mod?
                                               ns-id
-                                              ns)
+                                              (compile-context-namespace cctx))
                                          ',mod-name
                                          ,(let ([phase (phase- phase
                                                                (module-binding-phase b))])
-                                            (if self-name
+                                            (if in-mod?
                                                 `(+ ,phase-shift-id ,phase)
                                                 phase)))
             ,(module-binding-phase b)
@@ -127,12 +147,15 @@
                          ,phase
                          ',(module-binding-sym b)
                          ,(module-binding-phase b))))])]
+       [(compile-context-allow-unbound-as-variable? cctx)
+        (syntax-e s)]
        [else
-        (error "not a reference to a local binding:" s)])]
+        (error "not a reference to a module or local binding:" s)])]
      [else
       (error "bad syntax after expansion:" s)])))
 
-(define (compile-lambda formals body phase ns self-name)
+(define (compile-lambda formals body cctx)
+  (define phase (compile-context-phase cctx))
   (define gen-formals
     (let loop ([formals formals])
       (cond
@@ -141,11 +164,12 @@
        [(pair? formals) (cons (loop (car formals))
                               (loop (cdr formals)))]
        [else null])))
-  `(,gen-formals ,(compile body ns phase self-name)))
+  `(,gen-formals ,(compile body cctx)))
 
-(define (compile-let core-sym s phase ns self-name)
+(define (compile-let core-sym s cctx)
   (define rec? (eq? core-sym 'letrec-values))
   (define m (match-syntax s '(let-values ([(id ...) rhs] ...) body)))
+  (define phase (compile-context-phase cctx))
   (define sc (new-scope))
   (define idss (m 'id))
   (define symss (for/list ([ids (in-list idss)])
@@ -153,15 +177,16 @@
                     (local->symbol id phase))))
   `(,core-sym ,(for/list ([syms (in-list symss)]
                           [rhs (in-list (m 'rhs))])
-                 `[,syms ,(compile rhs ns phase self-name)])
-    ,(compile (m 'body) ns phase self-name)))
+                 `[,syms ,(compile rhs cctx)])
+    ,(compile (m 'body) cctx)))
 
 ;; ----------------------------------------
                        
-(define (compile-module s enclosing-self ns
+(define (compile-module s cctx
                         #:as-submodule? [as-submodule? #f])
   (define m (match-syntax s '(module name initial-require
                               (#%module-begin body ...))))
+  (define enclosing-self (compile-context-self-name cctx))
   (define self (build-module-name (syntax-e (m 'name))
                                   enclosing-self))
   (define requires (syntax-property s 'module-requires))
@@ -172,6 +197,9 @@
   
   (define (add-body phase-to-body phase body)
     (hash-update phase-to-body phase (lambda (l) (cons body l)) null))
+  
+  (define body-cctx (struct-copy compile-context cctx
+                                 [self-name self]))
   
   (define phase-to-bodys
     (let loop ([bodys bodys]
@@ -190,7 +218,9 @@
                   phase-to-body
                   phase
                   `(begin
-                    (define-values ,syms ,(compile (m 'rhs) ns phase self))
+                    (define-values ,syms ,(compile (m 'rhs)
+                                                   (struct-copy compile-context body-cctx
+                                                                [phase phase])))
                     ,@(for/list ([sym (in-list syms)])
                         `(namespace-set-variable! ,ns-id ,phase ',sym ,sym)))))]
           [(define-syntaxes)
@@ -201,7 +231,9 @@
                  (add-body
                   phase-to-body
                   (add1 phase)
-                  `(let-values ([,syms ,(compile (m 'rhs) ns (add1 phase) self)])
+                  `(let-values ([,syms ,(compile (m 'rhs)
+                                                 (struct-copy compile-context body-cctx
+                                                              [phase (add1 phase)]))])
                     ,@(for/list ([sym (in-list syms)])
                         `(namespace-set-transformer! ,ns-id ,phase ',sym ,sym)))))]
           [(begin-for-syntax)
@@ -224,7 +256,9 @@
                  (add-body
                   phase-to-body
                   phase
-                  (compile (car bodys) ns phase self)))])])))
+                  (compile (car bodys)
+                           (struct-copy compile-context body-cctx
+                                        [phase phase]))))])])))
   
   (define (compile-submodules form-name)
     (cond
@@ -244,7 +278,7 @@
                [(try-match-syntax (car bodys) '(module* name #f . _))
                 (syntax-shift-phase-level (car bodys) (phase- 0 phase))]
                [else (car bodys)]))
-            (cons (compile-module s-shifted self ns)
+            (cons (compile-module s-shifted body-cctx)
                   (loop (cdr bodys) phase))]
            [(eq? f 'begin-for-syntax)
             (define m (match-syntax (car bodys) `(begin-for-syntax e ...)))
