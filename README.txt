@@ -11,8 +11,8 @@ TODO:
  lazy module instantiation
  lazy scope propagation
  use-site scope "optimization"
- rename transformers
  source locations
+ origin tracking
  syntax-local-...
  taints
  lift syntax objects with shifts

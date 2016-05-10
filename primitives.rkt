@@ -9,9 +9,11 @@
          "core.rkt"
          "set-bang-trans.rkt"
          "rename-trans.rkt"
-         "syntax-local.rkt")
+         "syntax-local.rkt"
+         "def-ctx.rkt"
+         "local-expand.rkt")
 
-(define (bound-identifier=? a b [phase (default-phase)])
+(define (bound-identifier=? a b [phase (syntax-local-phase-level)])
   (unless (identifier? a)
     (raise-argument-error 'bound-identifier=? "identifier?" a))
   (unless (identifier? b)
@@ -20,7 +22,7 @@
     (raise-argument-error 'bound-identifier=? "(or/c exact-nonnegative-integer? #f)" phase))
   (raw:bound-identifier=? a b phase))
 
-(define (free-identifier=? a b [phase (default-phase)])
+(define (free-identifier=? a b [phase (syntax-local-phase-level)])
   (unless (identifier? a)
     (raise-argument-error 'free-identifier=? "identifier?" a))
   (unless (identifier? b)
