@@ -181,8 +181,8 @@
        (define v (env-lookup env binding))
        (cond
         [(procedure? v)
-         ;; apply a macro, then recur:
-         (expand (v s) env)]
+         ;; Apply transformer, then recur
+         (expand (apply-transformer v s) env)]
         [else
          (expand-app s env)])])]
    [(or (pair? (syntax-e s))
@@ -195,6 +195,16 @@
     (syntax (list (syntax 'quote (seteq core-scope))
                   s)
             (seteq))]))
+
+;; Given a macro transformer `t`, apply it --- adding appropriate
+;; scopes to represent the expansion step
+(define (apply-transformer t s)
+  (define intro-scope (scope))
+  (define intro-s (add-scope s intro-scope))
+  ;; Call the transformer
+  (define transformed-s (t intro-s))
+  ;; Flip intro scope to get final result:
+  (flip-scope transformed-s intro-scope))
 
 ;; ----------------------------------------
 
