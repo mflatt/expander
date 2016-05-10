@@ -15,6 +15,7 @@
 (provide expand
          expand-body
          lookup
+         apply-transformer
          
          expand+eval-for-syntaxes-binding
          eval-for-syntaxes-binding
@@ -102,7 +103,7 @@
         ((core-form-expander t) s ctx))]
    [(transformer? t)
     ;; Apply transformer and expand again
-    (expand (apply-transformer t s ctx) ctx)]
+    (expand (apply-transformer (transformer->procedure t) s ctx) ctx)]
    [(or (variable? t)
         (unbound? t)) ;; treat unbound as variable (for top level)
     ;; A reference to a variable expands to itself

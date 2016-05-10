@@ -8,7 +8,8 @@
          "dup-check.rkt"
          "core.rkt"
          "expand-context.rkt"
-         "expand.rkt")
+         "expand.rkt"
+         "set-bang-trans.rkt")
 
 ;; ----------------------------------------
 
@@ -243,12 +244,15 @@
    (unless binding
      (error "no binding for assignment:" s))
    (define t (lookup binding ctx s))
-   (unless (variable? t)
-     (if (unbound? t)
-         (error "cannot assign to unbound identifier:" s)
-         (error "cannot assign to syntax:" s)))
-   (rebuild
-    s
-    (list (m 'set!)
-          (m 'id)
-          (expand (m 'rhs) ctx)))))
+   (cond
+    [(set!-transformer? t)
+     (expand (apply-transformer (transformer->procedure t) s ctx) ctx)]
+    [(variable? t)
+     (rebuild
+      s
+      (list (m 'set!)
+            (m 'id)
+            (expand (m 'rhs) ctx)))]
+    [(unbound? t)
+     (error "cannot assign to unbound identifier:" s)]
+    [else (error "cannot assign to syntax:" s)])))

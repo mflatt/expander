@@ -3,7 +3,8 @@
          "syntax.rkt"
          "scope.rkt"
          "phase.rkt"
-         "namespace.rkt")
+         "namespace.rkt"
+         "set-bang-trans.rkt")
 
 (provide
  (struct-out module-binding)
@@ -18,7 +19,7 @@
  variable
  (struct-out core-form)
  
- transformer?
+ transformer? transformer->procedure
  variable?
  unbound?
  
@@ -95,7 +96,11 @@
 (define (unbound? t) (eq? t unbound))
 
 ;; A subset of compile-time values are macro transformers
-(define (transformer? t) (procedure? t))
+(define (transformer? t) (or (procedure? t) (set!-transformer? t)))
+(define (transformer->procedure t)
+  (if (set!-transformer? t)
+      (set!-transformer->procedure t)
+      t))
 
 ;; A subset of compile-time values are primitive forms
 (struct core-form (expander) #:transparent)

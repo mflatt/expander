@@ -7,6 +7,7 @@
          (rename-in "binding.rkt"
                     [free-identifier=? raw:free-identifier=?])
          "core.rkt"
+         "set-bang-trans.rkt"
          "syntax-local.rkt")
 
 (define (bound-identifier=? a b [phase (default-phase)])
@@ -56,10 +57,14 @@
                       internal-definition-context-introduce
                       internal-definition-context-seal
                       identifier-remove-from-definition-context
+                      
+                      make-set!-transformer
+                      prop:set!-transformer
+                      set!-transformer?
 
                       ;; This list will need to be a lot longer...
-                      list cons car cdr null? map
-                      values 
+                      list cons car cdr pair? null? map
+                      equal? values
                       error
                       println
                       random

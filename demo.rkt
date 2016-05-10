@@ -364,6 +364,39 @@
     (m x y)))
  #:check 12)
 
+"set! transformer"
+(eval-expression
+ '(let-values ([(real-one) 1]
+               [(check-one) (lambda (v)
+                              (if (equal? v 1)
+                                  'ok
+                                  'oops))])
+   (letrec-syntaxes+values
+    ([(one)
+      (make-set!-transformer
+       (lambda (stx)
+         (if (pair? (syntax-e stx))
+             (if (free-identifier=? (car (syntax-e stx))
+                                    (quote-syntax set!))
+                 (datum->syntax
+                  (quote-syntax here)
+                  (list (quote-syntax check-one)
+                        (car (cdr (cdr (syntax-e stx))))))
+                 (datum->syntax
+                  stx
+                  (cons
+                   (quote-syntax list)
+                   (cons
+                    (quote-syntax real-one)
+                    (cdr (syntax-e stx))))))
+             (quote-syntax real-one))))])
+    ()
+    (list one
+          (set! one 5)
+          (set! one 1)
+          (one 8))))
+ #:check (list 1 'oops 'ok '(1 8)))
+
 ;; ----------------------------------------
 
 (define (eval-module-declaration mod)
