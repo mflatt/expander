@@ -522,3 +522,17 @@
  (namespace-require ''use-submodule-provide demo-ns)
  'e)
 
+(eval-module-declaration '(module expand-provide '#%core
+                           (#%require (for-syntax '#%core))
+                           (define-values (x) 'x)
+                           (define-syntaxes (m) (lambda (stx) (quote-syntax (begin x))))
+                           (#%provide (expand (m)))))
+
+(eval-module-declaration '(module use-expand-provide '#%core
+                           (#%require 'expand-provide)
+                           (println x)))
+
+(check-print
+ (namespace-require ''use-expand-provide demo-ns)
+ 'x)
+
