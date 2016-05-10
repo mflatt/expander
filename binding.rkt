@@ -102,7 +102,7 @@
                              (rename-transformer? t)))
 (define (transformer->procedure t)
   (cond
-   [(set!-transformer? t) (set!-transformer->procedure t)]
+   [(set!-transformer? t) (set!-transformer-procedure t)]
    [(rename-transformer? t) (lambda (s)
                               (if (identifier? s)
                                   (rename-transformer-target t)

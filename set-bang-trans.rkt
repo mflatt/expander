@@ -3,7 +3,7 @@
 (provide set!-transformer?
          prop:set!-transformer
          make-set!-transformer
-         set!-transformer->procedure)
+         set!-transformer-procedure)
 
 (define-values (prop:set!-transformer set!-transformer? set!-transformer-value)
   (make-struct-type-property 'set!-transformer
@@ -50,7 +50,7 @@
                               proc))
       (set!-transformer proc))))
 
-(define (set!-transformer->procedure t)
+(define (set!-transformer-procedure t)
   (define v (set!-transformer-value t))
   (if (procedure-arity-includes? v 1)
       v

@@ -36,7 +36,7 @@
                                 #f ; no enclosing module
                                 (expand-context-namespace ctx)
                                 (expand-context-phase ctx)
-                                (make-requires+provides))
+                                (make-requires+provides #f))
    ;; Nothing to expand
    s))
 

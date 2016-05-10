@@ -59,7 +59,7 @@
          `(,(lambda ()
               (define ns (compile-context-namespace cctx))
               (parse-and-perform-requires! #:run? #t (m 'req) #f ns phase 
-                                           (make-requires+provides))))]
+                                           (make-requires+provides #f))))]
         [(lambda)
          (define m (match-syntax s '(lambda formals body)))
          `(lambda ,@(compile-lambda (m 'formals) (m 'body) cctx))]

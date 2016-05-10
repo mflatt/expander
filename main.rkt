@@ -30,7 +30,7 @@
                                                 (namespace-scope ns)))
                                #f ns
                                0
-                               (make-requires+provides)))
+                               (make-requires+provides #f)))
 
 (define (expand s [ns (current-namespace)])
   (expand-in-context s (make-expand-context ns)))

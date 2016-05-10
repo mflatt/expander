@@ -7,12 +7,14 @@
          "namespace.rkt")
 
 (provide make-requires+provides
+         requires+provides-self
          
          (struct-out required)
          add-required-module!
          add-defined-or-required-id!
          check-not-required-or-defined
          extract-module-requires
+         extract-module-definitions
          
          reset-provides!
          add-provide!
@@ -21,11 +23,13 @@
 
 ;; ----------------------------------------
 
-(struct requires+provides (requires   ; module-name-> require-phase -> list of (required id phase boolean)
+(struct requires+provides (self       ; module-name to recognize definitions among requires
+                           requires   ; module-name-> require-phase -> list of (required id phase boolean)
                            provides)) ; phase -> sym -> binding
 
-(define (make-requires+provides)
-  (requires+provides (make-hash)
+(define (make-requires+provides self)
+  (requires+provides self
+                     (make-hash)
                      (make-hasheqv)))
 
 ;; ----------------------------------------
@@ -76,11 +80,15 @@
                       (not (required-can-shadow? r)))
              (error "already required or defined:" id))))))
 
-;; Get All the bindings imported from a given module
-(define (extract-module-requires r+p mod-path phase)
-  (define at-mod (hash-ref (requires+provides-requires r+p) mod-path #f))
+;; Get all the bindings imported from a given module
+(define (extract-module-requires r+p mod-name phase)
+  (define at-mod (hash-ref (requires+provides-requires r+p) mod-name #f))
   (and at-mod
        (hash-ref at-mod phase #f)))
+
+;; Get all the definitions
+(define (extract-module-definitions r+p)
+  (extract-module-requires r+p (requires+provides-self r+p) 0))
 
 ;; ----------------------------------------
 

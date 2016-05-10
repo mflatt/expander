@@ -793,3 +793,42 @@
 (check-print
  (namespace-require ''use-lifted-provide demo-ns)
  'done)
+
+;; ----------------------------------------
+;; `expand` in `#%provide`
+
+(eval-module-declaration '(module expand-provide '#%core
+                           (#%require (for-syntax '#%core))
+                           (module sub '#%core
+                             (#%provide a-sub b-sub)
+                             (define-values (a-sub) 'a-sub)
+                             (define-values (b-sub) 'b-sub))
+                           (#%require (submod "." sub))
+                           (define-values (a-here) 'a-here)
+                           (define-values (b-here) 'b-here)
+                           (define-syntaxes (all-a)
+                             (lambda (stx)
+                               (let-values ([(here) (syntax-local-module-defined-identifiers)]
+                                            [(there) (syntax-local-module-required-identifiers
+                                                      '(submod "." sub)
+                                                      0)]
+                                            [(keep-a) (lambda (id)
+                                                        (regexp-match? #rx"^a"
+                                                                       (symbol->string
+                                                                        (syntax-e id))))])
+                                 (datum->syntax
+                                  #f
+                                  (cons
+                                   (quote-syntax begin)
+                                   (append
+                                    (filter keep-a (hash-ref here 0))
+                                    (filter keep-a (cdr (assv 0 there)))))))))
+                           (#%provide (expand (all-a)))))
+
+(eval-module-declaration '(module use-expand-provide '#%core
+                           (#%require 'expand-provide)
+                           (println (list a-sub a-here))))
+
+(check-print
+ (namespace-require ''use-expand-provide demo-ns)
+ (list 'a-sub 'a-here))

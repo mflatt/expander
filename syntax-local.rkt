@@ -8,10 +8,17 @@
          "expand.rkt"
          "core.rkt"
          "rename-trans.rkt"
-         "lift-context.rkt")
+         "lift-context.rkt"
+         "require+provide.rkt"
+         "module-path.rkt")
 
 (provide get-current-expand-context
          flip-introduction-scopes
+         
+         syntax-transforming?
+         syntax-transforming-with-lifts?
+         syntax-transforming-module-expression?
+         syntax-local-transforming-module-provides?
          
          syntax-local-context
          syntax-local-introduce
@@ -34,6 +41,9 @@
          syntax-local-lift-provide
          syntax-local-lift-module-end-declaration
          
+         syntax-local-module-defined-identifiers
+         syntax-local-module-required-identifiers
+         
          syntax-local-get-shadower)
 
 ;; ----------------------------------------
@@ -45,6 +55,29 @@
 (define (flip-introduction-scopes s ctx)
   (flip-scopes s (expand-context-current-introduction-scopes ctx)))
 
+;; ----------------------------------------
+
+(define (syntax-transforming?)
+  (and (current-expand-context) #t))
+
+(define (syntax-transforming-with-lifts?)
+  (define ctx (current-expand-context))
+  (and ctx
+       (expand-context-lifts ctx)
+       #t))
+
+(define (syntax-transforming-module-expression?)
+  (define ctx (current-expand-context))
+  (and ctx
+       (expand-context-lifts-to-module ctx)
+       #t))
+
+(define (syntax-local-transforming-module-provides?)
+  (define ctx (current-expand-context))
+  (and ctx
+       (expand-context-requires+provides ctx)
+       #t))
+  
 ;; ----------------------------------------
 
 (define (syntax-local-context)
@@ -238,6 +271,39 @@
           (syntax-shift-phase-level core-stx phase)
           sym)
          s)))
+
+;; ----------------------------------------
+
+(define (syntax-local-module-defined-identifiers)
+  (unless (syntax-local-transforming-module-provides?)
+    (raise-arguments-error 'syntax-local-module-defined-identifiers "not currently transforming module provides"))
+  (define ctx (current-expand-context))
+  (requireds->phase-ht (extract-module-definitions (expand-context-requires+provides ctx))))
+  
+  
+(define (syntax-local-module-required-identifiers mod-path phase-level)
+  (unless (module-path? mod-path)
+    (raise-argument-error 'syntax-local-module-required-identifiers "module-path?" mod-path))
+  (unless (phase? phase-level)
+    (raise-argument-error 'syntax-local-module-required-identifiers "(or/c #f exact-nonnegative-integer?)" phase-level))
+  (unless (syntax-local-transforming-module-provides?)
+    (raise-arguments-error 'syntax-local-module-required-identifiers "not currently transforming module provides"))
+  (define ctx (current-expand-context))
+  (define requires+provides (expand-context-requires+provides ctx))
+  (define mod-name (resolve-module-path mod-path (requires+provides-self requires+provides)))
+  (define requireds (extract-module-requires requires+provides
+                                             mod-name
+                                             phase-level))
+  (and requireds
+       (for/list ([(phase ids) (in-hash (requireds->phase-ht requireds))])
+         (cons phase ids))))
+
+(define (requireds->phase-ht requireds)
+  (for/fold ([ht (hasheqv)]) ([r (in-list requireds)])
+    (hash-update ht
+                 (required-phase r)
+                 (lambda (l) (cons (required-id r) l))
+                 null)))
 
 ;; ----------------------------------------
 

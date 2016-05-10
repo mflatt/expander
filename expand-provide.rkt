@@ -116,10 +116,11 @@
           (void (match-syntax spec '(expand (id . datum))))
           (define m (match-syntax spec '(expand form)))
           (define exp-spec (expand (m 'form) (struct-copy expand-context ctx
-                                                          [phase phase])))
+                                                          [phase phase]
+                                                          [only-immediate? #t])))
           (unless (and (pair? (syntax-e exp-spec))
                        (identifier? (car (syntax-e exp-spec)))
-                       (eq? 'begin (core-form-sym (car (syntax-e exp-spec)))))
+                       (eq? 'begin (core-form-sym exp-spec at-phase)))
             (error "expansion of `provide` spec does not start `begin`:" spec))
           (define e-m (match-syntax exp-spec '(begin spec ...)))
           (loop (e-m 'spec)

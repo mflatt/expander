@@ -26,6 +26,7 @@
                         lift-envs  ; list of box of env for lifts to locals
                         module-lifts ; lifted modules
                         lifts-to-module ; more lifts: requires, provides, etc.
+                        requires+provides ; enclosing module's requires and provides during `provide`
                         ))
 
 (define (make-expand-context ns)
@@ -46,6 +47,7 @@
                   #f   ; lifts
                   '()  ; lift-envs
                   #f   ; module-lifts
-                  #f)) ; lifts-for-module
+                  #f   ; lifts-for-module
+                  #f)) ; requires+provides
 
 (define current-expand-context (make-parameter #f))

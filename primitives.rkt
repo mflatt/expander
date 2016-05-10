@@ -42,6 +42,11 @@
                       bound-identifier=?
                       free-identifier=?
                       
+                      syntax-transforming?
+                      syntax-transforming-with-lifts?
+                      syntax-transforming-module-expression?
+                      syntax-local-transforming-module-provides?
+                      
                       syntax-local-context
                       syntax-local-introduce
                       syntax-local-identifier-as-binding
@@ -63,6 +68,9 @@
                       syntax-local-lift-provide
                       syntax-local-lift-module-end-declaration
                       
+                      syntax-local-module-defined-identifiers
+                      syntax-local-module-required-identifiers
+                      
                       syntax-local-get-shadower
                       
                       local-expand
@@ -78,6 +86,7 @@
                       make-set!-transformer
                       prop:set!-transformer
                       set!-transformer?
+                      set!-transformer-procedure
 
                       rename-transformer?
                       prop:rename-transformer
@@ -85,8 +94,12 @@
                       rename-transformer-target
 
                       ;; This list will need to be a lot longer...
-                      list cons car cdr pair? null? map
+                      list cons car cdr pair? null? map filter append
                       equal? values void
+                      symbol->string
+                      regexp-match?
+                      hash-ref
+                      assv
                       error
                       println
                       random

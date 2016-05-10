@@ -89,7 +89,7 @@
    (define bodys (map apply-module-scopes (m 'body)))
    
    ;; To keep track of all requires and provides
-   (define requires+provides (make-requires+provides))
+   (define requires+provides (make-requires+provides self))
 
    ;; Table of symbol picked for each binding in this module:
    (define defined-syms (make-hasheqv)) ; phase -> sym ->id
@@ -212,7 +212,8 @@
                          #:requires-and-provides requires+provides
                          #:phase phase
                          #:self self
-                         #:ctx ctx))
+                         #:ctx (struct-copy expand-context ctx
+                                            [requires+provides requires+provides])))
 
      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
      ;; Pass 4: expand `module*` submodules
