@@ -10,7 +10,25 @@
          
          make-module-lift-context
          get-and-clear-module-lifts!
-         add-lifted-module!)
+         add-lifted-module!
+         
+         make-lift-to-module-context
+         lift-to-module-context-end-as-expressions?
+         get-and-clear-ends!
+         get-and-clear-requires-and-provides!
+         add-lifted-to-module-require!
+         add-lifted-to-module-provide!
+         add-lifted-to-module-end!)
+
+;; ----------------------------------------
+
+(define (box-cons! b v)
+  (set-box! b (cons v (unbox b))))
+
+(define (box-clear! b)
+  (begin0
+   (reverse (unbox b))
+   (set-box! b null)))
 
 ;; ----------------------------------------
 
@@ -23,15 +41,11 @@
 
 (define (add-lifted! lifts ids rhs phase)
   (define-values (lifted-ids lifted) ((lift-context-convert lifts) ids rhs phase))
-  (set-box! (lift-context-lifts lifts)
-            (cons lifted
-                  (unbox (lift-context-lifts lifts))))
+  (box-cons! (lift-context-lifts lifts) lifted)
   lifted-ids)
 
 (define (get-and-clear-lifts! lifts)
-  (define l (unbox (lift-context-lifts lifts)))
-  (set-box! (lift-context-lifts lifts) null)
-  (reverse l))
+  (box-clear! (lift-context-lifts lifts)))
 
 (define (make-local-lift lift-env)
   (lambda (ids rhs phase)
@@ -49,15 +63,45 @@
   (module-lift-context (box null) module*-ok?))
 
 (define (get-and-clear-module-lifts! module-lifts)
-  (define l (unbox (module-lift-context-lifts module-lifts)))
-  (set-box! (module-lift-context-lifts module-lifts) null)
-  (reverse l))
+  (box-clear! (module-lift-context-lifts module-lifts)))
 
 (define (add-lifted-module! module-lifts s phase)
   (unless (module-lift-context-module*-ok? module-lifts)
     (case (core-form-sym s phase)
       [(module*)
        (error "cannot lift `module*` outside of a module:" s)]))
-  (set-box! (module-lift-context-lifts module-lifts)
-            (cons s
-                  (unbox (module-lift-context-lifts module-lifts)))))
+  (box-cons! (module-lift-context-lifts module-lifts)
+             s))
+
+;; ----------------------------------------
+
+(struct lift-to-module-context (do-require requires
+                                provides
+                                end-as-expressions? ends))
+
+(define (make-lift-to-module-context do-require
+                                     #:end-as-expressions? end-as-expressions?)
+  (lift-to-module-context do-require (box null)
+                          (box null) 
+                          end-as-expressions? (box null)))
+
+(define (get-and-clear-ends! lifts-to-module)
+  (box-clear! (lift-to-module-context-ends lifts-to-module)))
+
+(define (get-and-clear-requires-and-provides! lifts-to-module)
+  (append
+   (box-clear! (lift-to-module-context-requires lifts-to-module)))
+   (box-clear! (lift-to-module-context-provides lifts-to-module)))
+
+(define (add-lifted-to-module-require! lifts-to-module s phase)
+  ((lift-to-module-context-do-require lifts-to-module) s phase)
+  (box-cons! (lift-to-module-context-requires lifts-to-module)
+             s))
+
+(define (add-lifted-to-module-provide! lifts-to-module s phase)
+  (box-cons! (lift-to-module-context-provides lifts-to-module)
+             s))
+
+(define (add-lifted-to-module-end! lifts-to-module s phase)
+  (box-cons! (lift-to-module-context-ends lifts-to-module)
+             s))

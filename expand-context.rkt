@@ -23,7 +23,7 @@
                         lifts      ; #f or lift-context, which contains a list of lifteds
                         lift-envs  ; list of box of env for lifts to locals
                         module-lifts ; lifted modules
-                        lifts-for-module ; more lifts: requires, provides, etc.
+                        lifts-to-module ; more lifts: requires, provides, etc.
                         ))
 
 (define (make-expand-context ns)

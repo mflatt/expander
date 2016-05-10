@@ -28,7 +28,11 @@
          syntax-local-lift-values-expression
          syntax-local-lift-context
          
-         syntax-local-lift-module)
+         syntax-local-lift-module
+         
+         syntax-local-lift-require
+         syntax-local-lift-provide
+         syntax-local-lift-module-end-declaration)
 
 ;; ----------------------------------------
 
@@ -173,3 +177,62 @@
     [else
      (raise-arguments-error 'syntax-local-lift-module "not a module form"
                             "given form" s)]))
+
+;; ----------------------------------------
+
+(define (do-local-lift-to-module who add! s filter
+                                 #:more-checks [more-checks void])
+  (unless (syntax? s)
+    (raise-argument-error who "syntax?" s))
+  (more-checks)
+  (define ctx (get-current-expand-context who))
+  (define phase (expand-context-phase ctx))
+  (define lifts-to-module (expand-context-lifts-to-module ctx))
+  (add! lifts-to-module
+        (filter s phase (lift-to-module-context-end-as-expressions? lifts-to-module))
+        phase))
+
+(define (syntax-local-lift-require s use-s)
+  (define sc (new-scope))
+  (do-local-lift-to-module 'syntax-local-lift-module-require
+                           add-lifted-to-module-require!
+                           s
+                           #:more-checks
+                           (lambda ()
+                             (unless (syntax? use-s)
+                               (raise-argument-error 'syntax-local-lift-module-require
+                                                     "syntax?"
+                                                     use-s)))
+                           (lambda (s phase end-as-expressions?)
+                             (wrap-form '#%require
+                                        (add-scope s sc)
+                                        phase)))
+  (add-scope use-s sc))
+
+(define (syntax-local-lift-provide s)
+  (do-local-lift-to-module 'syntax-local-lift-module-end-declaration
+                           add-lifted-to-module-provide!
+                           s
+                           (lambda (s phase end-as-expressions?)
+                             (wrap-form '#%provide s phase))))
+
+(define (syntax-local-lift-module-end-declaration s)
+  (do-local-lift-to-module 'syntax-local-lift-module-end-declaration
+                           add-lifted-to-module-end!
+                           s
+                           (lambda (orig-s phase end-as-expressions?)
+                             (define s (if end-as-expressions?
+                                           (wrap-form '#%expression orig-s phase)
+                                           orig-s))
+                             (for/fold ([s s]) ([phase (in-range phase 0 -1)])
+                               (wrap-form '#%begin-for-syntax
+                                          s
+                                          (sub1 phase))))))
+
+(define (wrap-form sym s phase)
+  (datum->syntax
+   #f
+   (list (datum->syntax
+          (syntax-shift-phase-level core-stx phase)
+          sym)
+         s)))

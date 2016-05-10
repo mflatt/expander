@@ -59,6 +59,10 @@
                       
                       syntax-local-lift-module
                       
+                      syntax-local-lift-require
+                      syntax-local-lift-provide
+                      syntax-local-lift-module-end-declaration
+                      
                       local-expand
                       
                       internal-definition-context?
@@ -80,7 +84,7 @@
 
                       ;; This list will need to be a lot longer...
                       list cons car cdr pair? null? map
-                      equal? values
+                      equal? values void
                       error
                       println
                       random

@@ -162,11 +162,16 @@
                                                        (make-wrap-as-definition self
                                                                                 inside-scope new-module-scopes
                                                                                 defined-syms requires+provides))]
-                                               [module-lifts (make-module-lift-context #t)]))
+                                               [module-lifts (make-module-lift-context #t)]
+                                               [lifts-to-module
+                                                (make-lift-to-module-context
+                                                 (make-parse-lifted-require m-ns self requires+provides)
+                                                 #:end-as-expressions? #f)]))
 
          (define partially-expanded-bodys
            (partially-expand-bodys bodys
                                    #:original s
+                                   #:tail? (zero? phase)
                                    #:phase phase
                                    #:ctx partial-body-ctx
                                    #:namespace m-ns
@@ -181,14 +186,19 @@
          
          (define body-ctx (struct-copy expand-context partial-body-ctx
                                        [only-immediate? #f]
-                                       [post-expansion-scope #f]))
+                                       [post-expansion-scope #f]
+                                       [lifts-to-module
+                                        (make-lift-to-module-context
+                                         (make-parse-lifted-require m-ns self requires+provides)
+                                         #:end-as-expressions? #t)]))
          
          (finish-expanding-body-expressons partially-expanded-bodys
+                                           #:tail? (zero? phase)
                                            #:phase phase
                                            #:ctx body-ctx
                                            #:self self)))
 
-     ;; Check that any tentativey allowed reference at phase >= 1 is ok
+     ;; Check that any tentatively allowed reference at phase >= 1 is ok
      (check-defined-by-now need-eventually-defined self)
      
      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -331,6 +341,7 @@
 ;; requires, and `module` submodules
 (define (partially-expand-bodys bodys
                                 #:original s
+                                #:tail? tail?
                                 #:phase phase
                                 #:ctx partial-body-ctx
                                 #:namespace m-ns
@@ -339,21 +350,33 @@
                                 #:module-scopes module-scopes
                                 #:defined-syms defined-syms
                                 #:loop phase-1-and-2-loop)
-  (let loop ([bodys bodys])
+  (let loop ([tail? tail?] [bodys bodys])
     (cond
-     [(null? bodys) null]
+     [(null? bodys)
+      (cond
+       [tail?
+        ;; Were at the very end of the module; if there are any lifted-to-end
+        ;; declarations, keep going
+        (define bodys
+          (get-and-clear-ends! (expand-context-lifts-to-module partial-body-ctx)))
+        (if (null? bodys)
+            null
+            (loop #t bodys))]
+       [else null])]
      [else
       (define exp-body (expand (car bodys) partial-body-ctx))
       (append
        ;; Save any expressions lifted during partial expansion
        (get-and-clear-lifts! (expand-context-lifts partial-body-ctx))
+       ;; Ditto for requires and provides
+       (get-and-clear-requires-and-provides! (expand-context-lifts-to-module partial-body-ctx))
        ;; Ditto for modules, which need to be processed
-       (loop (get-and-clear-module-lifts! (expand-context-module-lifts partial-body-ctx)))
+       (loop #f (get-and-clear-module-lifts! (expand-context-module-lifts partial-body-ctx)))
        ;; Dispatch on form revealed by partial expansion
        (case (core-form-sym exp-body phase)
          [(begin)
           (define m (match-syntax exp-body '(begin e ...)))
-          (loop (append (m 'e) (cdr bodys)))]
+          (loop tail? (append (m 'e) (cdr bodys)))]
          [(begin-for-syntax)
           (define m (match-syntax exp-body '(begin-for-syntax e ...)))
           (define nested-bodys (phase-1-and-2-loop (m 'e) (add1 phase)))
@@ -362,7 +385,7 @@
            (rebuild
             s
             `(,(m 'begin-for-syntax) ,@nested-bodys))
-           (loop (cdr bodys)))]
+           (loop tail? (cdr bodys)))]
          [(define-values)
           (define m (match-syntax exp-body '(define-values (id ...) rhs)))
           (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
@@ -371,7 +394,7 @@
                                                      module-scopes
                                                      requires+provides))
           (cons exp-body
-                (loop (cdr bodys)))]
+                (loop tail? (cdr bodys)))]
          [(define-syntaxes)
           (define m (match-syntax exp-body '(define-syntaxes (id ...) rhs)))
           (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
@@ -388,32 +411,32 @@
             (namespace-set-transformer! m-ns phase sym val))
           (cons (rebuild exp-body
                          `(,(m 'define-syntaxes) ,ids ,exp-rhs))
-                (loop (cdr bodys)))]
+                (loop tail? (cdr bodys)))]
          [(#%require)
           (define m (match-syntax exp-body '(#%require req ...)))
           (parse-and-perform-requires! (m 'req) self
                                        m-ns phase
                                        requires+provides)
           (cons exp-body
-                (loop (cdr bodys)))]
+                (loop tail? (cdr bodys)))]
          [(#%provide)
           ;; save for last pass
           (cons exp-body
-                (loop (cdr bodys)))]
+                (loop tail? (cdr bodys)))]
          [(module)
           ;; Submodule to parse immediately
           (define submod
             (expand-submodule exp-body self partial-body-ctx))
           (cons submod
-                (loop (cdr bodys)))]
+                (loop tail? (cdr bodys)))]
          [(module*)
           ;; Submodule to save for after this module
           (cons exp-body
-                (loop (cdr bodys)))]
+                (loop tail? (cdr bodys)))]
          [else
           ;; save expression for next pass
           (cons exp-body
-                (loop (cdr bodys)))]))])))
+                (loop tail? (cdr bodys)))]))])))
 
 ;; Convert lifted identifiers plus expression to a `define-values` form:
 (define (make-wrap-as-definition self
@@ -438,12 +461,23 @@
 
 ;; Pass 2 of `module` expansion, which expands all expressions
 (define (finish-expanding-body-expressons partially-expanded-bodys
+                                          #:tail? tail?
                                           #:phase phase
                                           #:ctx body-ctx
                                           #:self self)
-  (let loop ([bodys partially-expanded-bodys])
+  (let loop ([tail? tail?] [bodys partially-expanded-bodys])
     (cond
-     [(null? bodys) null]
+     [(null? bodys)
+      (cond
+       [tail? 
+        ;; Were at the very end of the module, again, so check for lifted-to-end
+        ;; declarations
+        (define bodys
+          (get-and-clear-ends! (expand-context-lifts-to-module body-ctx)))
+        (if (null? bodys)
+            null
+            (loop #t bodys))]
+       [else bodys])]
      [else
       (case (core-form-sym (car bodys) phase)
         [(define-values)
@@ -451,17 +485,19 @@
          (define exp-rhs (expand (m 'rhs) body-ctx))
          (cons (rebuild (car bodys)
                         `(,(m 'define-values) ,(m 'id) ,exp-rhs))
-               (loop (cdr bodys)))]
+               (loop tail? (cdr bodys)))]
         [(define-syntaxes #%require #%provide begin-for-syntax module module*)
          (cons (car bodys)
-               (loop (cdr bodys)))]
+               (loop tail? (cdr bodys)))]
         [else
          (define body (expand (car bodys) body-ctx))
          (define lifts
            ;; If there were any lifts, the right-hand sides need to be expanded
-           (loop
-            (get-and-clear-lifts! (expand-context-lifts body-ctx))))
-         (define module-lifts
+           (loop #f (get-and-clear-lifts! (expand-context-lifts body-ctx))))
+         (define lifted-requires-and-provides
+           ;; Get any requires and provides, keeping them as-is
+           (get-and-clear-requires-and-provides! (expand-context-lifts-to-module body-ctx)))
+         (define lifted-modules
            ;; If there were any module lifts, the `module` forms need to
            ;; be expanded
            (expand-non-module*-submodules (get-and-clear-module-lifts!
@@ -471,9 +507,10 @@
                                           body-ctx))
          (append
           lifts
-          module-lifts
+          lifted-requires-and-provides
+          lifted-modules
           (cons body
-                (loop (cdr bodys))))])])))
+                (loop tail? (cdr bodys))))])])))
 
 (define (check-defined-by-now need-eventually-defined self)
   ;; If `need-eventually-defined` is not empty, report an error
@@ -690,3 +727,12 @@
       [(module)
        (expand-submodule body self ctx)]
       [else body])))
+
+;; ----------------------------------------
+
+(define (make-parse-lifted-require m-ns self requires+provides)
+  (lambda (s phase)
+    (define m (match-syntax s '(#%require req)))
+    (parse-and-perform-requires! (list (m 'req)) self
+                                 m-ns phase
+                                 requires+provides)))

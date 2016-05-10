@@ -265,3 +265,14 @@
     [(unbound? t)
      (error "cannot assign to unbound identifier:" s)]
     [else (error "cannot assign to syntax:" s)])))
+
+(add-core-form!
+ '#%expression
+ (lambda (s ctx)
+   (define m (match-syntax s '(#%expression e)))
+   (define exp-e (expand (m 'e) ctx))
+   (case (expand-context-context ctx)
+     [(expression) exp-e]
+     [else (rebuild
+            s
+            `(,(m '#%expression) ,exp-e))])))

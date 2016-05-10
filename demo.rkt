@@ -709,10 +709,13 @@
  1)
 
 ;; ----------------------------------------
-;; syntax-local-lift-{expression,module}
+;; syntax-local-lift-{expression,module}, etc.
 
 (eval-module-declaration '(module lifts '#%core
                            (#%require (for-syntax '#%core))
+                           (module pre '#%core
+                             (#%provide pre)
+                             (define-values (pre) 'pre))
                            (define-syntaxes (m)
                              (lambda (stx)
                                (datum->syntax
@@ -730,15 +733,43 @@
                                (syntax-local-lift-module
                                 (quote-syntax (module* main #f
                                                 (println x))))
-                               (quote-syntax
-                                (begin
-                                  (#%require (submod "." sub))
-                                  (println sub)))))
+                               (syntax-local-lift-module-end-declaration
+                                (quote-syntax (define-values (done) 'done)))
+                               (syntax-local-lift-provide
+                                (quote-syntax done))
+                               (let-values ([(pre-id) (syntax-local-lift-require
+                                                       (quote-syntax (submod "." pre))
+                                                       (quote-syntax pre))])
+                                 (datum->syntax
+                                  (quote-syntax here)
+                                  (list
+                                   (quote-syntax begin)
+                                   (list (quote-syntax println) pre-id)
+                                   (quote-syntax (#%require (submod "." sub)))
+                                   (quote-syntax (println sub)))))))
                            (n)
-                           (define-values (x) '*)))
+                           (define-values (x) '*)
+                           (define-syntaxes (as-expr)
+                             (lambda (stx)
+                               ;; (syntax-local-lift-module-end-declaration
+                               ;;  (quote-syntax (define-values (fail) 'this-wont-work)))
+                               (syntax-local-lift-module-end-declaration
+                                (quote-syntax (println 'end)))
+                               (quote-syntax (void))))
+                           (list (as-expr))))
 
 (check-print
  (namespace-require '(submod 'lifts main) demo-ns)
  3
+ 'pre
  'sub
+ 'end
  '*)
+
+(eval-module-declaration '(module use-lifted-provide '#%core
+                           (#%require 'lifts)
+                           (println done)))
+
+(check-print
+ (namespace-require ''use-lifted-provide demo-ns)
+ 'done)

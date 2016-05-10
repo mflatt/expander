@@ -95,6 +95,9 @@
            ,(compile (m 'rhs)))]
         [(let-values letrec-values)
          (compile-let core-sym s cctx)]
+        [(#%expression)
+         (define m (match-syntax s '(#%expression e)))
+         (compile (m 'e))]
         [(quote)
          (define m (match-syntax s '(quote datum)))
          `(quote ,(syntax->datum (m 'datum)))]
