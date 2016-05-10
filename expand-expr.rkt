@@ -9,7 +9,8 @@
          "core.rkt"
          "expand-context.rkt"
          "expand.rkt"
-         "set-bang-trans.rkt")
+         "set-bang-trans.rkt"
+         "rename-trans.rkt")
 
 ;; ----------------------------------------
 
@@ -247,6 +248,14 @@
    (cond
     [(set!-transformer? t)
      (expand (apply-transformer (transformer->procedure t) s ctx) ctx)]
+    [(rename-transformer? t)
+     (expand (datum->syntax s
+                            (list (m 'set!)
+                                  (rename-transformer-target t)
+                                  (m 'rhs))
+                            s
+                            s)
+             ctx)]
     [(variable? t)
      (rebuild
       s

@@ -7,7 +7,8 @@
          "free-id-set.rkt"
          "core.rkt"
          "expand-context.rkt"
-         "expand.rkt")
+         "expand.rkt"
+         "rename-trans.rkt")
 
 (provide default-phase
          
@@ -20,6 +21,7 @@
          make-syntax-delta-introducer
          
          syntax-local-value
+         syntax-local-value/immediate
          
          local-expand
          
@@ -99,27 +101,48 @@
   
 ;; ----------------------------------------
 
-(define (syntax-local-value id [failure-thunk #f])
+(define (do-syntax-local-value who id [failure-thunk #f]
+                               #:immediate? [immediate? #f])
+  (unless (identifier? id)
+    (raise-argument-error who "identifier?" id))
+  (unless (or (not failure-thunk)
+              (and (procedure? failure-thunk)
+                   (procedure-arity-includes? failure-thunk 0)))
+    (raise-argument-error who
+                          "(or #f (procedure-arity-includes/c 0))" 
+                          failure-thunk))
   (define ctx (get-current-expand-context 'syntax-local-value))
   (define phase (expand-context-phase ctx))
-  (define b (resolve id phase))
-  (cond
-   [(not b)
-    (if failure-thunk
-        (failure-thunk)
-        (error 'syntax-local-value "unbound identifier: ~v" id))]
-   [else
-    (define v (binding-lookup b
-                              (expand-context-env ctx)
-                              (expand-context-namespace ctx)
-                              phase
-                              id))
+  (let loop ([id id])
+    (define b (resolve id phase))
     (cond
-     [(or (variable? v) (unbound? v) (core-form? v))
+     [(not b)
       (if failure-thunk
           (failure-thunk)
-          (error 'syntax-local-value "identifier is not bound to syntax: ~v" id))]
-     [else v])]))
+          (error 'syntax-local-value "unbound identifier: ~v" id))]
+     [else
+      (define v (binding-lookup b
+                                (expand-context-env ctx)
+                                (expand-context-namespace ctx)
+                                phase
+                                id))
+      (cond
+       [(or (variable? v) (unbound? v) (core-form? v))
+        (if failure-thunk
+            (failure-thunk)
+            (error 'syntax-local-value "identifier is not bound to syntax: ~v" id))]
+       [(rename-transformer? v)
+        (if immediate?
+            (values v (rename-transformer-target v))
+            (loop (rename-transformer-target v)))]
+       [immediate? (values v #f)]
+       [else v])])))
+
+(define (syntax-local-value id [failure-thunk #f])
+  (do-syntax-local-value 'syntax-local-value #:immediate? #f id failure-thunk))
+
+(define (syntax-local-value/immediate id [failure-thunk #f])
+  (do-syntax-local-value 'syntax-local-value/immediate #:immediate? #t id failure-thunk))
 
 ;; ----------------------------------------
 

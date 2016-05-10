@@ -4,7 +4,8 @@
          "scope.rkt"
          "phase.rkt"
          "namespace.rkt"
-         "set-bang-trans.rkt")
+         "set-bang-trans.rkt"
+         "rename-trans.rkt")
 
 (provide
  (struct-out module-binding)
@@ -96,11 +97,22 @@
 (define (unbound? t) (eq? t unbound))
 
 ;; A subset of compile-time values are macro transformers
-(define (transformer? t) (or (procedure? t) (set!-transformer? t)))
+(define (transformer? t) (or (procedure? t)
+                             (set!-transformer? t)
+                             (rename-transformer? t)))
 (define (transformer->procedure t)
-  (if (set!-transformer? t)
-      (set!-transformer->procedure t)
-      t))
+  (cond
+   [(set!-transformer? t) (set!-transformer->procedure t)]
+   [(rename-transformer? t) (lambda (s)
+                              (if (identifier? s)
+                                  (rename-transformer-target t)
+                                  (datum->syntax
+                                   s
+                                   (cons (rename-transformer-target t)
+                                         (cdr (syntax-e s)))
+                                   s
+                                   s)))]
+   [else t]))
 
 ;; A subset of compile-time values are primitive forms
 (struct core-form (expander) #:transparent)

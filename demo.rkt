@@ -397,6 +397,29 @@
           (one 8))))
  #:check (list 1 'oops 'ok '(1 8)))
 
+"rename transformer"
+(eval-expression
+ '(let-values ([(f) (lambda (v) (+ v 1))])
+   (letrec-syntaxes+values
+    ([(g) (make-rename-transformer (quote-syntax f))])
+    ()
+    (list (let-values ([(h) g]) (h 0))
+          (g 1)
+          (begin
+            (set! g 3)
+            f)
+          (letrec-syntaxes+values
+           ([(f-id) (quote-syntax f)])
+           ()
+           (letrec-syntaxes+values
+            ([(g-id) (make-rename-transformer (quote-syntax f-id))])
+            ()
+            (letrec-syntaxes+values
+             ([(m) (lambda (stx) (syntax-local-value (quote-syntax g-id)))])
+             ()
+             (+ 1 (m))))))))
+ #:check (list 1 2 3 4))
+
 ;; ----------------------------------------
 
 (define (eval-module-declaration mod)

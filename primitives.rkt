@@ -8,6 +8,7 @@
                     [free-identifier=? raw:free-identifier=?])
          "core.rkt"
          "set-bang-trans.rkt"
+         "rename-trans.rkt"
          "syntax-local.rkt")
 
 (define (bound-identifier=? a b [phase (default-phase)])
@@ -48,6 +49,8 @@
                       make-syntax-delta-introducer
                       
                       syntax-local-value
+                      syntax-local-value/immediate
+                      
                       local-expand
                       
                       internal-definition-context?
@@ -61,6 +64,11 @@
                       make-set!-transformer
                       prop:set!-transformer
                       set!-transformer?
+
+                      rename-transformer?
+                      prop:rename-transformer
+                      make-rename-transformer
+                      rename-transformer-target
 
                       ;; This list will need to be a lot longer...
                       list cons car cdr pair? null? map
