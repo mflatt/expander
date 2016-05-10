@@ -10,7 +10,8 @@
          "dup-check.rkt"
          "compile.rkt"
          "core.rkt"
-         "expand-context.rkt")
+         "expand-context.rkt"
+         "lift-context.rkt")
 
 (provide expand
          expand-body
@@ -159,6 +160,7 @@
 (define (lookup b ctx id)
   (binding-lookup b
                   (expand-context-env ctx)
+                  (expand-context-lift-envs ctx)
                   (expand-context-namespace ctx)
                   (expand-context-phase ctx)
                   id))
@@ -336,13 +338,33 @@
 ;; Expand `s` as a compile-time expression relative to the current
 ;; expansion context
 (define (expand-transformer s ctx)
-  (expand s (struct-copy expand-context ctx
-                         [scopes null]
-                         [phase (add1 (expand-context-phase ctx))]
-                         [env empty-env]
-                         [only-immediate? #f]
-                         [post-expansion-scope #f]
-                         [module-scopes null])))
+  (define phase (add1 (expand-context-phase ctx)))
+  (define lift-env (box empty-env))
+  (define trans-ctx (struct-copy expand-context ctx
+                                 [scopes null]
+                                 [phase phase]
+                                 [env empty-env]
+                                 [only-immediate? #f]
+                                 [post-expansion-scope #f]
+                                 [module-scopes null]
+                                 [lifts (make-lift-context (make-local-lift lift-env))]
+                                 [lift-envs (cons lift-env
+                                                  (expand-context-lift-envs ctx))]))
+  ;; Expand `s`, but loop to handle lifted expressions
+  (let loop ([s s])
+    (define exp-s (expand s trans-ctx))
+    (define lifts (get-and-clear-lifts! (expand-context-lifts trans-ctx)))
+    (cond
+     [(null? lifts)
+      ;; No lifts, so expansion is done
+      exp-s]
+     [else
+      ;; Have lifts, so wrap as `let-values` and expand again
+      (loop (datum->syntax s (list (datum->syntax
+                                    (syntax-shift-phase-level core-stx phase)
+                                    'let-values)
+                                   lifts
+                                   exp-s)))])))
 
 ;; Expand and evaluate `s` as a compile-time expression, ensuring that
 ;; the number of returned values matches the number of target

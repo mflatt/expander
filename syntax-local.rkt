@@ -6,7 +6,8 @@
          "binding.rkt"
          "expand-context.rkt"
          "expand.rkt"
-         "rename-trans.rkt")
+         "rename-trans.rkt"
+         "lift-context.rkt")
 
 (provide get-current-expand-context
          flip-introduction-scopes
@@ -20,7 +21,11 @@
          make-syntax-delta-introducer
          
          syntax-local-value
-         syntax-local-value/immediate)
+         syntax-local-value/immediate
+         
+         syntax-local-lift-expression
+         syntax-local-lift-values-expression
+         syntax-local-lift-context)
 
 ;; ----------------------------------------
 
@@ -107,11 +112,7 @@
           (failure-thunk)
           (error 'syntax-local-value "unbound identifier: ~v" id))]
      [else
-      (define v (binding-lookup b
-                                (expand-context-env ctx)
-                                (expand-context-namespace ctx)
-                                phase
-                                id))
+      (define v (lookup b ctx id))
       (cond
        [(or (variable? v) (unbound? v) (core-form? v))
         (if failure-thunk
@@ -129,3 +130,29 @@
 
 (define (syntax-local-value/immediate id [failure-thunk #f])
   (do-syntax-local-value 'syntax-local-value/immediate #:immediate? #t id failure-thunk))
+
+;; ----------------------------------------
+
+(define (do-lift-values-expression who n s)
+  (unless (syntax? s)
+    (raise-argument-error who "syntax?" s))
+  (unless (exact-nonnegative-integer? n)
+    (raise-argument-error who "exact-nonnegative-integer?" n))
+  (define ctx (get-current-expand-context who))
+  (define lifts (expand-context-lifts ctx))
+  (define ids (for/list ([i (in-range n)])
+                ;; FIXME: use deterministic counter
+                (define name (gensym 'lifted))
+                (add-scope (datum->syntax #f name) (new-scope))))
+  ;; returns converted ids:
+  (add-lifted! lifts ids s (expand-context-phase ctx)))
+
+(define (syntax-local-lift-expression s)
+  (car (do-lift-values-expression 'syntax-local-lift-expression 1 s)))
+
+(define (syntax-local-lift-values-expression n s)
+  (do-lift-values-expression 'syntax-local-lift-values-expression n s))
+
+(define (syntax-local-lift-context)
+  (define ctx (get-current-expand-context 'syntax-local-lift-context))
+  (expand-context-lifts ctx))

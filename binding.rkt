@@ -119,7 +119,7 @@
 
 ;; Returns `variable`, a compile-time value, or `unbound` (only
 ;; in the case of module-level bindings)
-(define (binding-lookup b env ns phase id)
+(define (binding-lookup b env lift-envs ns phase id)
   (cond
    [(module-binding? b)
     (define m (namespace->module-namespace ns
@@ -130,7 +130,12 @@
                                unbound)]
    [(local-binding? b)
     (define t (hash-ref env (local-binding-key b) unbound))
-    (when (eq? t unbound)
-      (error "identifier used out of context:" id))
-    t]
+    (cond
+     [(eq? t unbound)
+      (or
+       ;; check in lift envs, if any
+       (for/or ([lift-env (in-list lift-envs)])
+         (hash-ref (unbox lift-env) (local-binding-key b) #f))
+       (error "identifier used out of context:" id))]
+     [else t])]
    [else (error "internal error: unknown binding for lookup:" b)]))

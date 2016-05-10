@@ -53,6 +53,10 @@
                       syntax-local-value
                       syntax-local-value/immediate
                       
+                      syntax-local-lift-expression
+                      syntax-local-lift-values-expression
+                      syntax-local-lift-context
+                      
                       local-expand
                       
                       internal-definition-context?

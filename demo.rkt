@@ -420,6 +420,22 @@
              (+ 1 (m))))))))
  #:check (list 1 2 3 4))
 
+"lifts in transformer; same number twice"
+(eval-expression '(letrec-syntaxes+values
+                   ([(n) (lambda (stx)
+                           (letrec-syntaxes+values
+                            ([(m) (lambda (stx)
+                                    (datum->syntax
+                                     (quote-syntax here)
+                                     (list (quote-syntax println)
+                                           (syntax-local-lift-expression
+                                            (quote-syntax (random))))))])
+                            ()
+                            (datum->syntax (quote-syntax here)
+                                           (m))))])
+                   ()
+                   (list (n) (n))))
+
 ;; ----------------------------------------
 
 (define (eval-module-declaration mod)
@@ -691,3 +707,21 @@
 (check-print
  (namespace-require ''use-non-transformer demo-ns)
  1)
+
+;; ----------------------------------------
+;; syntax-local-lift-expression
+
+(eval-module-declaration '(module lifts-expression '#%core
+                           (#%require (for-syntax '#%core))
+                           (define-syntaxes (m)
+                             (lambda (stx)
+                               (datum->syntax
+                                (quote-syntax here)
+                                (list (quote-syntax println)
+                                      (syntax-local-lift-expression
+                                       (quote-syntax (+ 1 2)))))))
+                           (m)))
+
+(check-print
+ (namespace-require ''lifts-expression demo-ns)
+ 3)

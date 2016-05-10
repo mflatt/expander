@@ -20,6 +20,8 @@
                         need-eventually-defined ; phase(>=1) -> variables expanded before binding
                         stops      ; free-id-set
                         current-introduction-scopes ; scope for current macro expansion
+                        lifts      ; #f or lift-context, which contains a list of lifteds
+                        lift-envs  ; list of box of env for lifts to locals
                         ))
 
 (define (make-expand-context ns)
@@ -35,6 +37,8 @@
                   #f   ; module-begin-k
                   #f   ; need-eventually-defined
                   empty-free-id-set
-                  null)); current-introduction-scopes
+                  null ; current-introduction-scopes
+                  #f   ; lifts
+                  '())); lift-envs
 
 (define current-expand-context (make-parameter #f))

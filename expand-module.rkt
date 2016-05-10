@@ -8,6 +8,7 @@
          "binding.rkt"
          "require+provide.rkt"
          "module-path.rkt"
+         "lift-context.rkt"
          "core.rkt"
          "expand-context.rkt"
          "expand.rkt"
@@ -156,8 +157,12 @@
                                                [post-expansion-scope inside-scope]
                                                [module-scopes new-module-scopes]
                                                [need-eventually-defined (and (phase . >= . 1)
-                                                                             need-eventually-defined)]))
-         
+                                                                             need-eventually-defined)]
+                                               [lifts (make-lift-context
+                                                       (make-wrap-as-definition self
+                                                                                inside-scope new-module-scopes
+                                                                                defined-syms requires+provides))]))
+
          (define partially-expanded-bodys
            (partially-expand-bodys bodys
                                    #:original s
@@ -337,70 +342,93 @@
      [(null? bodys) null]
      [else
       (define exp-body (expand (car bodys) partial-body-ctx))
-      (case (core-form-sym exp-body phase)
-        [(begin)
-         (define m (match-syntax exp-body '(begin e ...)))
-         (loop (append (m 'e) (cdr bodys)))]
-        [(begin-for-syntax)
-         (define m (match-syntax exp-body '(begin-for-syntax e ...)))
-         (define nested-bodys (phase-1-and-2-loop (m 'e) (add1 phase)))
-         (eval-nested-bodys nested-bodys (add1 phase) m-ns self)
-         (cons
-          (rebuild
-           s
-           `(,(m 'begin-for-syntax) ,@nested-bodys))
-          (loop (cdr bodys)))]
-        [(define-values)
-         (define m (match-syntax exp-body '(define-values (id ...) rhs)))
-         (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
-         (check-ids-unbound ids phase requires+provides)
-         (define syms (select-defined-syms-and-bind ids defined-syms self phase
-                                                    module-scopes
-                                                    requires+provides))
-         (cons exp-body
-               (loop (cdr bodys)))]
-        [(define-syntaxes)
-         (define m (match-syntax exp-body '(define-syntaxes (id ...) rhs)))
-         (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
-         (check-ids-unbound ids phase requires+provides)
-         (define syms (select-defined-syms-and-bind ids defined-syms self phase
-                                                    module-scopes
-                                                    requires+provides))
-         ;; Expand and evaluate RHS:
-         (define-values (exp-rhs vals)
-           (expand+eval-for-syntaxes-binding (m 'rhs) ids partial-body-ctx))
-         ;; Install transformers in the namespace for expansion:
-         (for ([key (in-list syms)]
-               [val (in-list vals)])
-           (namespace-set-transformer! m-ns phase key val))
-         (cons (rebuild exp-body
-                        `(,(m 'define-syntaxes) ,ids ,exp-rhs))
-               (loop (cdr bodys)))]
-        [(#%require)
-         (define m (match-syntax exp-body '(#%require req ...)))
-         (parse-and-perform-requires! (m 'req) self
-                                      m-ns phase
-                                      requires+provides)
-         (cons exp-body
-               (loop (cdr bodys)))]
-        [(#%provide)
-         ;; save for last pass
-         (cons exp-body
-               (loop (cdr bodys)))]
-        [(module)
-         ;; Submodule to parse immediately
-         (define submod
-           (expand-submodule exp-body self partial-body-ctx))
-         (cons submod
-               (loop (cdr bodys)))]
-        [(module*)
-         ;; Submodule to save for after this module
-         (cons exp-body
-               (loop (cdr bodys)))]
-        [else
-         ;; save expression for next pass
-         (cons exp-body
-               (loop (cdr bodys)))])])))
+      (append
+       ;; Save any expressions lifted during partial expansion
+       (get-and-clear-lifts! (expand-context-lifts partial-body-ctx))
+       ;; Dispatch on form revealed by partial expansion
+       (case (core-form-sym exp-body phase)
+         [(begin)
+          (define m (match-syntax exp-body '(begin e ...)))
+          (loop (append (m 'e) (cdr bodys)))]
+         [(begin-for-syntax)
+          (define m (match-syntax exp-body '(begin-for-syntax e ...)))
+          (define nested-bodys (phase-1-and-2-loop (m 'e) (add1 phase)))
+          (eval-nested-bodys nested-bodys (add1 phase) m-ns self)
+          (cons
+           (rebuild
+            s
+            `(,(m 'begin-for-syntax) ,@nested-bodys))
+           (loop (cdr bodys)))]
+         [(define-values)
+          (define m (match-syntax exp-body '(define-values (id ...) rhs)))
+          (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
+          (check-ids-unbound ids phase requires+provides)
+          (define syms (select-defined-syms-and-bind ids defined-syms self phase
+                                                     module-scopes
+                                                     requires+provides))
+          (cons exp-body
+                (loop (cdr bodys)))]
+         [(define-syntaxes)
+          (define m (match-syntax exp-body '(define-syntaxes (id ...) rhs)))
+          (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
+          (check-ids-unbound ids phase requires+provides)
+          (define syms (select-defined-syms-and-bind ids defined-syms self phase
+                                                     module-scopes
+                                                     requires+provides))
+          ;; Expand and evaluate RHS:
+          (define-values (exp-rhs vals)
+            (expand+eval-for-syntaxes-binding (m 'rhs) ids partial-body-ctx))
+          ;; Install transformers in the namespace for expansion:
+          (for ([sym (in-list syms)]
+                [val (in-list vals)])
+            (namespace-set-transformer! m-ns phase sym val))
+          (cons (rebuild exp-body
+                         `(,(m 'define-syntaxes) ,ids ,exp-rhs))
+                (loop (cdr bodys)))]
+         [(#%require)
+          (define m (match-syntax exp-body '(#%require req ...)))
+          (parse-and-perform-requires! (m 'req) self
+                                       m-ns phase
+                                       requires+provides)
+          (cons exp-body
+                (loop (cdr bodys)))]
+         [(#%provide)
+          ;; save for last pass
+          (cons exp-body
+                (loop (cdr bodys)))]
+         [(module)
+          ;; Submodule to parse immediately
+          (define submod
+            (expand-submodule exp-body self partial-body-ctx))
+          (cons submod
+                (loop (cdr bodys)))]
+         [(module*)
+          ;; Submodule to save for after this module
+          (cons exp-body
+                (loop (cdr bodys)))]
+         [else
+          ;; save expression for next pass
+          (cons exp-body
+                (loop (cdr bodys)))]))])))
+
+;; Convert lifted identifiers plus expression to a `define-values` form:
+(define (make-wrap-as-definition self
+                                 inside-scope module-scopes
+                                 defined-syms requires+provides)
+  (lambda (ids rhs phase)
+    (define scoped-ids (for/list ([id (in-list ids)])
+                         (add-scope id inside-scope)))
+    (select-defined-syms-and-bind scoped-ids defined-syms self phase
+                                  module-scopes
+                                  requires+provides)
+    (values scoped-ids
+            (add-scope (datum->syntax
+                        #f
+                        (list (datum->syntax (syntax-shift-phase-level core-stx phase)
+                                             'define-values)
+                              ids
+                              rhs))
+                       inside-scope))))
 
 ;; ----------------------------------------
 
@@ -423,8 +451,15 @@
          (cons (car bodys)
                (loop (cdr bodys)))]
         [else
-         (cons (expand (car bodys) body-ctx)
-               (loop (cdr bodys)))])])))
+         (define body (expand (car bodys) body-ctx))
+         (define lifts
+           ;; If there were any lifts, the right-hand sides need to be expanded
+           (loop
+            (get-and-clear-lifts! (expand-context-lifts body-ctx))))
+         (append
+          lifts
+          (cons body
+                (loop (cdr bodys))))])])))
 
 (define (check-defined-by-now need-eventually-defined self)
   ;; If `need-eventually-defined` is not empty, report an error
@@ -572,7 +607,6 @@
                               0))
     (add-binding! id b phase)
     (add-defined-or-required-id! requires+provides id phase b)
-    (log-error "~s ~s => ~s" id phase defined-sym)
     defined-sym))
 
 (define (no-extra-scopes? id module-scopes phase)
