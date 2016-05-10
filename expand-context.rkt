@@ -1,5 +1,6 @@
 #lang racket/base
-(require "namespace.rkt"
+(require "syntax.rkt"
+         "namespace.rkt"
          "binding.rkt"
          "free-id-set.rkt")
 
@@ -10,6 +11,7 @@
 (struct expand-context (scopes     ; list of scopes that should be pruned by `quote-syntax`
                         use-site-scopes ; #f or boxed list: scopes that should be pruned from binders
                         module-scopes ; list of scopes for enclosing module or top level
+                        all-scopes-stx ; all scopes from enclosing binding context; for `syntax-local-get-shadower`
                         context    ; 'expression, 'module, or 'top-level
                         phase      ; current expansion phase
                         namespace  ; namespace for modules and top-levels
@@ -30,6 +32,7 @@
   (expand-context null ; scopes
                   #f ; use-site scopes
                   (list (namespace-scope ns)) ; module-scopes
+                  empty-syntax
                   'top-level
                   0
                   ns

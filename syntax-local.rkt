@@ -32,7 +32,9 @@
          
          syntax-local-lift-require
          syntax-local-lift-provide
-         syntax-local-lift-module-end-declaration)
+         syntax-local-lift-module-end-declaration
+         
+         syntax-local-get-shadower)
 
 ;; ----------------------------------------
 
@@ -236,3 +238,13 @@
           (syntax-shift-phase-level core-stx phase)
           sym)
          s)))
+
+;; ----------------------------------------
+
+(define (syntax-local-get-shadower id [only-generated? #f])
+  (unless (identifier? id)
+    (raise-argument-error 'syntax-local-get-shadower "identifier?" id))
+  (define ctx (get-current-expand-context 'syntax-local-get-shadower))
+  (add-scopes id (set->list
+                  (syntax-scope-set (expand-context-all-scopes-stx ctx)
+                                    (expand-context-phase ctx)))))

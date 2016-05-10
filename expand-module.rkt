@@ -98,11 +98,12 @@
    (define need-eventually-defined (make-hasheqv)) ; phase -> list of id
 
    ;; Initial require
+   (define initial-require-stx (apply-module-scopes (m 'initial-require)))
    (cond
     [(not keep-enclosing-scope-at-phase)
      ;; Install the initial require
      (perform-initial-require! initial-require self
-                               (apply-module-scopes (m 'initial-require))
+                               initial-require-stx
                                m-ns
                                requires+provides)]
     [else
@@ -156,6 +157,7 @@
                                                [use-site-scopes use-site-scopes]
                                                [post-expansion-scope inside-scope]
                                                [module-scopes new-module-scopes]
+                                               [all-scopes-stx initial-require-stx]
                                                [need-eventually-defined (and (phase . >= . 1)
                                                                              need-eventually-defined)]
                                                [lifts (make-lift-context

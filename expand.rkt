@@ -197,7 +197,12 @@
                                 [scopes (list* outside-sc
                                                inside-sc
                                                (expand-context-scopes ctx))]
-                                [use-site-scopes (box null)]))
+                                [use-site-scopes (box null)]
+                                [all-scopes-stx
+                                 (add-scope
+                                  (add-scope (expand-context-all-scopes-stx ctx)
+                                             outside-sc)
+                                  inside-sc)]))
   (let loop ([body-ctx body-ctx]
              [bodys init-bodys]
              [done-bodys null] ; accumulated expressions

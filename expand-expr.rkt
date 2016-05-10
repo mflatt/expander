@@ -30,7 +30,9 @@
   ;; Expand the function body:
   (define body-ctx (struct-copy expand-context ctx
                                 [env body-env]
-                                [scopes (cons sc (expand-context-scopes ctx))]))
+                                [scopes (cons sc (expand-context-scopes ctx))]
+                                [all-scopes-stx
+                                 (add-scope (expand-context-all-scopes-stx ctx) sc)]))
   (define exp-body (expand-body bodys sc s body-ctx))
   ;; Return formals (with new scope) and expanded body:
   (values (add-scope formals sc)
@@ -128,7 +130,9 @@
    ;; Expand right-hand sides and body
    (define rec-ctx (struct-copy expand-context ctx
                                 [env rec-env]
-                                [scopes (cons sc (expand-context-scopes ctx))]))
+                                [scopes (cons sc (expand-context-scopes ctx))]
+                                [all-scopes-stx
+                                 (add-scope (expand-context-all-scopes-stx ctx) sc)]))
    (define letrec-values-id
      (if syntaxes?
          (datum->syntax (syntax-shift-phase-level core-stx phase) 'letrec-values)

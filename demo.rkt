@@ -436,6 +436,26 @@
                    ()
                    (list (n) (n))))
 
+"get shadower"
+(eval-expression
+ '(let-values ([(x) 1])
+   (letrec-syntaxes+values
+    ([(m)
+      (lambda (stx)
+        (datum->syntax
+         #f
+         (list (quote-syntax let-values)
+               (list
+                (list
+                 (list (syntax-local-introduce
+                        (syntax-local-get-shadower (quote-syntax x))))
+                 (quote-syntax 2)))
+               (car (cdr (syntax-e stx))))))])
+    ()
+    (let-values ([(x) 3])
+      (m x))))
+ #:check 2)
+
 ;; ----------------------------------------
 
 (define (eval-module-declaration mod)

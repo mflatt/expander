@@ -63,6 +63,8 @@
                       syntax-local-lift-provide
                       syntax-local-lift-module-end-declaration
                       
+                      syntax-local-get-shadower
+                      
                       local-expand
                       
                       internal-definition-context?

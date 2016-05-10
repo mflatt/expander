@@ -65,8 +65,10 @@
                                                 (expand-context-post-expansion-scope ctx)))]
                                      [only-immediate? (not stop-ids)]
                                      [stops (free-id-set phase (or all-stop-ids null))]
-                                     [current-introduction-scopes null])))
+                                     [current-introduction-scopes null]
+                                     [all-scopes-stx (add-intdef-scopes
+                                                      (expand-context-all-scopes-stx ctx)
+                                                      intdefs)])))
   (define input-s (add-intdef-scopes (flip-introduction-scopes s ctx) intdefs))
   (define output-s (expand input-s local-ctx))
   (flip-introduction-scopes output-s ctx))
-
