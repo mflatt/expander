@@ -327,16 +327,29 @@
                (quote-syntax here)
                (list (quote-syntax let-values)
                      (list (list (list
-                                  (syntax-local-identifier-as-binding
-                                   (car
-                                    (cdr
-                                     (syntax-e (local-expand (datum->syntax
-                                                              #f
-                                                              (list (quote-syntax quote)
-                                                                    id2))
-                                                             (list 'intdef)
-                                                             (list (quote-syntax quote))
-                                                             intdef))))))
+                                  (let-values ([(id2-by-expand)
+                                                (car
+                                                 (cdr
+                                                  (syntax-e (local-expand (datum->syntax
+                                                                           #f
+                                                                           (list (quote-syntax quote)
+                                                                                 id2))
+                                                                          (list 'intdef)
+                                                                          (list (quote-syntax quote))
+                                                                          intdef))))]
+                                               [(id2-by-intro)
+                                                (internal-definition-context-introduce
+                                                 intdef
+                                                 id2)]
+                                               [(flip) (make-syntax-introducer)])
+                                    (if (bound-identifier=? id2-by-expand id2-by-intro)
+                                        (let-values ([(delta)
+                                                      (make-syntax-delta-introducer
+                                                       (flip (quote-syntax here))
+                                                       (quote-syntax here))])
+                                          (syntax-local-identifier-as-binding
+                                           (delta (flip id2-by-intro) 'remove)))
+                                        (error "should have been the same"))))
                                  7))
                      (local-expand (datum->syntax
                                     (quote-syntax here)

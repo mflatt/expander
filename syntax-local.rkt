@@ -1,5 +1,6 @@
 #lang racket/base
-(require "syntax.rkt"
+(require racket/set
+         "syntax.rkt"
          "phase.rkt"
          "scope.rkt"
          "binding.rkt"
@@ -9,11 +10,26 @@
          "expand.rkt")
 
 (provide default-phase
+         
+         syntax-local-context
+         syntax-local-introduce
+         syntax-local-identifier-as-binding
+         syntax-local-phase-level
+         
+         make-syntax-introducer
+         make-syntax-delta-introducer
+         
          syntax-local-value
+         
          local-expand
+         
+         internal-definition-context?
          syntax-local-make-definition-context
          syntax-local-bind-syntaxes
-         syntax-local-identifier-as-binding)
+         internal-definition-context-binding-identifiers
+         internal-definition-context-introduce
+         internal-definition-context-seal
+         identifier-remove-from-definition-context)
 
 ;; `bound-identifier=?` and `free-identifier=?` use the current
 ;; context to determine the default phase
@@ -30,6 +46,57 @@
 (define (flip-introduction-scopes s ctx)
   (flip-scopes s (expand-context-current-introduction-scopes ctx)))
 
+;; ----------------------------------------
+
+(define (syntax-local-context)
+  (define ctx (get-current-expand-context 'syntax-local-context))
+  (expand-context-context ctx))
+
+(define (syntax-local-introduce s)
+  (unless (syntax? s)
+    (raise-argument-error 'syntax-local-introduce "syntax?" s))
+  (define ctx (get-current-expand-context 'syntax-local-introduce))
+  (flip-introduction-scopes s ctx))
+
+(define (syntax-local-identifier-as-binding id)
+  (unless (identifier? id)
+    (raise-argument-error 'syntax-local-identifier-as-binding "identifier?" id))
+  (define ctx (get-current-expand-context 'syntax-local-identifier-as-binding))
+  (remove-use-site-scopes id ctx))
+
+(define (syntax-local-phase-level)
+  (default-phase))
+
+;; ----------------------------------------
+
+(define (make-syntax-introducer [as-use-site? #f])
+  (define sc (new-scope))
+  (lambda (s [mode 'flip])
+    (unless (syntax? s)
+      (raise-argument-error 'syntax-introducer "syntax?" s))
+    (case mode
+      [(add) (add-scope s sc)]
+      [(remove) (remove-scope s sc)]
+      [(flip) (flip-scope s sc)]
+      [else (raise-argument-error 'syntax-introducer "(or/c 'add 'remove 'flip)" mode)])))
+
+(define (make-syntax-delta-introducer ext-s base-s [phase (default-phase)])
+  (unless (syntax? ext-s)
+    (raise-argument-error 'make-syntax-delta-introducer "syntax?" ext-s))
+  (unless (syntax? base-s)
+    (raise-argument-error 'make-syntax-delta-introducer "syntax?" base-s))
+  (unless (phase? phase)
+    (raise-argument-error 'make-syntax-delta-introducer "phase?" phase))
+  (define ext-scs (syntax-scope-set ext-s phase))
+  (define base-scs (syntax-scope-set base-s phase))
+  (define delta-scs (set->list (set-subtract ext-scs base-scs)))
+  (lambda (s [mode 'flip])
+    (case mode
+      [(add) (add-scopes s delta-scs)]
+      [(remove) (remove-scopes s delta-scs)]
+      [(flip) (flip-scopes s delta-scs)]
+      [else (raise-argument-error 'syntax-introducer "(or/c 'add 'remove 'flip)" mode)])))
+  
 ;; ----------------------------------------
 
 (define (syntax-local-value id [failure-thunk #f])
@@ -120,15 +187,18 @@
                                      add-scope?    ; whether the scope is auto-added for expansion
                                      env-mixins))  ; bindings for this context: box of list of mix-binding
 
-(struct env-mixin (sym
+(struct env-mixin (id
+                   sym
                    value
                    cache)) ; caches addition of binding to an existing environment
 
+;; syntax-local-make-definition-context
 (define (syntax-local-make-definition-context [parent-ctx #f] [add-scope? #t])
   (void (get-current-expand-context 'syntax-local-make-definition-context))
   (define sc (new-scope))
   (internal-definition-context sc add-scope? (box null)))
 
+;; syntax-local-bind-syntaxes
 (define (syntax-local-bind-syntaxes ids s intdef)
   (unless (and (list? ids)
                (andmap identifier? ids))
@@ -141,10 +211,11 @@
   (define phase (expand-context-phase ctx))
   (define intdef-env (add-intdef-bindings (expand-context-env ctx)
                                           intdef))
-  (define syms (for/list ([id (in-list ids)])
-                 (define pre-id (remove-use-site-scopes (flip-introduction-scopes id ctx)
-                                                        ctx))
-                 (define intdef-id (add-intdef-scopes pre-id intdef #:always? #t))
+  (define intdef-ids (for/list ([id (in-list ids)])
+                       (define pre-id (remove-use-site-scopes (flip-introduction-scopes id ctx)
+                                                              ctx))
+                       (add-intdef-scopes pre-id intdef #:always? #t)))
+  (define syms (for/list ([intdef-id (in-list intdef-ids)])
                  (add-local-binding! intdef-id phase)))
   (define vals
     (cond
@@ -158,10 +229,53 @@
      [else
       (for/list ([id (in-list ids)]) variable)]))
   (define env-mixins (internal-definition-context-env-mixins intdef))
-  (set-box! env-mixins (append (for/list ([sym (in-list syms)]
+  (set-box! env-mixins (append (for/list ([intdef-id (in-list intdef-ids)]
+                                          [sym (in-list syms)]
                                           [val (in-list vals)])
-                                 (env-mixin sym val (make-weak-hasheq)))
+                                 (env-mixin intdef-id sym val (make-weak-hasheq)))
                                (unbox env-mixins))))
+
+;; internal-definition-context-binding-identifiers
+(define (internal-definition-context-binding-identifiers intdef)
+  (unless (internal-definition-context? intdef)
+    (raise-argument-error 'internal-definition-context-binding-identifiers "internal-definition-context?" intdef))
+  (for/list ([env-mixin (in-list (internal-definition-context-env-mixins intdef))])
+    (env-mixin-id env-mixin)))
+
+;; internal-definition-context-introduce
+(define (internal-definition-context-introduce intdef s [mode 'flip])
+  (unless (internal-definition-context? intdef)
+    (raise-argument-error 'internal-definition-context-introduce "internal-definition-context?" intdef))
+  (unless (syntax? s)
+    (raise-argument-error 'internal-definition-context-introduce "syntax?" s))
+  (add-intdef-scopes s intdef
+                     #:action (case mode
+                                [(add) add-scopes]
+                                [(remove) remove-scopes]
+                                [(flip) flip-scope]
+                                [else (raise-argument-error
+                                       internal-definition-context-introduce
+                                       "(or/c 'add 'remove 'flip)"
+                                       mode)])))
+
+;; internal-definition-context-seal
+(define (internal-definition-context-seal intdef) 
+  (unless (internal-definition-context? intdef)
+    (raise-argument-error 'internal-definition-context-seal "internal-definition-context?" intdef))
+  (void))
+
+;; identifier-remove-from-definition-context
+(define (identifier-remove-from-definition-context id intdef)
+  (unless (identifier? id)
+    (raise-argument-error 'identifier-remove-from-definition-context "identifier?" id))
+  (unless (or (internal-definition-context? intdef)
+              (and (list? intdef)
+                   (andmap internal-definition-context? intdef)))
+    (raise-argument-error 'identifier-remove-from-definition-context
+                          "(or/c internal-definition-context? (listof internal-definition-context?))"
+                          intdef))
+  (for/fold ([id id]) ([intdef (in-intdefs intdef)])
+    (internal-definition-context-introduce intdef id 'remove)))
 
 ;; Sequence for intdefs provided to `local-expand`
 (define (in-intdefs intdefs)
@@ -185,16 +299,10 @@
               (hash-set! (env-mixin-cache env-mixin) env new-env)
               new-env))]))))
 
-(define (add-intdef-scopes s intdefs #:always? [always? #f])
+(define (add-intdef-scopes s intdefs
+                           #:always? [always? #f]
+                           #:action [action add-scope])
   (for/fold ([s s]) ([intdef (in-intdefs intdefs)]
                      #:when (or always?
                                 (internal-definition-context-add-scope? intdef)))
-    (add-scope s (internal-definition-context-scope intdef))))
-
-;; ----------------------------------------
-
-(define (syntax-local-identifier-as-binding id)
-  (unless (identifier? id)
-    (raise-argument-error 'syntax-local-identifier-as-binding "identifier?" id))
-  (define ctx (get-current-expand-context 'syntax-local-identifier-as-binding))
-  (remove-use-site-scopes id ctx))
+    (action s (internal-definition-context-scope intdef))))

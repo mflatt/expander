@@ -12,6 +12,7 @@ TODO:
  lazy scope propagation
  use-site scope "optimization"
  rename transformers
+ set! transformers
  source locations
  syntax-local-...
  taints

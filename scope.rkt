@@ -12,6 +12,8 @@
          flip-scope
          flip-scopes
          
+         syntax-scope-set
+         
          syntax-shift-phase-level
          
          add-binding-in-scopes!

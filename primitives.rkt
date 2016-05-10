@@ -28,23 +28,39 @@
   (raw:free-identifier=? a b phase))
 
 ;; Register core primitives:
-;; This list will need to be a lot longer...
-(add-core-primitive! 'syntax-e syntax-e)
-(add-core-primitive! 'datum->syntax datum->syntax)
-(add-core-primitive! 'bound-identifier=? bound-identifier=?)
-(add-core-primitive! 'free-identifier=? free-identifier=?)
-(add-core-primitive! 'syntax-local-value syntax-local-value)
-(add-core-primitive! 'local-expand local-expand)
-(add-core-primitive! 'syntax-local-make-definition-context syntax-local-make-definition-context)
-(add-core-primitive! 'syntax-local-bind-syntaxes syntax-local-bind-syntaxes)
-(add-core-primitive! 'syntax-local-identifier-as-binding syntax-local-identifier-as-binding)
-(add-core-primitive! 'cons cons)
-(add-core-primitive! 'list list)
-(add-core-primitive! 'car car)
-(add-core-primitive! 'cdr cdr)
-(add-core-primitive! 'null? null?)
-(add-core-primitive! 'map map)
-(add-core-primitive! 'values values)
-(add-core-primitive! 'println println)
-(add-core-primitive! 'random random)
-(add-core-primitive! '+ +)
+(define-syntax-rule (add-core-primitives! id ...)
+  (begin
+    (add-core-primitive! 'id id)
+    ...))
+
+(add-core-primitives! syntax-e
+                      datum->syntax
+                      bound-identifier=?
+                      free-identifier=?
+                      
+                      syntax-local-context
+                      syntax-local-introduce
+                      syntax-local-identifier-as-binding
+                      syntax-local-phase-level
+
+                      make-syntax-introducer
+                      make-syntax-delta-introducer
+                      
+                      syntax-local-value
+                      local-expand
+                      
+                      internal-definition-context?
+                      syntax-local-make-definition-context
+                      syntax-local-bind-syntaxes
+                      internal-definition-context-binding-identifiers
+                      internal-definition-context-introduce
+                      internal-definition-context-seal
+                      identifier-remove-from-definition-context
+
+                      ;; This list will need to be a lot longer...
+                      list cons car cdr null? map
+                      values 
+                      error
+                      println
+                      random
+                      +)
