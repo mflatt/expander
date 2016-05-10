@@ -58,7 +58,7 @@
     ((core-form-expander t) s env)]
    [(transformer? t)
     ;; Apply transformer and expand again
-    (expand (apply-transformer t s env) env)]
+    (expand (apply-transformer t s) env)]
    [(or (variable? t)
         (unbound? t)) ;; treat unbound as variable (for top level)
     ;; A reference to a variable expands to itself
@@ -69,7 +69,7 @@
 
 ;; Given a macro transformer `t`, apply it --- adding appropriate
 ;; scopes to represent the expansion step
-(define (apply-transformer t s env)
+(define (apply-transformer t s)
   (define intro-scope (new-scope))
   (define intro-s (add-scope s intro-scope))
   ;; Call the transformer
