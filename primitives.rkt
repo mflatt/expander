@@ -57,6 +57,8 @@
                       syntax-local-lift-values-expression
                       syntax-local-lift-context
                       
+                      syntax-local-lift-module
+                      
                       local-expand
                       
                       internal-definition-context?

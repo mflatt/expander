@@ -709,9 +709,9 @@
  1)
 
 ;; ----------------------------------------
-;; syntax-local-lift-expression
+;; syntax-local-lift-{expression,module}
 
-(eval-module-declaration '(module lifts-expression '#%core
+(eval-module-declaration '(module lifts '#%core
                            (#%require (for-syntax '#%core))
                            (define-syntaxes (m)
                              (lambda (stx)
@@ -720,8 +720,25 @@
                                 (list (quote-syntax println)
                                       (syntax-local-lift-expression
                                        (quote-syntax (+ 1 2)))))))
-                           (m)))
+                           (m)
+                           (define-syntaxes (n)
+                             (lambda (stx)
+                               (syntax-local-lift-module
+                                (quote-syntax (module sub '#%core
+                                                (#%provide sub)
+                                                (define-values (sub) 'sub))))
+                               (syntax-local-lift-module
+                                (quote-syntax (module* main #f
+                                                (println x))))
+                               (quote-syntax
+                                (begin
+                                  (#%require (submod "." sub))
+                                  (println sub)))))
+                           (n)
+                           (define-values (x) '*)))
 
 (check-print
- (namespace-require ''lifts-expression demo-ns)
- 3)
+ (namespace-require '(submod 'lifts main) demo-ns)
+ 3
+ 'sub
+ '*)

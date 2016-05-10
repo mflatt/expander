@@ -161,7 +161,8 @@
                                                [lifts (make-lift-context
                                                        (make-wrap-as-definition self
                                                                                 inside-scope new-module-scopes
-                                                                                defined-syms requires+provides))]))
+                                                                                defined-syms requires+provides))]
+                                               [module-lifts (make-module-lift-context #t)]))
 
          (define partially-expanded-bodys
            (partially-expand-bodys bodys
@@ -184,7 +185,8 @@
          
          (finish-expanding-body-expressons partially-expanded-bodys
                                            #:phase phase
-                                           #:ctx body-ctx)))
+                                           #:ctx body-ctx
+                                           #:self self)))
 
      ;; Check that any tentativey allowed reference at phase >= 1 is ok
      (check-defined-by-now need-eventually-defined self)
@@ -345,6 +347,8 @@
       (append
        ;; Save any expressions lifted during partial expansion
        (get-and-clear-lifts! (expand-context-lifts partial-body-ctx))
+       ;; Ditto for modules, which need to be processed
+       (loop (get-and-clear-module-lifts! (expand-context-module-lifts partial-body-ctx)))
        ;; Dispatch on form revealed by partial expansion
        (case (core-form-sym exp-body phase)
          [(begin)
@@ -435,7 +439,8 @@
 ;; Pass 2 of `module` expansion, which expands all expressions
 (define (finish-expanding-body-expressons partially-expanded-bodys
                                           #:phase phase
-                                          #:ctx body-ctx)
+                                          #:ctx body-ctx
+                                          #:self self)
   (let loop ([bodys partially-expanded-bodys])
     (cond
      [(null? bodys) null]
@@ -456,8 +461,17 @@
            ;; If there were any lifts, the right-hand sides need to be expanded
            (loop
             (get-and-clear-lifts! (expand-context-lifts body-ctx))))
+         (define module-lifts
+           ;; If there were any module lifts, the `module` forms need to
+           ;; be expanded
+           (expand-non-module*-submodules (get-and-clear-module-lifts!
+                                           (expand-context-module-lifts body-ctx))
+                                          phase
+                                          self
+                                          body-ctx))
          (append
           lifts
+          module-lifts
           (cons body
                 (loop (cdr bodys))))])])))
 
@@ -668,3 +682,11 @@
 
   ;; Return the expanded submodule
   submod)
+
+;; Expand `module` forms, leave `module*` forms alone:
+(define (expand-non-module*-submodules bodys phase self ctx)
+  (for/list ([body (in-list bodys)])
+    (case (core-form-sym body phase)
+      [(module)
+       (expand-submodule body self ctx)]
+      [else body])))

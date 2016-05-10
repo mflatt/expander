@@ -6,6 +6,7 @@
          "binding.rkt"
          "expand-context.rkt"
          "expand.rkt"
+         "core.rkt"
          "rename-trans.rkt"
          "lift-context.rkt")
 
@@ -25,7 +26,9 @@
          
          syntax-local-lift-expression
          syntax-local-lift-values-expression
-         syntax-local-lift-context)
+         syntax-local-lift-context
+         
+         syntax-local-lift-module)
 
 ;; ----------------------------------------
 
@@ -156,3 +159,17 @@
 (define (syntax-local-lift-context)
   (define ctx (get-current-expand-context 'syntax-local-lift-context))
   (expand-context-lifts ctx))
+
+;; ----------------------------------------
+
+(define (syntax-local-lift-module s)
+  (unless (syntax? s)
+    (raise-argument-error 'syntax-local-lift-module "syntax?" s))
+  (define ctx (get-current-expand-context 'syntax-local-lift-module))
+  (define phase (expand-context-phase ctx))
+  (case (core-form-sym s phase)
+    [(module module*)
+     (add-lifted-module! (expand-context-module-lifts ctx) s phase)]
+    [else
+     (raise-arguments-error 'syntax-local-lift-module "not a module form"
+                            "given form" s)]))
