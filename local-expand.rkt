@@ -8,27 +8,40 @@
          "expand-context.rkt"
          "expand.rkt"
          "syntax-local.rkt"
-         "def-ctx.rkt")
+         "def-ctx.rkt"
+         "already-expanded.rkt")
 
-(provide local-expand)
+(provide local-expand
+         syntax-local-expand-expression)
 
 (define (local-expand s context stop-ids [intdefs #f])
+  (do-local-expand 'local-expand s context stop-ids intdefs))
+
+(define (syntax-local-expand-expression s)
+  (define exp-s (do-local-expand 'local-expand s 'expression null #f))
+  (values exp-s (already-expanded
+                 exp-s
+                 (expand-context-all-scopes-stx (current-expand-context)))))
+
+;; ----------------------------------------
+
+(define (do-local-expand who s context stop-ids [intdefs #f])
   (unless (syntax? s)
-    (raise-argument-error 'local-expand "syntax?" s))
+    (raise-argument-error who "syntax?" s))
   (unless (or (list? context)
               (memq context '(expression top-level module module-begin)))
-    (raise-argument-error 'local-expand "(or/c 'expression 'top-level 'module 'module-begin list?)" context))
+    (raise-argument-error who "(or/c 'expression 'top-level 'module 'module-begin list?)" context))
   (unless (or (not stop-ids)
               (and (list? stop-ids)
                    (andmap identifier? stop-ids)))
-    (raise-argument-error 'local-expand "(or/c (listof identifier?) #f)" stop-ids))
+    (raise-argument-error who "(or/c (listof identifier?) #f)" stop-ids))
   (unless (or (not intdefs)
               (internal-definition-context? intdefs)
               (and (list? intdefs) (andmap internal-definition-context? intdefs)))
-    (raise-argument-error 'local-expand
+    (raise-argument-error who
                           "(or/c #f internal-definitionc-context? (listof internal-definitionc-context?))" 
                           intdefs))
-  (define ctx (get-current-expand-context 'local-expand))
+  (define ctx (get-current-expand-context who))
   (define same-kind? (or (eq? context
                               (expand-context-context ctx))
                          (and (list? context)

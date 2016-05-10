@@ -15,6 +15,7 @@ TODO:
  origin tracking
  syntax-local-...
  taints
+ expander observer
  lift syntax objects with shifts
  compile to serializable form
 

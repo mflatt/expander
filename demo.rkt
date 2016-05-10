@@ -46,7 +46,7 @@
   (void)
   (with-handlers ([exn:fail? (lambda (exn)
                                (unless (regexp-match? rx (exn-message exn))
-                                 (error "wrong error"))
+                                 (error "wrong error" (exn-message exn)))
                                `(ok ,(exn-message exn)))])
     (t)
     (error "shouldn't get here")))
@@ -308,6 +308,43 @@
      (let-values ([(x) 20])
        (n (m))))))
  #:check 10)
+
+"local-expand-expression"
+(eval-expression
+ '(letrec-syntaxes+values
+   ([(m) (lambda (stx) (quote-syntax 5))])
+   ()
+   (letrec-syntaxes+values
+    ([(n) (lambda (stx)
+            (let-values ([(expr already)
+                          (syntax-local-expand-expression (car (cdr (syntax-e stx))))])
+              (datum->syntax
+               (quote-syntax here)
+               (list (quote-syntax +)
+                     (quote-syntax 1)
+                     already))))])
+    ()
+    (n (m))))
+ #:check 6)
+
+(check-error
+ (eval-expression
+  '(letrec-syntaxes+values
+    ([(m) (lambda (stx) (quote-syntax 5))])
+    ()
+    (letrec-syntaxes+values
+     ([(n) (lambda (stx)
+             (let-values ([(expr already)
+                           (syntax-local-expand-expression (car (cdr (syntax-e stx))))])
+               (datum->syntax
+                #f
+                (list
+                 (quote-syntax let-values)
+                 (list (list (list (quote-syntax x)) (quote-syntax 1)))
+                 already))))])
+     ()
+     (n (m)))))
+ #rx"expanded syntax not in its original lexical context")
 
 "internal definition context"
 (eval-expression

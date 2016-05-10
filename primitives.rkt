@@ -74,6 +74,7 @@
                       syntax-local-get-shadower
                       
                       local-expand
+                      syntax-local-expand-expression
                       
                       internal-definition-context?
                       syntax-local-make-definition-context

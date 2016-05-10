@@ -11,7 +11,8 @@
          "compile.rkt"
          "core.rkt"
          "expand-context.rkt"
-         "lift-context.rkt")
+         "lift-context.rkt"
+         "already-expanded.rkt")
 
 (provide expand
          expand-body
@@ -66,6 +67,16 @@
     ;; An "application" form that doesn't start with an identifier, so
     ;; use implicit `#%app`
     (expand-implicit '#%app s ctx)]
+   [(already-expanded? (syntax-e s))
+    ;; An expression that is already fully expanded via `local-expand-expression`
+    (define ae (syntax-e s))
+    (unless (bound-identifier=? (expand-context-all-scopes-stx ctx)
+                                (already-expanded-all-scopes-stx ae)
+                                (expand-context-phase ctx))
+      (error (string-append "expanded syntax not in its original lexical context"
+                            " (extra bindings or scopes in the current context):")
+             (already-expanded-s ae)))
+    (already-expanded-s ae)]
    [else
     ;; Anything other than an identifier or parens triggers the
     ;; implicit `#%datum` form
