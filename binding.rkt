@@ -22,7 +22,6 @@
  
  transformer? transformer->procedure
  variable?
- unbound?
  
  binding-lookup)
 
@@ -89,12 +88,11 @@
 (define variable (gensym 'variable))
 (define (variable? t) (eq? t variable))
 
-;; `unbound` is a token to represent the absence of a binding (which
-;; is not always an error) as a result from `binding-lookup`; a
+;; `missing` is a token to represent the absence of a binding; a
 ;; distinct token is needed so that it's distinct from all compile-time
 ;; values
-(define unbound (gensym 'unbound))
-(define (unbound? t) (eq? t unbound))
+(define missing (gensym 'missing))
+(define (missing? t) (eq? t missing))
 
 ;; A subset of compile-time values are macro transformers
 (define (transformer? t) (or (procedure? t)
@@ -117,8 +115,7 @@
 ;; A subset of compile-time values are primitive forms
 (struct core-form (expander) #:transparent)
 
-;; Returns `variable`, a compile-time value, or `unbound` (only
-;; in the case of module-level bindings)
+;; Returns `variable` or a compile-time value
 (define (binding-lookup b env lift-envs ns phase id)
   (cond
    [(module-binding? b)
@@ -127,11 +124,11 @@
                                            (- phase
                                               (module-binding-phase b))))
     (namespace-get-transformer m (module-binding-phase b) (module-binding-sym b)
-                               unbound)]
+                               variable)]
    [(local-binding? b)
-    (define t (hash-ref env (local-binding-key b) unbound))
+    (define t (hash-ref env (local-binding-key b) missing))
     (cond
-     [(eq? t unbound)
+     [(eq? t missing)
       (or
        ;; check in lift envs, if any
        (for/or ([lift-env (in-list lift-envs)])

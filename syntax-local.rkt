@@ -156,7 +156,7 @@
      [else
       (define v (lookup b ctx id))
       (cond
-       [(or (variable? v) (unbound? v) (core-form? v))
+       [(or (variable? v) (core-form? v))
         (if failure-thunk
             (failure-thunk)
             (error 'syntax-local-value "identifier is not bound to syntax: ~v" id))]

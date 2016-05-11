@@ -262,8 +262,7 @@
                             s
                             s)
              ctx)]
-    [(or (variable? t)
-         (unbound? t))
+    [(variable? t)
      (rebuild
       s
       (list (m 'set!)

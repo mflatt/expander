@@ -58,7 +58,7 @@
        ;; Find out whether it's bound as a variable, syntax, or core form
        (define t (lookup binding ctx id))
        (cond
-        [(or (variable? t) (unbound? t))
+        [(variable? t)
          ;; Not as syntax or core form, so use implicit `#%app`
          (expand-implicit '#%app s ctx)]
         [else
@@ -118,8 +118,7 @@
    [(transformer? t)
     ;; Apply transformer and expand again
     (expand (apply-transformer (transformer->procedure t) s ctx) ctx)]
-   [(or (variable? t)
-        (unbound? t)) ;; treat unbound as variable (for top level)
+   [(variable? t)
     ;; A reference to a variable expands to itself
     s]
    [else
