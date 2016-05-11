@@ -76,17 +76,16 @@
                                          (expand-context-module-scopes ctx)
                                          null)))
 
-   (define self (make-self-module-path-index
-                 (build-module-name (syntax-e (m 'id:module-name))
-                                    (and enclosing-self
-                                         (module-path-index-resolve enclosing-self)))))
+   (define self (make-self-module-path-index (syntax-e (m 'id:module-name))
+                                             enclosing-self))
    (define m-ns (make-module-namespace (expand-context-namespace ctx)
                                        (module-path-index-resolve self)
                                        (and enclosing-self #t)))
    
    (define apply-module-scopes
      (make-apply-module-scopes outside-scope inside-scope 
-                               ctx keep-enclosing-scope-at-phase))
+                               ctx keep-enclosing-scope-at-phase
+                               self enclosing-self))
 
    ;; Add the module's scope to the bodies
    (define bodys (map apply-module-scopes (m 'body)))
@@ -270,13 +269,19 @@
    
    ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    ;; Assemble the `module` result
+   
+   (define generic-self (make-generic-self-module-path-index self))
 
    (attach-require-provide-properties
     requires+provides
-    (rebuild
-     s
-     `(,(m 'module) ,(m 'id:module-name) ,(m 'initial-require) ,expanded-mb))
-    self))
+    (syntax-module-path-index-shift
+     (rebuild
+      s
+      `(,(m 'module) ,(m 'id:module-name) ,initial-require-stx ,expanded-mb))
+     self
+     generic-self)
+    self
+    generic-self))
 
 ;; ----------------------------------------
 
@@ -325,7 +330,8 @@
 
 ;; Make function to adjust syntax that appears in the original module body
 (define (make-apply-module-scopes inside-scope outside-scope
-                                  ctx keep-enclosing-scope-at-phase)
+                                  ctx keep-enclosing-scope-at-phase
+                                  self enclosing-self)
   (lambda (s)
     (define s-without-enclosing
       (if keep-enclosing-scope-at-phase
@@ -338,9 +344,19 @@
              (remove-scope s sc))
            ctx)))
     ;; Add outside- and inside-edge scopes
-    (add-scope (add-scope s-without-enclosing
-                          outside-scope)
-               inside-scope)))
+    (define s-with-edges
+      (add-scope (add-scope s-without-enclosing
+                            outside-scope)
+                 inside-scope))
+    (cond
+     [keep-enclosing-scope-at-phase
+      ;; Shift any references to the enclosing module to be relative to the
+      ;; submodule
+      (syntax-module-path-index-shift
+       s-with-edges
+       enclosing-self
+       (module-path-index-join '(submod "..") self))]
+     [else s-with-edges])))
 
 ;; ----------------------------------------
 
@@ -582,14 +598,18 @@
                     `(,(datum->syntax core-stx 'module) ,(m 'id:module-name) ,(m 'initial-require)
                       (,(mb-m '#%module-begin)
                        ,@fully-expanded-bodys-except-post-submodules)))
+                   self
                    self))
   
   (parameterize ([current-namespace m-ns])
     (run-time-eval (compile-module tmp-mod
                                    (make-compile-context #:namespace m-ns
-                                                         #:self-module-path-index enclosing-self)
+                                                         #:self enclosing-self
+                                                         #:root-module-name
+                                                         (resolved-module-path-root-name
+                                                          (module-path-index-resolve self)))
+                                   #:self self
                                    #:as-submodule? #t))))
-
 
 ;; ----------------------------------------
 
@@ -721,7 +741,10 @@
   (parameterize ([current-namespace ns])
     (run-time-eval (compile-module submod 
                                    (make-compile-context #:namespace ns
-                                                         #:self-module-path-index self)
+                                                         #:self self
+                                                         #:root-module-name
+                                                         (resolved-module-path-root-name
+                                                          (module-path-index-resolve self)))
                                    #:as-submodule? #t)))
 
   ;; Return the expanded submodule

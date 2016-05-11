@@ -147,7 +147,7 @@
   (define ctx (get-current-expand-context 'syntax-local-value))
   (define phase (expand-context-phase ctx))
   (let loop ([id id])
-    (define b (resolve id phase))
+    (define b (resolve+shift id phase))
     (cond
      [(not b)
       (if failure-thunk

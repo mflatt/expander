@@ -55,8 +55,7 @@
 (define (declare-core-module! ns)
   (declare-module!
    ns
-   core-module-name
-   (make-module core-module-name
+   (make-module core-mpi
                 #hasheq()
                 (hasheqv 0 (for/hasheq ([sym (in-sequences
                                               (in-hash-keys core-primitives)
@@ -65,7 +64,7 @@
                                                          core-mpi 0 sym
                                                          0))))
                 0 1
-                (lambda (ns phase phase-level)
+                (lambda (ns phase phase-level self)
                   (case phase-level
                     [(0)
                      (for ([(sym val) (in-hash core-primitives)])
@@ -78,7 +77,7 @@
 (define (core-form-sym s phase)
   (define m (try-match-syntax s '(id . _)))
   (and m
-       (let ([b (resolve (m 'id) phase)])
+       (let ([b (resolve+shift (m 'id) phase)])
          (and (module-binding? b)
               (eq? core-module-name (module-path-index-resolve (module-binding-module b)))
               (module-binding-sym b)))))

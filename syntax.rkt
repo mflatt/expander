@@ -14,6 +14,7 @@
 (struct syntax (e      ; datum and nested syntax objects
                 scopes ; scopes that apply at all phases
                 shifted-multi-scopes ; scopes with a distinct identity at each phase
+                mpi-shifts ; chain of module-path-index substitutions
                 srcloc ; source location
                 props) ; properties
         ;; Custom printer:
@@ -30,10 +31,11 @@
 
 (define empty-scopes (seteq))
 (define empty-shifted-multi-scopes (set))
+(define empty-mpi-shifts null)
 (define empty-props #hash())
 
 (define empty-syntax
-  (syntax #f empty-scopes empty-shifted-multi-scopes #f empty-props))
+  (syntax #f empty-scopes empty-shifted-multi-scopes empty-mpi-shifts #f empty-props))
 
 (define (identifier? s)
   (and (syntax? s) (symbol? (syntax-e s))))
@@ -55,6 +57,9 @@
             (if stx-c
                 (syntax-shifted-multi-scopes stx-c)
                 empty-shifted-multi-scopes)
+            (if stx-c
+                (syntax-mpi-shifts stx-c)
+                empty-mpi-shifts)
             (and stx-l (syntax-srcloc stx-l))
             (if stx-p (syntax-props stx-p) empty-props)))
   (cond

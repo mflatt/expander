@@ -3,10 +3,9 @@ This is a work-in-progress reimplementation of Racket's macro expander.
 See "demo.rkt" for examples.
 
 TODO:
+ extra free-identifier=? equivalences via rename transformers
  Racket-style local definition contexts
  top level
- module path indexes
- module resolver
  cross-phase persistent modules
  lazy module instantiation
  lazy scope propagation
@@ -34,6 +33,8 @@ Roadmap to the main pieces:
  expand-{module,require,provide}.rkt - module expander
 
  require+provide.rkt - require and provide tracking
+
+ module-path.rkt - [resolved] module path [indexes]
 
  compile.rkt - from expanded to raw S-expression
 

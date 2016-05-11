@@ -14,7 +14,7 @@
  free-identifier=?
  identifier-binding-symbol
  add-local-binding!
- 
+
  empty-env
  env-extend
  
@@ -24,7 +24,11 @@
  transformer? transformer->procedure
  variable?
  
- binding-lookup)
+ binding-lookup
+ 
+ resolve+shift
+ syntax-module-path-index-shift
+ binding-module-path-index-shift)
 
 ;; ----------------------------------------
 
@@ -42,8 +46,8 @@
 (struct local-binding (key))
 
 (define (free-identifier=? a b phase)
-  (define ab (resolve a phase))
-  (define bb (resolve b phase))
+  (define ab (resolve+shift a phase))
+  (define bb (resolve+shift b phase))
   (cond
    [(module-binding? ab)
     (and (module-binding? bb)
@@ -140,3 +144,63 @@
        (error "identifier used out of context:" id))]
      [else t])]
    [else (error "internal error: unknown binding for lookup:" b)]))
+
+; ----------------------------------------
+
+
+;; Adjust `s` (recursively) so that if `resolve+shift` would
+;;  report `form-mpi`, the same operation on the result will
+;;  report `to-mpi`
+(define (syntax-module-path-index-shift s from-mpi to-mpi)
+  (if (eq? from-mpi to-mpi)
+      s
+      (let ([shift (cons from-mpi to-mpi)])
+        (let loop ([s s])
+          (cond
+           [(syntax? s) (struct-copy syntax s
+                                     [e (loop (syntax-e s))]
+                                     [mpi-shifts
+                                      (cons shift (syntax-mpi-shifts s))])]
+           [(pair? s) (cons (loop (car s))
+                            (loop (cdr s)))]
+           [else s])))))
+
+;; Use `resolve` instead of `resolve+shift` when the module of a module
+;; binding is relevant; module path index shifts attached to `s` are
+;; taken into account in the result
+(define (resolve+shift s phase #:exactly? [exactly? #f])
+  (define b (resolve s phase #:exactly? exactly?))
+  (cond
+   [(module-binding? b)
+    (define mpi-shifts (syntax-mpi-shifts s))
+    (cond
+     [(null? mpi-shifts)
+      b]
+     [else
+      (struct-copy module-binding b
+                   [module (apply-shifts (module-binding-module b) mpi-shifts)]
+                   [nominal-module (apply-shifts (module-binding-nominal-module b) mpi-shifts)])])]
+   [else b]))
+
+;; Apply accumulated module path index shifts
+(define (apply-shifts mpi shifts)
+  (cond
+   [(null? shifts) mpi]
+   [else
+    (define shifted-mpi (apply-shifts mpi (cdr shifts)))
+    (if (eq? shifted-mpi (caar shifts))
+        (cdar shifts)
+        shifted-mpi)]))
+
+;; Apply a single shift to a single binding
+(define (binding-module-path-index-shift b from-mpi to-mpi)
+  (cond
+   [(module-binding? b)
+    (struct-copy module-binding b
+                 [module (module-path-index-shift (module-binding-module b)
+                                                  from-mpi
+                                                  to-mpi)]
+                 [nominal-module (module-path-index-shift (module-binding-nominal-module b)
+                                                          from-mpi
+                                                          to-mpi)])]
+   [else b]))

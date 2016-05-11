@@ -138,7 +138,7 @@
 ;; ----------------------------------------
 
 (define (parse-identifier! spec sym at-phase rp)
-  (define b (resolve spec at-phase))
+  (define b (resolve+shift spec at-phase))
   (unless b
     (error "provided identifier is not defined or required:" spec))
   (add-provide! rp sym at-phase b spec))
@@ -195,7 +195,7 @@
                 (for/or ([except-id (in-list except-ids)])
                   (and (free-identifier=? id except-id phase)
                        (hash-set! found except-id #t))))
-      (add-provide! rp (add-prefix (syntax-e id)) phase (resolve id phase) id)))
+      (add-provide! rp (add-prefix (syntax-e id)) phase (resolve+shift id phase) id)))
   
   ;; Check that all exclusions matched something to exclude:
   (unless (= (hash-count found) (length except-ids))

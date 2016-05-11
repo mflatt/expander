@@ -230,7 +230,7 @@
   (define m (namespace->module ns module-name))
   (unless m
     (error "module not declared:" module-name))
-  (define self (module-self-name m))
+  (define self (module-self m))
   (for ([(provide-phase-level provides) (in-hash (module-provides m))])
     (define phase (phase+ phase-shift provide-phase-level))
     (for ([(sym binding) (in-hash provides)])
@@ -238,7 +238,9 @@
       (define b (struct-copy module-binding binding
                              [module (if (eq? from-mod self)
                                          mpi
-                                         from-mod)]
+                                         (module-path-index-shift from-mod
+                                                                  self
+                                                                  mpi))]
                              [nominal-module mpi]
                              [nominal-phase provide-phase-level]
                              [nominal-sym sym]

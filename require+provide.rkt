@@ -4,7 +4,8 @@
          "phase.rkt"
          "scope.rkt"
          "binding.rkt"
-         "namespace.rkt")
+         "namespace.rkt"
+         "module-path.rkt")
 
 (provide make-requires+provides
          requires+provides-self
@@ -19,7 +20,9 @@
          reset-provides!
          add-provide!
          
-         attach-require-provide-properties)
+         attach-require-provide-properties
+         
+         module-shift-for-declare)
 
 ;; ----------------------------------------
 
@@ -67,7 +70,7 @@
 ;; Check whether an identifier has a binding that is from a non-shadowable
 ;; require
 (define (check-not-required-or-defined r+p id phase)
-  (define b (resolve id phase #:exactly? #t))
+  (define b (resolve+shift id phase #:exactly? #t))
   (when b
     (define at-mod (hash-ref (requires+provides-requires r+p)
                              (module-binding-nominal-module b)
@@ -121,16 +124,56 @@
 
 ;; Extract both require and provide information into a syntax property
 ;; for use by `compile`
-(define (attach-require-provide-properties r+p s self)
+(define (attach-require-provide-properties r+p s old-self new-self)
   (define (extract-requires)
     (define mht
       (for/fold ([mht #hasheqv()]) ([(module-name ht) (in-hash (requires+provides-requires r+p))])
         (for/fold ([mht mht]) ([phase (in-hash-keys ht)])
-          (if (eq? module-name self)
+          (if (eq? module-name old-self)
               mht
-              (hash-update mht phase (lambda (s) (set-add s module-name)) (set))))))
+              (let ([module-name (module-path-index-shift module-name old-self new-self)])
+                (hash-update mht phase (lambda (s) (set-add s module-name)) (set)))))))
     (for/hasheqv ([(phase mods) (in-hash mht)])
       (values phase (set->list mods))))
+  (define (extract-provides)
+    (shift-provides-module-path-index (requires+provides-provides r+p) old-self new-self))
   (let* ([s (syntax-property s 'module-requires (extract-requires))]
-         [s (syntax-property s 'module-provides (requires+provides-provides r+p))])
+         [s (syntax-property s 'module-provides (extract-provides))])
     s))
+
+
+;; ----------------------------------------
+
+(define (module-shift-for-declare m name)
+  (if (eq? name (module-path-index-resolve (module-self m)))
+      m
+      (let ([new-self (make-self-module-path-index name)])
+        (remake-module m
+                       new-self
+                       (shift-requires-module-path-index
+                        (module-requires m)
+                        (module-self m)
+                        new-self)
+                       (shift-provides-module-path-index
+                        (module-provides m)
+                        (module-self m)
+                        new-self)))))
+
+(define (shift-requires-module-path-index requires from-mpi to-mpi)
+  (cond
+   [(eq? from-mpi to-mpi) requires]
+   [else
+    (for/hash ([(phase mpis) (in-hash requires)])
+      (values phase
+              (for/list ([mpi (in-list mpis)])
+                (module-path-index-shift mpi from-mpi to-mpi))))]))
+
+(define (shift-provides-module-path-index provides from-mpi to-mpi)
+  (cond
+   [(eq? from-mpi to-mpi) provides]
+   [else
+    (for/hasheqv ([(phase at-phase) (in-hash provides)])
+      (values phase
+              (for/hasheq ([(sym binding) (in-hash at-phase)])
+                (values sym
+                        (binding-module-path-index-shift binding from-mpi to-mpi)))))]))

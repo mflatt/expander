@@ -4,6 +4,7 @@
 (provide resolved-module-path?
          make-resolved-module-path
          resolved-module-path-name
+         resolved-module-path-root-name
          
          module-path-index?
          module-path-index-resolve
@@ -11,12 +12,15 @@
          module-path-index-split
          module-path-index-submodule
          make-self-module-path-index
+         make-generic-self-module-path-index
+         module-path-index-shift
          
          resolve-module-path
          current-module-name-resolver
-         build-module-name)
-
-;; ----------------------------------------
+         build-module-name
+         
+         current-module-declare-name
+         substitute-module-declare-name)
 
 ;; ----------------------------------------
 
@@ -26,6 +30,12 @@
           (write-string "#<resolved-module-path:" port)
           (fprintf port " ~.s" (resolved-module-path-name r))
           (write-string ">" port)))
+
+(define (resolved-module-path-root-name r)
+  (define name (resolved-module-path-name r))
+  (if (symbol? name)
+      name
+      (car name)))
 
 ;; FIXME: make weak
 (define resolved-module-paths (make-hash))
@@ -135,8 +145,45 @@
 (define (module-path-index-submodule mpi)
   (error "not yet implemented"))
 
-(define (make-self-module-path-index r)
-  (module-path-index #f #f r))
+(define make-self-module-path-index
+  (case-lambda
+    [(name) (module-path-index #f #f name)]
+    [(name enclosing)
+     (make-self-module-path-index (build-module-name name
+                                                     (and enclosing
+                                                          (module-path-index-resolve enclosing))))]))
+
+;; FIXME: make weak
+(define generic-self-mpis (make-hasheq))
+
+;; Return a module path index that is the same for a given
+;; submodule path in the given self module path index
+(define (make-generic-self-module-path-index self)
+  (define name (resolved-module-path-name (module-path-index-resolved self)))
+  (define submod (make-resolved-module-path
+                  (if (symbol? name)
+                      'expanded
+                      (cons 'expanded (cdr name)))))
+  (or (hash-ref generic-self-mpis submod #f)
+      (let ([mpi (module-path-index #f #f submod)])
+        (hash-set! generic-self-mpis submod mpi)
+        mpi)))
+
+(define (module-path-index-shift mpi from-mpi to-mpi)
+  (cond
+   [(eq? mpi from-mpi) to-mpi]
+   [else
+    (define base (module-path-index-base mpi))
+    (cond
+     [(not base) mpi]
+     [else
+      (define shifted-base (module-path-index-shift base from-mpi to-mpi))
+      (cond
+       [(eq? shifted-base base) mpi]
+       [else
+        (module-path-index (module-path-index-path mpi)
+                           shifted-base
+                           #f)])])]))
 
 ;; ----------------------------------------
 
@@ -193,3 +240,28 @@
       [(= 2 (length enclosing-module-name)) (car enclosing-module-name)]
       [else (drop-right enclosing-module-name 1)])]
     [else (append enclosing-module-name (list name))])))
+
+;; ----------------------------------------
+
+(define current-module-declare-name
+  (make-parameter #f
+                  (lambda (r)
+                    (unless (or (not r)
+                                (resolved-module-path? r))
+                      (raise-argument-error 'current-module-declare-name
+                                            "(or/c #f resolved-module-path?)"
+                                            r))
+                    r)))
+
+(define (substitute-module-declare-name default-root-name default-r)
+  (define current-name (current-module-declare-name))
+  (define root-name (if current-name
+                        (resolved-module-path-root-name current-name)
+                        default-root-name))
+  (define default-name (resolved-module-path-name default-r))
+  (make-resolved-module-path
+   (if (symbol? default-name)
+       root-name
+       (cons
+        root-name
+        (cdr default-name)))))

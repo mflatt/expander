@@ -35,7 +35,7 @@
    [(identifier? s)
     (guard-stop
      s ctx s
-     (define binding (resolve s (expand-context-phase ctx)))
+     (define binding (resolve+shift s (expand-context-phase ctx)))
      (cond
       [(not binding)
        ;; The implicit `#%top` form handles unbound identifiers
@@ -49,7 +49,7 @@
     (define id (car (syntax-e s)))
     (guard-stop
      id ctx s
-     (define binding (resolve id (expand-context-phase ctx)))
+     (define binding (resolve+shift id (expand-context-phase ctx)))
      (cond
       [(not binding)
        ;; The `#%app` binding might do something with unbound ids
@@ -92,7 +92,7 @@
    ;; Instead of calling `expand` with a new form that starts `id`,
    ;; we reimplement the "applicaiton"-form case of `expand` so that
    ;; we provide an error if the implicit form is not suitably bound
-   (define b (resolve id (expand-context-phase ctx)))
+   (define b (resolve+shift id (expand-context-phase ctx)))
    (define t (and b (lookup b ctx id)))
    (cond
     [(core-form? t)

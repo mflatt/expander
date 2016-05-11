@@ -247,7 +247,7 @@
  'set!
  (lambda (s ctx)
    (define m (match-syntax s '(set! id rhs)))
-   (define binding (resolve (m 'id) (expand-context-phase ctx)))
+   (define binding (resolve+shift (m 'id) (expand-context-phase ctx)))
    (unless binding
      (error "no binding for assignment:" s))
    (define t (lookup binding ctx s))

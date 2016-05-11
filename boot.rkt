@@ -21,12 +21,10 @@
   (define syms (for/list ([sym (in-list (map car (cdr (assv 0 vars))))]
                           #:unless (set-member? skip-syms sym))
                  sym))
-  (define to-resolved (make-resolved-module-path to-name))
   (define to-mpi (module-path-index-join (list 'quote to-name) #f))
   (declare-module!
    boot-ns
-   to-resolved
-   (make-module to-resolved
+   (make-module to-mpi
                 #hasheqv()
                 (hasheqv 0 (for/hash ([sym (in-list syms)])
                              (values sym
@@ -34,7 +32,7 @@
                                                      to-mpi 0 sym
                                                      0))))
                 0 0
-                (lambda (ns phase-shift phase-level)
+                (lambda (ns phase-shift phase-level self)
                   (when (= 0 phase-level)
                     (for ([sym (in-list syms)])
                       (or (hash-ref alts sym #f)

@@ -15,7 +15,7 @@
          syntax-scope-set
          
          syntax-shift-phase-level
-         
+
          add-binding-in-scopes!
          add-binding!
          resolve
@@ -146,7 +146,7 @@
       (shifted-multi-scope (phase+ delta (shifted-multi-scope-phase sms))
                            (shifted-multi-scope-multi-scope sms))))
 
-;; FIXME: this should be lazy, too
+;; FIXME: this should be lazy, too?
 (define (syntax-shift-phase-level s phase)
   (if (eqv? phase 0)
       s
@@ -218,7 +218,7 @@
                      (set-count (car max-candidate))))
          (cdr max-candidate))]
    [else #f]))
-
+ 
 ;; ----------------------------------------
 
 (define (bound-identifier=? a b phase)

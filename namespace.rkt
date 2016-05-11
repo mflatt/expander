@@ -12,10 +12,12 @@
          namespace-scope
          
          make-module
+         remake-module
          declare-module!
-         module-self-name
+         module-self
+         module-requires
          module-provides
-         
+
          namespace-module-instantiate!
          namespace-module-visit!
          namespace->module-namespace
@@ -35,7 +37,7 @@
                      transformers   ; sym -> val
                      [instantiated? #:mutable]))
 
-(struct module (self-name       ; resolved-module-path used for a self reference
+(struct module (self            ; module path index used for a self reference
                 requires        ; phase -> list of module-path-index
                 provides        ; phase-level -> sym -> binding
                 min-phase-level ; phase-level
@@ -72,20 +74,24 @@
   (or (hash-ref (namespace-submodule-declarations ns) name #f)
       (hash-ref (namespace-module-declarations ns) name #f)))
 
-(define (make-module self-name requires provides
+(define (make-module self requires provides
                      min-phase-level max-phase-level
                      instantiate)
-  (module self-name requires provides
+  (module self requires provides
           min-phase-level max-phase-level
           instantiate))
 
-(define (declare-module! ns name m #:as-submodule? [as-submodule? #f])
-  (unless (resolved-module-path? name)
-    (error "not a resolved module path:" name))
+(define (remake-module m self requires provides)
+  (struct-copy module m
+               [self self]
+               [requires requires]
+               [provides provides]))
+
+(define (declare-module! ns m #:as-submodule? [as-submodule? #f])
   (hash-set! (if as-submodule?
                  (namespace-submodule-declarations ns)
                  (namespace-module-declarations ns))
-             name
+             (module-path-index-resolve (module-self m))
              m))
 
 (define (namespace-module-instantiate! ns name phase-shift [min-phase 0])
@@ -105,13 +111,17 @@
       (define defs (namespace->definitions m-ns phase-level))
       (unless (definitions-instantiated? defs)
         (set-definitions-instantiated?! defs #t)
-        ((module-instantiate m) m-ns phase-shift phase-level)))))
+        ((module-instantiate m) m-ns phase-shift phase-level (module-self m))))))
 
 (define (namespace-module-visit! ns name phase)
   (namespace-module-instantiate! ns name phase 1))
 
-(define (namespace->module-namespace ns name phase #:create? [create? #f])
+(define (namespace->module-namespace ns name phase
+                                     #:create? [create? #f]
+                                     #:complain-on-failure? [complain-on-failure? #f])
   (or (hash-ref (namespace-module-instances ns) (cons name phase) #f)
+      (and complain-on-failure?
+           (error "no module instance found:" name))
       (and create?
            (let ([m (namespace->module ns name)])
              (unless m
