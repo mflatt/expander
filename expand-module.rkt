@@ -92,7 +92,7 @@
    ;; All module bodies start at phase 0
    (define phase 0)
    
-   ;; The primitive `#%module-body` form calls this function to expand the
+   ;; The primitive `#%module-begin` form calls this function to expand the
    ;; current module's body
    (define (module-begin-k mb ctx)
      (define mb-m (match-syntax mb '(#%module-begin body ...)))
@@ -192,7 +192,7 @@
      ;; Assemble the `#%module-begin` result:
      (rebuild
       mb
-      `(,(m '#%module-body) ,@fully-expanded-bodys)))
+      `(,(mb-m '#%module-begin) ,@fully-expanded-bodys)))
 
    ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    ;; Actually expand the `#%module-body` form
