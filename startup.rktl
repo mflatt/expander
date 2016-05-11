@@ -1030,7 +1030,7 @@
   (#%require '#%min-stx '#%utils '#%paramz)
 
   (#%provide boot seal orig-paramz)
-
+  
   (define-values (dll-suffix)
     (system-type 'so-suffix))
        
@@ -1182,7 +1182,7 @@
   (define (register-zo-path name ns-hts path src-path base)
     (when ns-hts
       (hash-set! (cdr ns-hts) name (list path src-path base))))
-
+  
   (define-values (default-reader-guard)
     (lambda (path) path))
 

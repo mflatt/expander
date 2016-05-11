@@ -29,14 +29,14 @@
                                                           "field index not declared immutable"
                                                           "field index" v)))
                                (define ref (list-ref info 3))
-                               (if (integer? v)
-                                   (lambda (t s)
-                                     (define p (ref t v))
-                                     (if (and (procedure? p)
-                                              (procedure-arity-includes? p 1))
-                                         (p s)
-                                         (error "bad syntax:" s)))
-                                   v))))
+                               (cond
+                                [(integer? v) (lambda (t)
+                                                (define p (ref t v))
+                                                (if (and (procedure? p)
+                                                         (procedure-arity-includes? p 1))
+                                                    p
+                                                    (lambda (s) (error "bad syntax:" s))))]
+                                [else (lambda (t) v)]))))
 
 (define make-set!-transformer
   (let ()
@@ -51,7 +51,7 @@
       (set!-transformer proc))))
 
 (define (set!-transformer-procedure t)
-  (define v (set!-transformer-value t))
+  (define v ((set!-transformer-value t) t))
   (if (procedure-arity-includes? v 1)
       v
       (lambda (s) (v t s))))

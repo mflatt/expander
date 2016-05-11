@@ -69,7 +69,8 @@
 
 ;; Check whether an identifier has a binding that is from a non-shadowable
 ;; require
-(define (check-not-required-or-defined r+p id phase)
+(define (check-not-required-or-defined r+p id phase #:in orig-s
+                                       #:unless-matches [ok-binding #f])
   (define b (resolve+shift id phase #:exactly? #t))
   (when b
     (define at-mod (hash-ref (requires+provides-requires r+p)
@@ -80,8 +81,10 @@
                                      (module-binding-nominal-require-phase b)
                                      null))])
            (when (and (eq? (syntax-e id) (syntax-e (required-id r)))
-                      (not (required-can-shadow? r)))
-             (error "already required or defined:" id))))))
+                      (not (required-can-shadow? r))
+                      (or (not ok-binding)
+                          (not (same-binding? b ok-binding))))
+             (error "already required or defined:" id "in" orig-s "at" phase))))))
 
 ;; Get all the bindings imported from a given module
 (define (extract-module-requires r+p mod-name phase)

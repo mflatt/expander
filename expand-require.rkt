@@ -163,7 +163,7 @@
                           #:run? [run? #f]
                           #:can-shadow? [can-shadow? #f])
   (define mpi (module-path-index-join mod-path self))
-  (define module-name (module-path-index-resolve mpi))
+  (define module-name (module-path-index-resolve mpi #t))
   (define bind-in-stx (if (adjust-rename? adjust)
                           (adjust-rename-to-id adjust)
                           in-stx))
@@ -200,7 +200,9 @@
                 (define s (datum->syntax bind-in-stx adjusted-sym))
                 (define bind-phase (phase+ phase-shift provide-phase))
                 (check-not-required-or-defined requires+provides
-                                               s bind-phase)
+                                               s bind-phase 
+                                               #:unless-matches binding
+                                               #:in in-stx)
                 (add-defined-or-required-id! requires+provides
                                              s bind-phase binding
                                              #:can-shadow? can-shadow?))

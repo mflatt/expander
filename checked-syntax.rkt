@@ -6,7 +6,9 @@
          (rename-in "scope.rkt"
                     [bound-identifier=? raw:bound-identifier=?])
          (rename-in "binding.rkt"
-                    [free-identifier=? raw:free-identifier=?])
+                    [free-identifier=? raw:free-identifier=?]
+                    [identifier-binding raw:identifier-binding]
+                    [identifier-binding-symbol raw:identifier-binding-symbol])
          "syntax-local.rkt"
          "srcloc.rkt")
 
@@ -14,14 +16,16 @@
          datum->syntax
          syntax->list
          bound-identifier=?
-         free-identifier=?)
+         free-identifier=?
+         identifier-binding
+         identifier-binding-symbol)
 
 (define (syntax->datum s)
   (unless (syntax? s)
     (raise-argument-error 'syntax->datum "syntax?" s))
   (raw:syntax->datum s))
 
-(define (datum->syntax stx-c s [stx-l #f] [stx-p #f])
+(define (datum->syntax stx-c s [stx-l #f] [stx-p #f] [ignored #f])
   (unless (or (not stx-c) (syntax? stx-c))
     (raise-argument-error 'datum->syntax "(or #f syntax?)" stx-c))
   (unless (or (not stx-l)
@@ -61,3 +65,17 @@
   (unless (phase? phase)
     (raise-argument-error 'free-identifier=? "(or/c exact-nonnegative-integer? #f)" phase))
   (raw:free-identifier=? a b phase))
+
+(define (identifier-binding id [phase (syntax-local-phase-level)])
+  (unless (identifier? id)
+    (raise-argument-error 'identifier-binding "identifier?" id))
+  (unless (phase? phase)
+    (raise-argument-error 'identifier-binding "(or/c exact-nonnegative-integer? #f)" phase))
+  (raw:identifier-binding id phase))
+
+(define (identifier-binding-symbol id [phase (syntax-local-phase-level)])
+  (unless (identifier? id)
+    (raise-argument-error 'identifier-binding-symbol "identifier?" id))
+  (unless (phase? phase)
+    (raise-argument-error 'identifier-binding-symbol "(or/c exact-nonnegative-integer? #f)" phase))
+  (raw:identifier-binding-symbol id phase))

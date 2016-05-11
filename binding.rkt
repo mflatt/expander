@@ -12,6 +12,8 @@
  (struct-out module-binding)
  (struct-out local-binding)
  free-identifier=?
+ same-binding?
+ identifier-binding
  identifier-binding-symbol
  add-local-binding!
 
@@ -49,22 +51,28 @@
   (define ab (resolve+shift a phase))
   (define bb (resolve+shift b phase))
   (cond
+   [(or (not ab) (not bb))
+    (and (not ab)
+         (not bb)
+         (eq? (syntax-e a) (syntax-e b)))]
+   [else
+    (same-binding? ab bb)]))
+
+(define (same-binding? ab bb)
+  (cond
    [(module-binding? ab)
     (and (module-binding? bb)
          (eq? (module-binding-sym ab)
               (module-binding-sym bb))
          (eqv? (module-binding-phase ab)
                (module-binding-phase bb))
-         (equal? (module-binding-module ab)
-                 (module-binding-module bb)))]
+         (eq? (module-path-index-resolve (module-binding-module ab))
+              (module-path-index-resolve (module-binding-module bb))))]
    [(local-binding? ab)
     (and (local-binding? bb)
          (eq? (local-binding-key ab)
               (local-binding-key bb)))]
-   [else
-    (and (not ab)
-         (not bb)
-         (eq? (syntax-e a) (syntax-e b)))]))
+   [else (error "bad binding")]))
 
 (define (identifier-binding-symbol id phase)
   (define b (resolve id phase))
@@ -74,6 +82,21 @@
    [(local-binding? b)
     (local-binding-key b)]
    [else (syntax-e id)]))
+
+(define (identifier-binding id phase)
+  (define b (resolve+shift id phase))
+  (cond
+   [(module-binding? b)
+     (list (module-binding-module b)
+           (module-binding-sym b)
+           (module-binding-nominal-module b)
+           (module-binding-nominal-sym b)
+           (module-binding-phase b)
+           (module-binding-nominal-require-phase b)
+           (module-binding-nominal-phase b))]
+   [(local-binding? b)
+    'lexical]
+   [else #f]))
 
 ;; Helper for registering a local binding in a set of scopes:
 (define (add-local-binding! id phase)

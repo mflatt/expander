@@ -258,7 +258,7 @@
                      ;; preserved order
                      (append
                       (for/list ([done-body (in-list done-bodys)])
-                        (no-binds s phase))
+                        (no-binds done-body s phase))
                       val-binds))
                new-dups)]
         [(define-syntaxes)
@@ -333,10 +333,11 @@
 
 ;; Helper to turn an expression into a binding clause with zero
 ;; bindings
-(define (no-binds s phase)
+(define (no-binds expr s phase)
   (define s-core-stx (syntax-shift-phase-level core-stx phase))
   (list null (datum->syntax #f
                             `(,(datum->syntax s-core-stx 'begin)
+                              ,expr
                               (,(datum->syntax s-core-stx '#%app)
                                ,(datum->syntax s-core-stx 'values)))
                             s)))
@@ -406,13 +407,15 @@
 ;; Expand and evaluate `s` as a compile-time expression, ensuring that
 ;; the number of returned values matches the number of target
 ;; identifiers; return the expanded form as well as its values
-(define (expand+eval-for-syntaxes-binding rhs ids ctx)
+(define (expand+eval-for-syntaxes-binding rhs ids ctx
+                                          #:compile-time-for-self [compile-time-for-self #f])
   (define exp-rhs (expand-transformer rhs ctx))
   (values exp-rhs
           (eval-for-bindings ids
                              exp-rhs
                              (add1 (expand-context-phase ctx))
-                             (expand-context-namespace ctx))))
+                             (expand-context-namespace ctx)
+                             #:compile-time-for-self compile-time-for-self)))
 
 ;; Expand and evaluate `s` as a compile-time expression, returning
 ;; only the compile-time values
@@ -425,11 +428,11 @@
 ;; ensuring that the number of returned values matches the number of
 ;; target identifiers; return the values
 (define (eval-for-bindings ids s phase ns
-                           #:allow-unbound-as-variable? [allow-unbound-as-variable? #f])
-  (define compiled (compile s (make-compile-context
-                               #:namespace ns
-                               #:phase phase
-                               #:allow-unbound-as-variable? allow-unbound-as-variable?)))
+                           #:compile-time-for-self [compile-time-for-self #f])
+  (define compiled (compile-top s (make-compile-context
+                                   #:namespace ns
+                                   #:phase phase
+                                   #:compile-time-for-self compile-time-for-self)))
   (define vals
     (call-with-values (lambda () (expand-time-eval compiled))
       list))

@@ -15,9 +15,6 @@
 (define (syntax-arm stx [inspector #f] [use-mode? #f])
   stx)
 
-(define (syntax-protect stx)
-  (syntax-arm stx #f #t))
-
 (define (syntax-disarm stx inspector)
   stx)
 

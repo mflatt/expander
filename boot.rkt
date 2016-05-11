@@ -6,7 +6,9 @@
          "read-syntax.rkt"
          "module-path.rkt"
          racket/set
-         racket/runtime-path)
+         racket/runtime-path
+         (only-in racket/base
+                  [dynamic-require base:dynamic-require]))
 
 (define-runtime-path startup.rktl "startup.rktl")
 
@@ -24,7 +26,8 @@
   (define to-mpi (module-path-index-join (list 'quote to-name) #f))
   (declare-module!
    boot-ns
-   (make-module to-mpi
+   (make-module #:primitive? #t
+                to-mpi
                 #hasheqv()
                 (hasheqv 0 (for/hash ([sym (in-list syms)])
                              (values sym
@@ -35,8 +38,9 @@
                 (lambda (ns phase-shift phase-level self)
                   (when (= 0 phase-level)
                     (for ([sym (in-list syms)])
-                      (or (hash-ref alts sym #f)
-                          (namespace-set-variable! ns 0 sym (dynamic-require mod-name sym)))))))))
+                      (namespace-set-variable! ns 0 sym
+                                               (or (hash-ref alts sym #f)
+                                                   (base:dynamic-require mod-name sym)))))))))
 
 (copy-racket-module! '#%kernel
                      #:to '#%pre-kernel
@@ -44,7 +48,6 @@
                      #:alts (hasheq 'eval eval
                                     'compile compile
                                     'expand expand
-                                    'current-namespace current-namespace
                                     'make-empty-namespace make-empty-namespace
                                     'namespace-syntax-introduce namespace-syntax-introduce
                                     'namespace-require namespace-require))
@@ -73,8 +76,18 @@
    (for ([v (in-port (lambda (i) (read-syntax (object-name i) i)) i)])
      (eval-s-expr v))))
 
+((dynamic-require ''#%boot 'boot))
+
 (use-compiled-file-paths null)
 (current-eval (lambda (s)
                 (if (syntax? s)
                     (eval-syntax s)
                     (eval-s-expr s))))
+(current-load (lambda (path expected-module)
+                (call-with-input-file*
+                 path
+                 (lambda (i)
+                   (port-count-lines! i)
+                   (eval-s-expr (read-syntax (object-name i) i))))))
+
+(namespace-require 'racket/private/pre-base)

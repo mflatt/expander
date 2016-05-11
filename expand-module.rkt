@@ -151,13 +151,11 @@
          ;; Pass 1: partially expand to discover all bindings and install all 
          ;; defined macro transformers
          
-         (define use-site-scopes (box null))
          (define partial-body-ctx (struct-copy expand-context ctx
                                                [context 'module]
                                                [phase phase]
                                                [namespace m-ns]
                                                [only-immediate? #t]
-                                               [use-site-scopes use-site-scopes]
                                                [post-expansion-scope inside-scope]
                                                [module-scopes new-module-scopes]
                                                [all-scopes-stx initial-require-stx]
@@ -182,6 +180,7 @@
                                    #:namespace m-ns
                                    #:self self
                                    #:requires-and-provides requires+provides
+                                   #:need-eventually-defined need-eventually-defined
                                    #:module-scopes new-module-scopes
                                    #:defined-syms defined-syms
                                    #:loop phase-1-and-2-loop))
@@ -265,7 +264,8 @@
                           [context 'module-begin]
                           [namespace m-ns]
                           [module-scopes new-module-scopes]
-                          [module-begin-k module-begin-k])))
+                          [module-begin-k module-begin-k]
+                          [use-site-scopes (box null)])))
    
    ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    ;; Assemble the `module` result
@@ -370,6 +370,7 @@
                                 #:namespace m-ns
                                 #:self self
                                 #:requires-and-provides requires+provides
+                                #:need-eventually-defined need-eventually-defined
                                 #:module-scopes module-scopes
                                 #:defined-syms defined-syms
                                 #:loop phase-1-and-2-loop)
@@ -412,7 +413,7 @@
          [(define-values)
           (define m (match-syntax exp-body '(define-values (id ...) rhs)))
           (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
-          (check-ids-unbound ids phase requires+provides)
+          (check-ids-unbound ids phase requires+provides #:in exp-body)
           (define syms (select-defined-syms-and-bind ids defined-syms self phase
                                                      module-scopes
                                                      requires+provides))
@@ -421,13 +422,16 @@
          [(define-syntaxes)
           (define m (match-syntax exp-body '(define-syntaxes (id ...) rhs)))
           (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
-          (check-ids-unbound ids phase requires+provides)
+          (check-ids-unbound ids phase requires+provides #:in exp-body)
           (define syms (select-defined-syms-and-bind ids defined-syms self phase
                                                      module-scopes
                                                      requires+provides))
           ;; Expand and evaluate RHS:
           (define-values (exp-rhs vals)
-            (expand+eval-for-syntaxes-binding (m 'rhs) ids partial-body-ctx))
+            (expand+eval-for-syntaxes-binding (m 'rhs) ids 
+                                              (struct-copy expand-context partial-body-ctx
+                                                           [need-eventually-defined need-eventually-defined])
+                                              #:compile-time-for-self self))
           ;; Install transformers in the namespace for expansion:
           (for ([sym (in-list syms)]
                 [val (in-list vals)])
@@ -655,9 +659,9 @@
 
 ;; ----------------------------------------
 
-(define (check-ids-unbound ids phase requires+provides)
+(define (check-ids-unbound ids phase requires+provides #:in s)
   (for ([id (in-list ids)])
-    (check-not-required-or-defined requires+provides id phase)))
+    (check-not-required-or-defined requires+provides id phase #:in s)))
 
 (define (select-defined-syms-and-bind ids defined-syms self phase
                                       module-scopes
@@ -704,7 +708,7 @@
                                        ;; In case we tentatively have to allow
                                        ;; a reference to a variable defined in
                                        ;; a later `begin-for-syntax`:
-                                       #:allow-unbound-as-variable? #t))
+                                       #:compile-time-for-self self))
        (for ([id (in-list ids)]
              [val (in-list vals)])
          (define b (resolve id phase))
@@ -717,7 +721,7 @@
        (void)]
       [(#f)
        ;; an expression
-       (expand-time-eval `(#%expression ,(compile (car bodys) phase m-ns)))]
+       (expand-time-eval `(#%expression ,(compile-top (car bodys) phase m-ns)))]
       [else
        ;; other forms handled earlier or later
        (void)])))

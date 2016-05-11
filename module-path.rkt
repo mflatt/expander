@@ -28,14 +28,20 @@
         #:property prop:custom-write
         (lambda (r port mode)
           (write-string "#<resolved-module-path:" port)
-          (fprintf port " ~.s" (resolved-module-path-name r))
+          (fprintf port "~.s" (format-resolved-module-path-name (resolved-module-path-name r)))
           (write-string ">" port)))
+
+(define (format-resolved-module-path-name p)
+  (cond
+   [(path? p) (path->string p)]
+   [(symbol? p) `(quote ,p)]
+   [else `(submod ,(format-resolved-module-path-name (car p)) ,@(cdr p))]))
 
 (define (resolved-module-path-root-name r)
   (define name (resolved-module-path-name r))
-  (if (symbol? name)
-      name
-      (car name)))
+  (if (pair? name)
+      (car name)
+      name))
 
 ;; FIXME: make weak
 (define resolved-module-paths (make-hash))
@@ -66,7 +72,7 @@
 
 ;; ----------------------------------------
 
-(struct module-path-index (path base [resolved #:mutable])
+(struct module-path-index (path base [resolved #:mutable] shift-cache)
         #:property prop:equal+hash
         (list (lambda (a b eql?)
                 (and (eql? (module-path-index-path a)
@@ -82,22 +88,30 @@
         #:property prop:custom-write
         (lambda (r port mode)
           (write-string "#<module-path-index" port)
-          (when (module-path-index-path r)
-            (fprintf port ":~.s" (module-path-index-path r)))
-          (when (module-path-index-resolved r)
-            (fprintf port "=~.s" (module-path-index-resolved r)))
+          (cond
+           [(module-path-index-path r)
+            (fprintf port ":~.s" (let loop ([r r])
+                                   (if (and r (module-path-index-path r))
+                                       (cons (module-path-index-path r)
+                                             (loop (module-path-index-base r)))
+                                       null)))]
+           [(module-path-index-resolved r)
+            (fprintf port "=~.s" (format-resolved-module-path-name
+                                  (resolved-module-path-name
+                                   (module-path-index-resolved r))))])
           (write-string ">" port)))
 
-(define (module-path-index-resolve mpi)
+(define (module-path-index-resolve mpi [load? #f])
   (unless (module-path-index? mpi)
     (raise-argument-error 'module-path-index-resolve "module-path-index?" mpi))
   (or (module-path-index-resolved mpi)
       (let ([mod-name ((current-module-name-resolver)
                        (module-path-index-path mpi)
                        (module-path-index-resolve/maybe
-                        (module-path-index-base mpi))
+                        (module-path-index-base mpi)
+                        load?)
                        #f
-                       #f)])
+                       load?)])
         (unless (resolved-module-path? mod-name)
           (raise-arguments-error 'module-path-index-resolve
                                  "current module name resolver's result is not a resolved module path"
@@ -129,11 +143,16 @@
                            "given module path" mod-path
                            "given submodule list" submod))
   (when submod (error "not yet implemented"))
-  (module-path-index mod-path base #f))
+  (define keep-base
+    (cond
+     [(path? mod-path) #f]
+     [(and (pair? mod-path) (eq? 'quote (car mod-path))) #f]
+     [else base]))
+  (module-path-index mod-path keep-base #f (make-shift-cache)))
 
-(define (module-path-index-resolve/maybe base)
+(define (module-path-index-resolve/maybe base load?)
   (if (module-path-index? base)
-      (module-path-index-resolve base)
+      (module-path-index-resolve base load?)
       base))
 
 (define (module-path-index-split mpi)
@@ -147,7 +166,7 @@
 
 (define make-self-module-path-index
   (case-lambda
-    [(name) (module-path-index #f #f name)]
+    [(name) (module-path-index #f #f name (make-shift-cache))]
     [(name enclosing)
      (make-self-module-path-index (build-module-name name
                                                      (and enclosing
@@ -165,7 +184,7 @@
                       'expanded
                       (cons 'expanded (cdr name)))))
   (or (hash-ref generic-self-mpis submod #f)
-      (let ([mpi (module-path-index #f #f submod)])
+      (let ([mpi (module-path-index #f #f submod (make-shift-cache))])
         (hash-set! generic-self-mpis submod mpi)
         mpi)))
 
@@ -180,10 +199,24 @@
       (define shifted-base (module-path-index-shift base from-mpi to-mpi))
       (cond
        [(eq? shifted-base base) mpi]
+       [(shift-cache-ref (module-path-index-shift-cache base) mpi)]
        [else
-        (module-path-index (module-path-index-path mpi)
-                           shifted-base
-                           #f)])])]))
+        (define shifted-mpi
+          (module-path-index (module-path-index-path mpi)
+                             shifted-base
+                             #f
+                             (make-shift-cache)))
+        (shift-cache-set! (module-path-index-shift-cache base) mpi shifted-mpi)
+        shifted-mpi])])]))
+
+(define (make-shift-cache)
+  (make-weak-hasheq))
+
+(define (shift-cache-ref cache v)
+  (hash-ref cache v #f))
+
+(define (shift-cache-set! cache v r)
+  (hash-set! cache v r))
 
 ;; ----------------------------------------
 
@@ -192,36 +225,40 @@
 
 (define current-module-name-resolver
   (make-parameter
-   (lambda (p enclosing source-stx-stx load?)
-     (unless (module-path? p)
-       (raise-argument-error 'core-module-name-resolver "module-path?" p))
-     (unless (or (not enclosing)
-                 (resolved-module-path? enclosing))
-       (raise-argument-error 'core-module-name-resolver "resolved-module-path?" enclosing))
-     (cond
-      [(and (list? p)
-            (= (length p) 2)
-            (eq? 'quote (car p))
-            (symbol? (cadr p)))
-       (make-resolved-module-path (cadr p))]
-      [(and (list? p)
-            (eq? 'submod (car p))
-            (equal? ".." (cadr p)))
-       (for/fold ([enclosing enclosing]) ([s (in-list (cdr p))])
-         (build-module-name s enclosing #:original p))]
-      [(and (list? p)
-            (eq? 'submod (car p))
-            (equal? "." (cadr p)))
-       (for/fold ([enclosing enclosing]) ([s (in-list (cddr p))])
-         (build-module-name s enclosing #:original p))]
-      [(and (list? p)
-            (eq? 'submod (car p)))
-       (let ([base ((current-module-name-resolver) (cadr p) enclosing #f #f)])
-         (for/fold ([enclosing base]) ([s (in-list (cddr p))])
-           (build-module-name s enclosing #:original p)))]
-      [else
-       (error 'core-module-name-resolver
-              "not a supported module path: ~v" p)]))))
+   (case-lambda
+     [(name from-namespace)
+      ;; No need to register
+      (void)]
+     [(p enclosing source-stx-stx load?)
+      (unless (module-path? p)
+        (raise-argument-error 'core-module-name-resolver "module-path?" p))
+      (unless (or (not enclosing)
+                  (resolved-module-path? enclosing))
+        (raise-argument-error 'core-module-name-resolver "resolved-module-path?" enclosing))
+      (cond
+       [(and (list? p)
+             (= (length p) 2)
+             (eq? 'quote (car p))
+             (symbol? (cadr p)))
+        (make-resolved-module-path (cadr p))]
+       [(and (list? p)
+             (eq? 'submod (car p))
+             (equal? ".." (cadr p)))
+        (for/fold ([enclosing enclosing]) ([s (in-list (cdr p))])
+          (build-module-name s enclosing #:original p))]
+       [(and (list? p)
+             (eq? 'submod (car p))
+             (equal? "." (cadr p)))
+        (for/fold ([enclosing enclosing]) ([s (in-list (cddr p))])
+          (build-module-name s enclosing #:original p))]
+       [(and (list? p)
+             (eq? 'submod (car p)))
+        (let ([base ((current-module-name-resolver) (cadr p) enclosing #f #f)])
+          (for/fold ([enclosing base]) ([s (in-list (cddr p))])
+            (build-module-name s enclosing #:original p)))]
+       [else
+        (error 'core-module-name-resolver
+               "not a supported module path: ~v" p)])])))
 
 ;; Build a submodule name given an enclosing module name, if cany
 (define (build-module-name name ; a symbol
@@ -260,8 +297,6 @@
                         default-root-name))
   (define default-name (resolved-module-path-name default-r))
   (make-resolved-module-path
-   (if (symbol? default-name)
-       root-name
-       (cons
-        root-name
-        (cdr default-name)))))
+   (if (pair? default-name)
+       (cons root-name (cdr default-name))
+       root-name)))

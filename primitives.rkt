@@ -9,7 +9,9 @@
                     bound-identifier=?)
          "namespace.rkt"
          (except-in "binding.rkt"
-                    free-identifier=?)
+                    free-identifier=?
+                    identifier-binding
+                    identifier-binding-symbol)
          "core.rkt"
          "set-bang-trans.rkt"
          "rename-trans.rkt"
@@ -31,20 +33,24 @@
 
 (add-core-primitives! #:table primitive-ids
                       
+                      syntax?
                       syntax-e
+                      syntax->datum
                       datum->syntax
                       bound-identifier=?
                       free-identifier=?
+                      identifier-binding
+                      identifier-binding-symbol
                       syntax-source
                       syntax-line
                       syntax-column
                       syntax-position
                       syntax-span
                       syntax->list
+                      syntax-property
                       
                       syntax-tainted?
                       syntax-arm
-                      syntax-protect
                       syntax-disarm
                       syntax-rearm
                       syntax-taint
@@ -114,6 +120,10 @@
                       module-path-index-submodule
 
                       current-module-name-resolver
+                      current-module-declare-name
+                      
+                      current-namespace
+                      namespace-module-registry
 
                       ;; Things that we don't have to replace, but
                       ;; used in "demo.rkt":

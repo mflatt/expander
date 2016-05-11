@@ -563,11 +563,28 @@
                                       (list (car (cdr (syntax-e stx))))
                                       (quote-syntax  (lambda (x) x))))))
                            (define-identity f)
-                           (println (f 5))))
+                           (println (f 5))
+                           
+                           (define-syntaxes (define-x)
+                             (lambda (stx)
+                               (datum->syntax
+                                (quote-syntax here)
+                                (list (quote-syntax begin-for-syntax)
+                                      (list (quote-syntax define-values)
+                                            (list (car (cdr (syntax-e stx))))
+                                            (quote-syntax 'ct-5))))))
+                           (define-x ct-5)
+                           (define-syntaxes (ct-five)
+                             (lambda (stx)
+                               (datum->syntax (quote-syntax here)
+                                              (list (quote-syntax quote)
+                                                    ct-5))))
+                           (println (ct-five))))
 
 (check-print
  (namespace-require ''with-use-site-scope demo-ns)
- 5)
+ 5
+ 'ct-5)
 
 (eval-module-declaration '(module definition-shadows-initial-require '#%core
                            (#%require (rename '#%core orig:list list))

@@ -7,7 +7,8 @@
          "expand-context.rkt"
          (rename-in "expand.rkt" [expand expand-in-context])
          "expand-require.rkt"
-         (rename-in "compile.rkt" [compile compile-in-namespace]))
+         "compile.rkt"
+         "module-path.rkt")
 
 ;; Register core forms:
 (require "expand-expr.rkt"
@@ -24,13 +25,22 @@
   (declare-core-module! ns)
   ns)
 
-(define (namespace-require req ns)
+(define (namespace-require req [ns (current-namespace)])
   (parse-and-perform-requires! #:run? #t
                                (list (add-scope (datum->syntax #f req)
                                                 (namespace-scope ns)))
                                #f ns
                                0
                                (make-requires+provides #f)))
+
+(define (dynamic-require mod-path sym [fail-k (lambda () (error "failed:" mod-path sym))])
+  (unless (module-path? mod-path)
+    (raise-argument-error 'dynamic-require "module-path?" mod-path))
+  (define ns (current-namespace))
+  (define mod-name (resolve-module-path mod-path #f))
+  (namespace-module-instantiate! ns mod-name 0)
+  (define m-ns (namespace->module-namespace ns mod-name 0 #:complain-on-failure? #t))
+  (namespace-get-variable m-ns 0 sym fail-k))
 
 (define (expand s [ns (current-namespace)])
   (expand-in-context s (make-expand-context ns)))
@@ -41,12 +51,12 @@
           (fprintf port "#<compiled-expression:~.s>" (compiled-expression-s-expr c))))
 
 (define (compile s [ns (current-namespace)])
-  (compiled-expression (compile-in-namespace s (make-compile-context #:namespace ns))))
+  (compiled-expression (compile-top s (make-compile-context #:namespace ns))))
 
 (define (eval s [ns (current-namespace)])
   (if (compiled-expression? s)
       (run-time-eval (compiled-expression-s-expr s))
-      (run-time-eval (compile-in-namespace
+      (run-time-eval (compile-top
                       (expand-in-context
                        (namespace-syntax-introduce
                         (datum->syntax #f s)
@@ -71,6 +81,7 @@
          
          namespace-syntax-introduce
          namespace-require
+         dynamic-require
          
          expand
          compile

@@ -15,7 +15,7 @@
 ;; ----------------------------------------
 
 ;; Common expansion for `lambda` and `case-lambda`
-(define (make-lambda-expander s formals bodys ctx)
+(define (lambda-clause-expander s formals bodys ctx)
   (define sc (new-scope))
   (define phase (expand-context-phase ctx))
   ;; Parse and check formal arguments:
@@ -38,15 +38,21 @@
   (values (add-scope formals sc)
           exp-body))
 
+(define (expand-lambda s ctx)
+  (define m (match-syntax s '(lambda formals body ...+)))
+  (define-values (formals body)
+    (lambda-clause-expander s (m 'formals) (m 'body) ctx))
+  (rebuild
+   s
+   `(,(m 'lambda) ,formals ,body)))
+
 (add-core-form!
  'lambda
- (lambda (s ctx)
-   (define m (match-syntax s '(lambda formals body ...+)))
-   (define-values (formals body)
-     (make-lambda-expander s (m 'formals) (m 'body) ctx))
-   (rebuild
-    s
-    `(,(m 'lambda) ,formals ,body))))
+ expand-lambda)
+
+(add-core-form!
+ 'λ
+ expand-lambda)
 
 (add-core-form!
  'case-lambda
@@ -60,7 +66,7 @@
                    [bodys (in-list (m 'body))]
                    [clause (in-list (cm 'clause))])
           (define-values (exp-formals exp-body)
-            (make-lambda-expander s formals bodys ctx))
+            (lambda-clause-expander s formals bodys ctx))
           (rebuild clause `[,exp-formals ,exp-body]))))))
 
 (define (parse-and-flatten-formals all-formals sc)
@@ -172,6 +178,8 @@
     (list (datum->syntax (syntax-shift-phase-level core-stx phase) 'quote)
           (m 'datum)))))
 
+;; Sensible `#%app` disallows empty combinations
+#|
 (add-core-form!
  '#%app
  (lambda (s ctx)
@@ -182,6 +190,27 @@
            (expand (m 'rator) ctx)
            (for/list ([rand (in-list (m 'rand))])
              (expand rand ctx))))))
+|#
+
+;; '#%kernel `#%app` treats an empty combination as a literal null
+(add-core-form!
+ '#%app
+ (lambda (s ctx)
+   (define m (match-syntax s '(#%app e ...)))
+   (define es (m 'e))
+   (cond
+    [(null? es)
+     (define phase (expand-context-phase ctx))
+     (rebuild
+      s
+      (list (datum->syntax (syntax-shift-phase-level core-stx phase) 'quote)
+            null))]
+    [else
+     (rebuild
+      s
+      (list* (m '#%app)
+             (for/list ([e (in-list es)])
+               (expand e ctx))))])))
 
 (add-core-form!
  'quote

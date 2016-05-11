@@ -5,6 +5,7 @@
 
 (provide make-empty-namespace
          current-namespace
+         namespace-module-registry
          make-module-namespace
          namespace->module
          
@@ -17,6 +18,7 @@
          module-self
          module-requires
          module-provides
+         module-primitive?
 
          namespace-module-instantiate!
          namespace-module-visit!
@@ -25,13 +27,23 @@
          namespace-set-variable!
          namespace-set-transformer!
          namespace-get-variable
+         namespace-get-variable-box
          namespace-get-transformer)
 
-(struct namespace (scope               ; scope for top-level bindings
+(struct namespace (name                ; for debugging
+                   scope               ; scope for top-level bindings
                    phases              ; phase-level -> definitions
-                   module-declarations ; resolved-module-path -> module
+                   module-registry     ; module-registry of (resolved-module-path -> module)
                    submodule-declarations ; resolved-module-path -> module
-                   module-instances))  ; (cons resolved-module-path phase) -> namespace
+                   module-instances)   ; (cons resolved-module-path phase) -> namespace
+        #:property prop:custom-write
+        (lambda (ns port mode)
+          (write-string "#<namespace:" port)
+          (fprintf port " ~.s" (namespace-name ns))
+          (write-string ">" port)))
+
+;; Wrapper to make the registry opqaue
+(struct module-registry (declarations))
 
 (struct definitions (variables      ; sym -> val
                      transformers   ; sym -> val
@@ -43,12 +55,14 @@
                 min-phase-level ; phase-level
                 max-phase-level ; phase-level
                 ;; expected to be consistent with provides and {min,max}-phase-level:
-                instantiate))  ; namespace phase phase-level ->
+                instantiate     ; namespace phase phase-level ->
+                primitive?))    ; inline variable values in compiled code?
 
 (define (make-empty-namespace)
-  (namespace (new-multi-scope)
+  (namespace 'top
+             (new-multi-scope)
              (make-hasheqv)
-             (make-hasheq)
+             (module-registry (make-hasheq))
              (make-hasheq)
              (make-hash)))
 
@@ -61,7 +75,7 @@
   (define m-ns
     ;; Keeps all module declarations, but makes a fresh space of instances
     (struct-copy namespace (make-empty-namespace)
-                 [module-declarations (namespace-module-declarations ns)]
+                 [module-registry (namespace-module-registry ns)]
                  [submodule-declarations (if for-submodule?
                                              ;; Same set of submodules:
                                              (namespace-submodule-declarations ns)
@@ -72,14 +86,16 @@
 
 (define (namespace->module ns name)
   (or (hash-ref (namespace-submodule-declarations ns) name #f)
-      (hash-ref (namespace-module-declarations ns) name #f)))
+      (hash-ref (module-registry-declarations (namespace-module-registry ns)) name #f)))
 
 (define (make-module self requires provides
                      min-phase-level max-phase-level
-                     instantiate)
+                     instantiate
+                     #:primitive? [primitive? #f])
   (module self requires provides
           min-phase-level max-phase-level
-          instantiate))
+          instantiate
+          primitive?))
 
 (define (remake-module m self requires provides)
   (struct-copy module m
@@ -88,11 +104,14 @@
                [provides provides]))
 
 (define (declare-module! ns m #:as-submodule? [as-submodule? #f])
+  (define mod-name (module-path-index-resolve (module-self m)))
   (hash-set! (if as-submodule?
                  (namespace-submodule-declarations ns)
-                 (namespace-module-declarations ns))
-             (module-path-index-resolve (module-self m))
-             m))
+                 (module-registry-declarations (namespace-module-registry ns)))
+             mod-name
+             m)
+  ;; Tell resolver that the module is declared
+  ((current-module-name-resolver) mod-name #f))
 
 (define (namespace-module-instantiate! ns name phase-shift [min-phase 0])
   (unless (resolved-module-path? name)
@@ -126,9 +145,10 @@
            (let ([m (namespace->module ns name)])
              (unless m
                (error "no module declared to instantiate:" name))
-             (define m-ns (namespace (new-multi-scope)
+             (define m-ns (namespace name
+                                     (new-multi-scope)
                                      (make-hasheqv)
-                                     (namespace-module-declarations ns)
+                                     (namespace-module-registry ns)
                                      (namespace-submodule-declarations ns)
                                      (namespace-module-instances ns)))
              (hash-set! (namespace-module-instances ns) (cons name phase) m-ns)
@@ -143,15 +163,26 @@
 
 (define (namespace-set-variable! ns phase-level name val)
   (define d (namespace->definitions ns phase-level))
-  (hash-set! (definitions-variables d) name val))
+  (define b (or (hash-ref (definitions-variables d) name #f)
+                (let ([b (box #f)])
+                  (hash-set! (definitions-variables d) name b)
+                  b)))
+    (set-box! b val))
 
 (define (namespace-set-transformer! ns phase-level name val)
   (define d (namespace->definitions ns phase-level))
   (hash-set! (definitions-transformers d) name val))
 
-(define (namespace-get-variable ns phase-level name fail-k)
+(define (namespace-get-variable-box ns phase-level name fail-k)
   (define d (namespace->definitions ns phase-level))
   (hash-ref (definitions-variables d) name fail-k))
+  
+(define (namespace-get-variable ns phase-level name fail-k)
+  (define b (namespace-get-variable-box ns phase-level name #f))
+  (cond
+   [b (unbox b)]
+   [(procedure? fail-k) (fail-k)]
+   [else fail-k]))
 
 (define (namespace-get-transformer ns phase-level name fail-k)
   (define d (namespace->definitions ns phase-level))
