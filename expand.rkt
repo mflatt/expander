@@ -19,6 +19,8 @@
          lookup
          apply-transformer
          
+         expand/capture-lifts
+         expand-transformer
          expand+eval-for-syntaxes-binding
          eval-for-syntaxes-binding
          eval-for-bindings
@@ -353,34 +355,54 @@
 
 ;; Expand `s` as a compile-time expression relative to the current
 ;; expansion context
-(define (expand-transformer s ctx)
-  (define phase (add1 (expand-context-phase ctx)))
-  (define lift-env (box empty-env))
-  (define trans-ctx (struct-copy expand-context ctx
-                                 [scopes null]
-                                 [phase phase]
-                                 [env empty-env]
-                                 [only-immediate? #f]
-                                 [post-expansion-scope #f]
-                                 [module-scopes null]
-                                 [lifts (make-lift-context (make-local-lift lift-env))]
-                                 [lift-envs (cons lift-env
+(define (expand/capture-lifts s ctx
+                              #:expand-lifts? [expand-lifts? #f]
+                              #:begin-form? [begin-form? #f])
+  (define context (expand-context-context ctx))
+  (define phase (expand-context-phase ctx))
+  (define local? (not (memq context '(top-level module))))
+  (define lift-env (and local? (box empty-env)))
+  (define capture-ctx (struct-copy expand-context ctx
+                                   [lifts (make-lift-context
+                                           (if local?
+                                               (make-local-lift lift-env)
+                                               (make-toplevel-lift)))]
+                                   [lift-envs (if local?
+                                                  (cons lift-env
+                                                        (expand-context-lift-envs ctx))
                                                   (expand-context-lift-envs ctx))]))
   ;; Expand `s`, but loop to handle lifted expressions
   (let loop ([s s])
-    (define exp-s (expand s trans-ctx))
-    (define lifts (get-and-clear-lifts! (expand-context-lifts trans-ctx)))
+    (define exp-s (expand s capture-ctx))
+    (define lifts (get-and-clear-lifts! (expand-context-lifts capture-ctx)))
     (cond
      [(null? lifts)
       ;; No lifts, so expansion is done
       exp-s]
      [else
       ;; Have lifts, so wrap as `let-values` and expand again
-      (loop (datum->syntax s (list (datum->syntax
-                                    (syntax-shift-phase-level core-stx phase)
-                                    'let-values)
-                                   lifts
-                                   exp-s)))])))
+      (define with-lifts-s
+        (if begin-form?
+            (wrap-lifts-as-begin lifts exp-s s phase)
+            (wrap-lifts-as-let lifts exp-s s phase)))
+      (if expand-lifts?
+          (loop with-lifts-s)
+          with-lifts-s)])))
+
+;; Expand `s` as a compile-time expression relative to the current
+;; expansion context
+(define (expand-transformer s ctx
+                            #:begin-form? [begin-form? #f])
+  (define phase (add1 (expand-context-phase ctx)))
+  (define trans-ctx (struct-copy expand-context ctx
+                                 [context 'expression]
+                                 [scopes null]
+                                 [phase phase]
+                                 [env empty-env]
+                                 [only-immediate? #f]
+                                 [post-expansion-scope #f]
+                                 [module-scopes null]))
+  (expand/capture-lifts s trans-ctx #:expand-lifts? #t #:begin-form? begin-form?))
 
 ;; Expand and evaluate `s` as a compile-time expression, ensuring that
 ;; the number of returned values matches the number of target

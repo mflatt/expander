@@ -12,10 +12,26 @@
          "already-expanded.rkt")
 
 (provide local-expand
+         local-expand/capture-lifts
+         local-transformer-expand
+         local-transformer-expand/capture-lifts
          syntax-local-expand-expression)
 
 (define (local-expand s context stop-ids [intdefs #f])
   (do-local-expand 'local-expand s context stop-ids intdefs))
+
+(define (local-expand/capture-lifts s context stop-ids [intdefs #f])
+  (do-local-expand 'local-expand s context stop-ids intdefs
+                   #:capture-lifts? #t))
+
+(define (local-transformer-expand s context stop-ids [intdefs #f])
+  (do-local-expand 'local-expand s context stop-ids intdefs
+                   #:as-transformer? #t))
+
+(define (local-transformer-expand/capture-lifts s context stop-ids [intdefs #f])
+  (do-local-expand 'local-expand s context stop-ids intdefs
+                   #:as-transformer? #t
+                   #:capture-lifts? #t))
 
 (define (syntax-local-expand-expression s)
   (define exp-s (do-local-expand 'local-expand s 'expression null #f))
@@ -25,12 +41,20 @@
 
 ;; ----------------------------------------
 
-(define (do-local-expand who s context stop-ids [intdefs #f])
+(define (do-local-expand who s context stop-ids [intdefs #f]
+                         #:capture-lifts? [capture-lifts? #t]
+                         #:as-transformer? [as-transformer? #f])
   (unless (syntax? s)
     (raise-argument-error who "syntax?" s))
   (unless (or (list? context)
-              (memq context '(expression top-level module module-begin)))
-    (raise-argument-error who "(or/c 'expression 'top-level 'module 'module-begin list?)" context))
+              (memq context (if as-transformer?
+                                '(expression top-level)
+                                '(expression top-level module module-begin))))
+    (raise-argument-error who
+                          (if as-transformer?
+                              "(or/c 'expression 'top-level list?)"
+                              "(or/c 'expression 'top-level 'module 'module-begin list?)")
+                          context))
   (unless (or (not stop-ids)
               (and (list? stop-ids)
                    (andmap identifier? stop-ids)))
@@ -46,7 +70,9 @@
                               (expand-context-context ctx))
                          (and (list? context)
                               (list? (expand-context-context ctx)))))
-  (define phase (expand-context-phase ctx))
+  (define phase (if as-transformer?
+                    (add1 (expand-context-phase ctx))
+                    (expand-context-phase ctx)))
   (define p-core-stx (syntax-shift-phase-level core-stx phase))
   (define auto-stop-syms '(begin quote set! lambda case-lambda let-values letrec-values
                            if begin0 with-continuation-mark letrec-syntaxes+values
@@ -83,5 +109,16 @@
                                                       (expand-context-all-scopes-stx ctx)
                                                       intdefs)])))
   (define input-s (add-intdef-scopes (flip-introduction-scopes s ctx) intdefs))
-  (define output-s (expand input-s local-ctx))
+  (define output-s (cond
+                    [(and as-transformer? capture-lifts?)
+                     (expand-transformer input-s local-ctx
+                                         #:begin-form? #t)]
+                    [as-transformer?
+                     (expand-transformer input-s local-ctx
+                                         #:begin-form? (eq? 'top-level context))]
+                    [capture-lifts?
+                     (expand/capture-lifts input-s local-ctx
+                                           #:begin-form? #t)]
+                    [else
+                     (expand input-s local-ctx)]))
   (flip-introduction-scopes output-s ctx))

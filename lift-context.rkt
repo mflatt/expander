@@ -1,12 +1,17 @@
 #lang racket/base
-(require "scope.rkt"
+(require "syntax.rkt"
+         "scope.rkt"
          "binding.rkt"
          "core.rkt")
 
 (provide make-lift-context
          add-lifted!
          get-and-clear-lifts!
+         
          make-local-lift
+         make-toplevel-lift
+         wrap-lifts-as-let
+         wrap-lifts-as-begin
          
          make-module-lift-context
          get-and-clear-module-lifts!
@@ -53,6 +58,36 @@
       (define key (add-local-binding! id phase))
       (set-box! lift-env (hash-set (unbox lift-env) key variable)))
     (values ids (list ids rhs))))
+
+(define (make-toplevel-lift)
+  (lambda (ids rhs phase)
+    (values ids (list ids rhs))))
+
+(define (wrap-lifts-as-let lifts body s phase)
+  (datum->syntax
+   s
+   (list (datum->syntax
+          (syntax-shift-phase-level core-stx phase)
+          'let-values)
+         lifts
+         body)))
+
+(define (wrap-lifts-as-begin lifts body s phase)
+  (datum->syntax
+   #f
+   (cons (datum->syntax
+          (syntax-shift-phase-level core-stx phase)
+          'begin)
+         (append
+          (for/list ([lift (in-list lifts)])
+            (define ids (car lift))
+            (define rhs (cadr lift))
+            (list (datum->syntax
+                   (syntax-shift-phase-level core-stx phase)
+                   'define-values)
+                  ids
+                  rhs))
+          (list body)))))
 
 ;; ----------------------------------------
 

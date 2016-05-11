@@ -74,6 +74,9 @@
                       syntax-local-get-shadower
                       
                       local-expand
+                      local-expand/capture-lifts
+                      local-transformer-expand
+                      local-transformer-expand/capture-lifts
                       syntax-local-expand-expression
                       
                       internal-definition-context?

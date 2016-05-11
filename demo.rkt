@@ -473,6 +473,27 @@
                    ()
                    (list (n) (n))))
 
+"local-expand/capture-lifts"
+(eval-expression '(letrec-syntaxes+values
+                   ([(m) (lambda (stx)
+                           (syntax-local-lift-expression (quote-syntax 1)))])
+                   ()
+                   (letrec-syntaxes+values
+                    ([(n) (lambda (stx)
+                            (datum->syntax
+                             (quote-syntax here)
+                             (list (quote-syntax quote)
+                                   (local-expand/capture-lifts
+                                    (quote-syntax (m))
+                                    'expression
+                                    '()))))])
+                    ()
+                    (let-values ([(x) (n)])
+                      (list (car x)
+                            (car (car (cdr x)))
+                            (car (cdr (cdr (car (cdr x)))))))))
+                 #:check '(begin define-values 1))
+
 "get shadower"
 (eval-expression
  '(let-values ([(x) 1])
@@ -830,6 +851,36 @@
 (check-print
  (namespace-require ''use-lifted-provide demo-ns)
  'done)
+
+;; ----------------------------------------
+;; `local-transformer-expand`
+
+(eval-module-declaration '(module local-transformer-expand '#%core
+                           (#%require (for-syntax '#%core))
+                           (define-syntaxes (m)
+                             (lambda (stx)
+                               (datum->syntax
+                                #f
+                                (list
+                                 (quote-syntax letrec-syntaxes+values)
+                                 (list
+                                  (list (list (car (cdr (syntax-e stx))))
+                                        (local-transformer-expand
+                                         (car (cdr (cdr (syntax-e stx))))
+                                         'expression
+                                         '())))
+                                 (list)
+                                 (car (cdr (cdr (cdr (syntax-e stx)))))))))
+                           (begin-for-syntax
+                             (#%require (for-syntax '#%core))
+                             (define-syntaxes (tm)
+                               (lambda (stx)
+                                 (quote-syntax (quote-syntax 'local-trans)))))
+                           (println (m p (lambda (stx) (tm)) (p)))))
+
+(check-print
+ (namespace-require ''local-transformer-expand demo-ns)
+ 'local-trans)
 
 ;; ----------------------------------------
 ;; `expand` in `#%provide`
