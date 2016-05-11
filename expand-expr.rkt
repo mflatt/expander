@@ -246,9 +246,7 @@
      (error "no binding for assignment:" s))
    (define t (lookup binding ctx s))
    (unless (variable? t)
-     (if (unbound? t)
-         (error "cannot assign to unbound identifier:" s)
-         (error "cannot assign to syntax:" s)))
+     (error "cannot assign to syntax:" s))
    (rebuild
     s
     (list (m 'set!)
