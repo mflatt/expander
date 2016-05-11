@@ -123,7 +123,7 @@
          [(equal? mod-name '#%core)
           ;; Inline a core binding:
           (define ns (compile-context-namespace cctx))
-          (define m-ns (namespace->module-namespace ns mod-name phase))
+          (define m-ns (namespace->module-namespace ns mod-name 0))
           (namespace-module-instantiate! m-ns '#%core (module-binding-phase b))
           (or (namespace-get-variable m-ns (module-binding-phase b) (module-binding-sym b) #f)
               (error "internal error: bad #%core reference:"

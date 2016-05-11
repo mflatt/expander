@@ -1,5 +1,6 @@
 #lang racket/base
-(require (except-in "syntax.rkt"
+(require racket/set
+         (except-in "syntax.rkt"
                     syntax->datum
                     datum->syntax)
          "srcloc.rkt"
@@ -15,16 +16,21 @@
          "syntax-local.rkt"
          "def-ctx.rkt"
          "local-expand.rkt"
+         "taint.rkt"
          "checked-syntax.rkt")
 
+(provide primitive-ids)
 
 ;; Register core primitives:
-(define-syntax-rule (add-core-primitives! id ...)
+(define-syntax-rule (add-core-primitives! #:table primitive-ids id ...)
   (begin
+    (define primitive-ids (seteq 'id ...))
     (add-core-primitive! 'id id)
     ...))
 
-(add-core-primitives! syntax-e
+(add-core-primitives! #:table primitive-ids
+                      
+                      syntax-e
                       datum->syntax
                       bound-identifier=?
                       free-identifier=?
@@ -34,6 +40,13 @@
                       syntax-position
                       syntax-span
                       syntax->list
+                      
+                      syntax-tainted?
+                      syntax-arm
+                      syntax-protect
+                      syntax-disarm
+                      syntax-rearm
+                      syntax-taint
                       
                       syntax-transforming?
                       syntax-transforming-with-lifts?
@@ -88,9 +101,9 @@
                       rename-transformer?
                       prop:rename-transformer
                       make-rename-transformer
-                      rename-transformer-target
 
-                      ;; This list will need to be a lot longer...
+                      ;; Things that we don't have to replace, but
+                      ;; used in "demo.rkt":
                       list cons car cdr pair? null? map filter append
                       equal? values void
                       symbol->string

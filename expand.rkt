@@ -336,11 +336,11 @@
 ;; bindings
 (define (no-binds s phase)
   (define s-core-stx (syntax-shift-phase-level core-stx phase))
-  (list null null (datum->syntax #f
-                                 `(,(datum->syntax s-core-stx 'begin)
-                                   (,(datum->syntax s-core-stx '#%app)
-                                    ,(datum->syntax s-core-stx 'values)))
-                                 s)))
+  (list null (datum->syntax #f
+                            `(,(datum->syntax s-core-stx 'begin)
+                              (,(datum->syntax s-core-stx '#%app)
+                               ,(datum->syntax s-core-stx 'values)))
+                            s)))
 
 ;; Helper to remove any created use-site scopes from the left-hand
 ;; side of a definition that was revealed by partial expansion in a

@@ -243,7 +243,7 @@
      ;; Assemble the `#%module-begin` result:
      (rebuild
       mb
-      `(,(m '#%module-body) ,@fully-expanded-bodys)))
+      `(,(mb-m '#%module-begin) ,@fully-expanded-bodys)))
 
    ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    ;; Actually expand the `#%module-body` form

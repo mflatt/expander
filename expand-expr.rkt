@@ -98,7 +98,7 @@
    (define sc (new-scope))
    (define phase (expand-context-phase ctx))
    ;; Add the new scope to each binding identifier:
-   (define trans-idss (for/list ([ids (in-list (m 'trans-id))])
+   (define trans-idss (for/list ([ids (in-list (if syntaxes? (m 'trans-id) null))])
                         (for/list ([id (in-list ids)])
                           (add-scope id sc))))
    (define val-idss (for/list ([ids (in-list (m 'val-id))])
@@ -114,7 +114,7 @@
                        (for/list ([id (in-list ids)])
                          (add-local-binding! id phase))))
    ;; Evaluate compile-time expressions (if any):
-   (define trans-valss (for/list ([rhs (in-list (m 'trans-rhs))]
+   (define trans-valss (for/list ([rhs (in-list (if syntaxes? (m 'trans-rhs) '()))]
                                   [ids (in-list trans-idss)])
                          (eval-for-syntaxes-binding (add-scope rhs sc) ids ctx)))
    ;; Fill expansion-time environment:
@@ -141,7 +141,9 @@
     s
     `(,letrec-values-id ,(for/list ([ids (in-list val-idss)]
                                     [rhs (in-list (m 'val-rhs))])
-                           `[,ids ,(expand (add-scope rhs sc) rec-ctx)])
+                           `[,ids ,(if rec?
+                                       (expand (add-scope rhs sc) rec-ctx)
+                                       (expand rhs ctx))])
       ,(expand-body (m 'body) sc s rec-ctx)))))
 
 (add-core-form!
@@ -260,14 +262,13 @@
                             s
                             s)
              ctx)]
-    [(variable? t)
+    [(or (variable? t)
+         (unbound? t))
      (rebuild
       s
       (list (m 'set!)
             (m 'id)
             (expand (m 'rhs) ctx)))]
-    [(unbound? t)
-     (error "cannot assign to unbound identifier:" s)]
     [else (error "cannot assign to syntax:" s)])))
 
 (add-core-form!
