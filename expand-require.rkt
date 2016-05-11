@@ -162,14 +162,15 @@
                           requires+provides
                           #:run? [run? #f]
                           #:can-shadow? [can-shadow? #f])
-  (define module-name (resolve-module-path mod-path self))
+  (define mpi (module-path-index-join mod-path self))
+  (define module-name (module-path-index-resolve mpi))
   (define bind-in-stx (if (adjust-rename? adjust)
                           (adjust-rename-to-id adjust)
                           in-stx))
   (define done-syms (make-hash))
-  (add-required-module! requires+provides module-name phase-shift)
+  (add-required-module! requires+provides mpi phase-shift)
   (bind-all-provides!
-   bind-in-stx phase-shift m-ns module-name
+   bind-in-stx phase-shift m-ns module-name mpi
    #:filter (lambda (binding)
               (define sym (module-binding-nominal-sym binding))
               (define provide-phase (module-binding-nominal-phase binding))
@@ -224,7 +225,7 @@
 
 ;; ----------------------------------------
 
-(define (bind-all-provides! in-stx phase-shift ns module-name
+(define (bind-all-provides! in-stx phase-shift ns module-name mpi
                             #:filter filter)
   (define m (namespace->module ns module-name))
   (unless m
@@ -236,9 +237,9 @@
       (define from-mod (module-binding-module binding))
       (define b (struct-copy module-binding binding
                              [module (if (eq? from-mod self)
-                                         module-name
+                                         mpi
                                          from-mod)]
-                             [nominal-module module-name]
+                             [nominal-module mpi]
                              [nominal-phase provide-phase-level]
                              [nominal-sym sym]
                              [nominal-require-phase phase-shift]))

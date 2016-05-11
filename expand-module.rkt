@@ -76,9 +76,12 @@
                                          (expand-context-module-scopes ctx)
                                          null)))
 
-   (define self (build-module-name (syntax-e (m 'id:module-name)) enclosing-self))
+   (define self (make-self-module-path-index
+                 (build-module-name (syntax-e (m 'id:module-name))
+                                    (and enclosing-self
+                                         (module-path-index-resolve enclosing-self)))))
    (define m-ns (make-module-namespace (expand-context-namespace ctx)
-                                       self
+                                       (module-path-index-resolve self)
                                        (and enclosing-self #t)))
    
    (define apply-module-scopes
@@ -112,7 +115,8 @@
      (add-required-module! requires+provides
                            enclosing-self
                            keep-enclosing-scope-at-phase)
-     (namespace-module-visit! m-ns enclosing-self keep-enclosing-scope-at-phase)])
+     (namespace-module-visit! m-ns (module-path-index-resolve enclosing-self)
+                              keep-enclosing-scope-at-phase)])
    
    ;; All module bodies start at phase 0
    (define phase 0)
@@ -583,7 +587,7 @@
   (parameterize ([current-namespace m-ns])
     (run-time-eval (compile-module tmp-mod
                                    (make-compile-context #:namespace m-ns
-                                                         #:self-name enclosing-self )
+                                                         #:self-module-path-index enclosing-self)
                                    #:as-submodule? #t))))
 
 
@@ -717,7 +721,7 @@
   (parameterize ([current-namespace ns])
     (run-time-eval (compile-module submod 
                                    (make-compile-context #:namespace ns
-                                                         #:self-name self)
+                                                         #:self-module-path-index self)
                                    #:as-submodule? #t)))
 
   ;; Return the expanded submodule

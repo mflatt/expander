@@ -290,9 +290,9 @@
     (raise-arguments-error 'syntax-local-module-required-identifiers "not currently transforming module provides"))
   (define ctx (current-expand-context))
   (define requires+provides (expand-context-requires+provides ctx))
-  (define mod-name (resolve-module-path mod-path (requires+provides-self requires+provides)))
+  (define mpi (module-path-index-join mod-path (requires+provides-self requires+provides)))
   (define requireds (extract-module-requires requires+provides
-                                             mod-name
+                                             mpi
                                              phase-level))
   (and requireds
        (for/list ([(phase ids) (in-hash (requireds->phase-ht requireds))])

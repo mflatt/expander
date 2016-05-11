@@ -23,8 +23,8 @@
 
 ;; ----------------------------------------
 
-(struct requires+provides (self       ; module-name to recognize definitions among requires
-                           requires   ; module-name-> require-phase -> list of (required id phase boolean)
+(struct requires+provides (self       ; module-path-index to recognize definitions among requires
+                           requires   ; module-path-index -> require-phase -> list of (required id phase boolean)
                            provides)) ; phase -> sym -> binding
 
 (define (make-requires+provides self)

@@ -5,7 +5,8 @@
          "scope.rkt"
          "binding.rkt"
          "match.rkt"
-         "namespace.rkt")
+         "namespace.rkt"
+         "module-path.rkt")
 
 (provide core-stx
          
@@ -14,12 +15,16 @@
          
          declare-core-module!
          
+         core-module-name
          core-form-sym)
 
 ;; Accumulate all core bindings in `core-scope`, so we can
 ;; easily generate a reference to a core form using `core-stx`:
 (define core-scope (new-multi-scope))
 (define core-stx (add-scope empty-syntax core-scope))
+
+(define core-module-name (make-resolved-module-path '#%core))
+(define core-mpi (module-path-index-join ''#%core #f))
 
 ;; Core forms and primitives are added by `require`s in "expander.rkt"
 
@@ -41,8 +46,8 @@
 
 (define (add-core-binding! sym)
   (add-binding! (datum->syntax core-stx sym)
-                (module-binding '#%core 0 sym
-                                '#%core 0 sym
+                (module-binding core-mpi 0 sym
+                                core-mpi 0 sym
                                 0)
                 0))
 
@@ -50,14 +55,14 @@
 (define (declare-core-module! ns)
   (declare-module!
    ns
-   '#%core
-   (make-module '#%core
+   core-module-name
+   (make-module core-module-name
                 #hasheq()
                 (hasheqv 0 (for/hasheq ([sym (in-sequences
                                               (in-hash-keys core-primitives)
                                               (in-hash-keys core-forms))])
-                             (values sym (module-binding '#%core 0 sym
-                                                         '#%core 0 sym
+                             (values sym (module-binding core-mpi 0 sym
+                                                         core-mpi 0 sym
                                                          0))))
                 0 1
                 (lambda (ns phase phase-level)
@@ -75,5 +80,5 @@
   (and m
        (let ([b (resolve (m 'id) phase)])
          (and (module-binding? b)
-              (eq? '#%core (module-binding-module b))
+              (eq? core-module-name (module-path-index-resolve (module-binding-module b)))
               (module-binding-sym b)))))

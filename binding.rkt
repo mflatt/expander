@@ -5,7 +5,8 @@
          "phase.rkt"
          "namespace.rkt"
          "set-bang-trans.rkt"
-         "rename-trans.rkt")
+         "rename-trans.rkt"
+         "module-path.rkt")
 
 (provide
  (struct-out module-binding)
@@ -120,9 +121,12 @@
   (cond
    [(module-binding? b)
     (define m (namespace->module-namespace ns
-                                           (module-binding-module b)
+                                           (module-path-index-resolve
+                                            (module-binding-module b))
                                            (- phase
                                               (module-binding-phase b))))
+    (unless m
+      (error "namespace mismatch: cannot locate module" (module-binding-module b)))
     (namespace-get-transformer m (module-binding-phase b) (module-binding-sym b)
                                variable)]
    [(local-binding? b)

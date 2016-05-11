@@ -168,13 +168,13 @@
   (define mod-path (syntax->datum mod-path-stx))
   (unless (module-path? mod-path)
     (error "not a module path:" mod-path-stx))
-  (define mod-name (resolve-module-path mod-path self))
-  (parse-all-from-module mod-name #f except-ids #f at-phase rp))
+  (define mpi (module-path-index-join mod-path self))
+  (parse-all-from-module mpi #f except-ids #f at-phase rp))
   
-(define (parse-all-from-module mod-name matching-stx except-ids prefix-sym at-phase rp)
-  (define requireds (extract-module-requires rp mod-name at-phase))
+(define (parse-all-from-module mpi matching-stx except-ids prefix-sym at-phase rp)
+  (define requireds (extract-module-requires rp mpi at-phase))
   (unless requireds
-    (error "no requires from module path:" mod-name "at phase:" at-phase))
+    (error "no requires from module path:" mpi "at phase:" at-phase))
   
   (define (add-prefix sym)
     (if prefix-sym

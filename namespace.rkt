@@ -1,6 +1,7 @@
 #lang racket/base
 (require "phase.rkt"
-         "scope.rkt")
+         "scope.rkt"
+         "module-path.rkt")
 
 (provide make-empty-namespace
          current-namespace
@@ -26,16 +27,16 @@
 
 (struct namespace (scope               ; scope for top-level bindings
                    phases              ; phase-level -> definitions
-                   module-declarations ; resolved-module-name -> module
-                   submodule-declarations ; resolved-module-name -> module
-                   module-instances))  ; (cons resolved-module-name phase) -> namespace
+                   module-declarations ; resolved-module-path -> module
+                   submodule-declarations ; resolved-module-path -> module
+                   module-instances))  ; (cons resolved-module-path phase) -> namespace
 
 (struct definitions (variables      ; sym -> val
                      transformers   ; sym -> val
                      [instantiated? #:mutable]))
 
-(struct module (self-name       ; symbol used for a self reference
-                requires        ; phase -> list of resolved-module-name
+(struct module (self-name       ; resolved-module-path used for a self reference
+                requires        ; phase -> list of module-path-index
                 provides        ; phase-level -> sym -> binding
                 min-phase-level ; phase-level
                 max-phase-level ; phase-level
@@ -45,8 +46,8 @@
 (define (make-empty-namespace)
   (namespace (new-multi-scope)
              (make-hasheqv)
-             (make-hash)
-             (make-hash)
+             (make-hasheq)
+             (make-hasheq)
              (make-hash)))
 
 (define current-namespace (make-parameter (make-empty-namespace)))
@@ -79,6 +80,8 @@
           instantiate))
 
 (define (declare-module! ns name m #:as-submodule? [as-submodule? #f])
+  (unless (resolved-module-path? name)
+    (error "not a resolved module path:" name))
   (hash-set! (if as-submodule?
                  (namespace-submodule-declarations ns)
                  (namespace-module-declarations ns))
@@ -86,11 +89,13 @@
              m))
 
 (define (namespace-module-instantiate! ns name phase-shift [min-phase 0])
+  (unless (resolved-module-path? name)
+    (error "not a resolved module path:" name))
   (define m-ns (namespace->module-namespace ns name phase-shift #:create? #t))
   (define m (namespace->module ns name))
   (for ([(req-phase mods) (in-hash (module-requires m))])
     (for ([mod (in-list mods)])
-      (namespace-module-instantiate! ns mod
+      (namespace-module-instantiate! ns (module-path-index-resolve mod)
                                      (phase+ phase-shift req-phase)
                                      min-phase)))
   (for ([phase-level (in-range (module-min-phase-level m)

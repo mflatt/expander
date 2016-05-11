@@ -17,7 +17,8 @@
          "def-ctx.rkt"
          "local-expand.rkt"
          "taint.rkt"
-         "checked-syntax.rkt")
+         "checked-syntax.rkt"
+         "module-path.rkt")
 
 (provide primitive-ids)
 
@@ -101,6 +102,18 @@
                       rename-transformer?
                       prop:rename-transformer
                       make-rename-transformer
+                      
+                      resolved-module-path?
+                      make-resolved-module-path
+                      resolved-module-path-name
+                      
+                      module-path-index?
+                      module-path-index-resolve
+                      module-path-index-join
+                      module-path-index-split
+                      module-path-index-submodule
+
+                      current-module-name-resolver
 
                       ;; Things that we don't have to replace, but
                       ;; used in "demo.rkt":

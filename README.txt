@@ -37,6 +37,8 @@ Roadmap to the main pieces:
 
  compile.rkt - from expanded to raw S-expression
 
- main.rkt - public interface
+ main.rkt - public interface to core for demo
 
  demo.rkt - exercises the expander and compiler
+
+ boot.rkt - starts a Racket replacement

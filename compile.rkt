@@ -23,11 +23,11 @@
 
 (define (make-compile-context #:namespace [namespace (current-namespace)]
                               #:phase [phase 0]
-                              #:self-name [self-name #f]
+                              #:self-module-path-index [self-mpi #f]
                               #:allow-unbound-as-variable? [allow-unbound-as-variable? #f])
   (compile-context namespace 
                    phase
-                   self-name
+                   (and self-mpi (module-path-index-resolve self-mpi))
                    allow-unbound-as-variable?))
 
 (define phase-shift-id (gensym 'phase))
@@ -118,13 +118,13 @@
           (error "missing a binding after expansion:" s))
         sym]
        [(module-binding? b)
-        (define mod-name (module-binding-module b))
+        (define mod-name (module-path-index-resolve (module-binding-module b)))
         (cond
-         [(equal? mod-name '#%core)
+         [(equal? mod-name core-module-name)
           ;; Inline a core binding:
           (define ns (compile-context-namespace cctx))
           (define m-ns (namespace->module-namespace ns mod-name 0))
-          (namespace-module-instantiate! m-ns '#%core (module-binding-phase b))
+          (namespace-module-instantiate! m-ns core-module-name (module-binding-phase b))
           (or (namespace-get-variable m-ns (module-binding-phase b) (module-binding-sym b) #f)
               (error "internal error: bad #%core reference:"
                      phase (module-binding-sym b) (module-binding-phase b)))]
@@ -334,9 +334,10 @@
   (for/list ([id (in-list ids)])
     (define b (resolve id phase))
     (unless (and (module-binding? b)
-                 (equal? self (module-binding-module b))
+                 (eq? self (module-path-index-resolve (module-binding-module b)))
                  (eqv? phase (module-binding-phase b)))
-      (error "bad binding for module definition:" id))
+      (error "bad binding for module definition:" id
+             self "vs." (module-path-index-resolve (module-binding-module b))))
     (module-binding-sym b)))
 
 ;; ----------------------------------------
