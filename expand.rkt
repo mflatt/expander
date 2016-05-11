@@ -281,11 +281,11 @@
 ;; Helper to turn an expression into a binding clause with zero
 ;; bindings
 (define (no-binds s)
-  (list null null (datum->syntax #f
-                                 `(,(datum->syntax core-stx 'begin)
-                                   (,(datum->syntax core-stx '#%app)
-                                    ,(datum->syntax core-stx 'values)))
-                                 s)))
+  (list null (datum->syntax #f
+                            `(,(datum->syntax core-stx 'begin)
+                              (,(datum->syntax core-stx '#%app)
+                               ,(datum->syntax core-stx 'values)))
+                            s)))
 
 ;; Helper to remove any created use-site scopes from the left-hand
 ;; side of a definition that was revealed by partial expansion in a
