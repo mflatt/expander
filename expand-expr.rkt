@@ -91,7 +91,7 @@
                                     body ...+))))
    (define sc (new-scope))
    ;; Add the new scope to each binding identifier:
-   (define trans-idss (for/list ([ids (in-list (m 'trans-id))])
+   (define trans-idss (for/list ([ids (in-list (if syntaxes? (m 'trans-id) null))])
                         (for/list ([id (in-list ids)])
                           (add-scope id sc))))
    (define val-idss (for/list ([ids (in-list (m 'val-id))])
@@ -107,7 +107,7 @@
                        (for/list ([id (in-list ids)])
                          (add-local-binding! id))))
    ;; Evaluate compile-time expressions (if any):
-   (define trans-valss (for/list ([rhs (in-list (m 'trans-rhs))]
+   (define trans-valss (for/list ([rhs (in-list (if syntaxes? (m 'trans-rhs) null))]
                                   [ids (in-list trans-idss)])
                          (eval-for-syntaxes-binding (add-scope rhs sc) ids ctx)))
    ;; Fill expansion-time environment:
