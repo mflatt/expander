@@ -18,7 +18,6 @@
  
  transformer?
  variable?
- unbound?
  
  binding-lookup)
 
@@ -62,15 +61,14 @@
   (hash-set env key val))
 
 ;; `variable` is a token to represent a binding to a run-time variable
-(define variable (gensym))
+(define variable (gensym 'variable))
 (define (variable? t) (eq? t variable))
 
-;; `unbound` is a token to represent the absence of a binding (which
-;; is not always an error) as a result from `binding-lookup`; a
+;; `missing` is a token to represent the absence of a binding; a
 ;; distinct token is needed so that it's distinct from all compile-time
 ;; values
-(define unbound (gensym))
-(define (unbound? t) (eq? t unbound))
+(define missing (gensym 'missing))
+(define (missing? t) (eq? t missing))
 
 ;; A subset of compile-time values are macro transformers
 (define (transformer? t) (procedure? t))
@@ -78,15 +76,14 @@
 ;; A subset of compile-time values are primitive forms
 (struct core-form (expander) #:transparent)
 
-;; Returns `variable`, a compile-time value, or `unbound` (only
-;; in the case of top-level bindings)
+;; Returns `variable` or a compile-time value
 (define (binding-lookup b env ns id)
   (cond
    [(top-level-binding? b)
-    (namespace-get-transformer ns (top-level-binding-sym b) unbound)]
+    (namespace-get-transformer ns (top-level-binding-sym b) variable)]
    [(local-binding? b)
-    (define t (hash-ref env (local-binding-key b) unbound))
-    (when (eq? t unbound)
+    (define t (hash-ref env (local-binding-key b) missing))
+    (when (eq? t missing)
       (error "identifier used out of context:" id))
     t]
    [else (error "internal error: unknown binding for lookup:" b)]))
