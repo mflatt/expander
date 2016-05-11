@@ -32,10 +32,10 @@
     (define binding (resolve id))
     (define t (if binding
                   (lookup binding env id)
-                  unbound))
+                  missing))
     ;; Find out whether it's bound as a variable, syntax, or core form
     (cond
-     [(or (variable? t) (unbound? t))
+     [(or (variable? t) (missing? t))
       (expand-app s env)]
      [else
       ;; Syntax or core form as "application"
@@ -59,8 +59,7 @@
    [(transformer? t)
     ;; Apply transformer and expand again
     (expand (apply-transformer t s) env)]
-   [(or (variable? t)
-        (unbound? t)) ;; treat unbound as variable (for top level)
+   [(variable? t)
     ;; A reference to a variable expands to itself
     s]
    [else
