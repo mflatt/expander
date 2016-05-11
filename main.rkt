@@ -113,9 +113,9 @@
 (define (env-extend env key val)
   (hash-set env key val))
 
-(define unbound (gensym 'unbound))
+(define missing (gensym 'missing))
 (define (env-lookup env binding)
-  (hash-ref env binding unbound))
+  (hash-ref env binding missing))
 
 ;; Helper for registering a local binding in a set of scopes:
 (define (add-local-binding! id)
@@ -152,8 +152,8 @@
      [else
       (define v (env-lookup env binding))
       (cond
-       [(eq? v unbound)
-        (error "free variable:" s)]
+       [(eq? v missing)
+        (error "out of context:" s)]
        [(eq? v variable)
         s]
        [(procedure? v)
