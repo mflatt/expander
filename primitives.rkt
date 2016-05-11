@@ -1,35 +1,22 @@
 #lang racket/base
-(require "syntax.rkt"
+(require (except-in "syntax.rkt"
+                    syntax->datum
+                    datum->syntax)
+         "srcloc.rkt"
          "phase.rkt"
-         (rename-in "scope.rkt"
-                    [bound-identifier=? raw:bound-identifier=?])
+         (except-in "scope.rkt"
+                    bound-identifier=?)
          "namespace.rkt"
-         (rename-in "binding.rkt"
-                    [free-identifier=? raw:free-identifier=?])
+         (except-in "binding.rkt"
+                    free-identifier=?)
          "core.rkt"
          "set-bang-trans.rkt"
          "rename-trans.rkt"
          "syntax-local.rkt"
          "def-ctx.rkt"
-         "local-expand.rkt")
+         "local-expand.rkt"
+         "checked-syntax.rkt")
 
-(define (bound-identifier=? a b [phase (syntax-local-phase-level)])
-  (unless (identifier? a)
-    (raise-argument-error 'bound-identifier=? "identifier?" a))
-  (unless (identifier? b)
-    (raise-argument-error 'bound-identifier=? "identifier?" b))
-  (unless (phase? phase)
-    (raise-argument-error 'bound-identifier=? "(or/c exact-nonnegative-integer? #f)" phase))
-  (raw:bound-identifier=? a b phase))
-
-(define (free-identifier=? a b [phase (syntax-local-phase-level)])
-  (unless (identifier? a)
-    (raise-argument-error 'free-identifier=? "identifier?" a))
-  (unless (identifier? b)
-    (raise-argument-error 'free-identifier=? "identifier?" b))
-  (unless (phase? phase)
-    (raise-argument-error 'free-identifier=? "(or/c exact-nonnegative-integer? #f)" phase))
-  (raw:free-identifier=? a b phase))
 
 ;; Register core primitives:
 (define-syntax-rule (add-core-primitives! id ...)
@@ -41,6 +28,12 @@
                       datum->syntax
                       bound-identifier=?
                       free-identifier=?
+                      syntax-source
+                      syntax-line
+                      syntax-column
+                      syntax-position
+                      syntax-span
+                      syntax->list
                       
                       syntax-transforming?
                       syntax-transforming-with-lifts?

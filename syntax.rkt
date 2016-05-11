@@ -1,4 +1,5 @@
-#lang racket
+#lang racket/base
+(require racket/set)
 
 (provide
  (struct-out syntax) ; includes `syntax?` and `syntax-e`
@@ -18,8 +19,13 @@
         ;; Custom printer:
         #:property prop:custom-write
         (lambda (s port mode)
-          (write-string "#<syntax:" port)
-          (fprintf port "~.s" (syntax->datum s))
+          (write-string "#<syntax" port)
+          (define srcloc (syntax-srcloc s))
+          (when srcloc
+            (define srcloc-str (srcloc->string srcloc))
+            (when srcloc-str
+              (fprintf port ":~a" srcloc-str)))
+          (fprintf port " ~.s" (syntax->datum s))
           (write-string ">" port)))
 
 (define empty-scopes (seteq))

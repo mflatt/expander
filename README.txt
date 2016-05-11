@@ -11,9 +11,7 @@ TODO:
  lazy module instantiation
  lazy scope propagation
  use-site scope "optimization"
- source locations
  origin tracking
- syntax-local-...
  taints
  expander observer
  lift syntax objects with shifts

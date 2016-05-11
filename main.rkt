@@ -1,6 +1,6 @@
 #lang racket/base
-(require "syntax.rkt"
-         "scope.rkt"
+(require "checked-syntax.rkt"
+         (only-in "scope.rkt" add-scope)
          "namespace.rkt"
          "core.rkt"
          "require+provide.rkt"
