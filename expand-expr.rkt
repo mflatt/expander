@@ -135,7 +135,9 @@
     s
     `(,letrec-values-id ,(for/list ([ids (in-list val-idss)]
                                     [rhs (in-list (m 'val-rhs))])
-                           `[,ids ,(expand (add-scope rhs sc) rec-ctx)])
+                           `[,ids ,(if rec?
+                                       (expand (add-scope rhs sc) rec-ctx)
+                                       (expand rhs ctx))])
       ,(expand-body (m 'body) sc s rec-ctx)))))
 
 (add-core-form!
