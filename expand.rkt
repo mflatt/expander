@@ -300,6 +300,7 @@
     (syntax-shift-phase-level core-stx (expand-context-phase body-ctx)))
   ;; As we finish expanding, we're no longer in a definition context
   (define finish-ctx (struct-copy expand-context body-ctx
+                                  [context 'expression]
                                   [use-site-scopes #f]
                                   [scopes (append
                                            (unbox (expand-context-use-site-scopes body-ctx))

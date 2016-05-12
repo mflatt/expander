@@ -547,7 +547,7 @@
       (case (core-form-sym (car bodys) phase)
         [(define-values)
          (define m (match-syntax (car bodys) '(define-values (id ...) rhs)))
-         (define exp-rhs (expand (m 'rhs) body-ctx))
+         (define exp-rhs (expand (m 'rhs) (as-expression-context body-ctx)))
          (cons (rebuild (car bodys)
                         `(,(m 'define-values) ,(m 'id) ,exp-rhs))
                (loop tail? (cdr bodys)))]
@@ -555,7 +555,7 @@
          (cons (car bodys)
                (loop tail? (cdr bodys)))]
         [else
-         (define body (expand (car bodys) body-ctx))
+         (define body (expand (car bodys) (as-expression-context body-ctx)))
          (define lifts
            ;; If there were any lifts, the right-hand sides need to be expanded
            (loop #f (get-and-clear-lifts! (expand-context-lifts body-ctx))))
@@ -813,4 +813,3 @@
     (parse-and-perform-requires! (list (m 'req)) self
                                  m-ns phase
                                  requires+provides)))
-

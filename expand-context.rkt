@@ -6,6 +6,7 @@
 
 (provide (struct-out expand-context)
          make-expand-context
+         as-expression-context
          current-expand-context)
 
 (struct expand-context (scopes     ; list of scopes that should be pruned by `quote-syntax`
@@ -49,5 +50,13 @@
                   #f   ; module-lifts
                   #f   ; lifts-for-module
                   #f)) ; requires+provides
+
+(define (as-expression-context ctx)
+  (cond
+   [(eq? 'expression (expand-context-context ctx))
+    ctx]
+   [else (struct-copy expand-context ctx
+                      [context 'expression]
+                      [use-site-scopes #f])]))
 
 (define current-expand-context (make-parameter #f))

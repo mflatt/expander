@@ -134,7 +134,8 @@
                                             [val (in-list vals)])
                        (env-extend env key val))))
    ;; Expand right-hand sides and body
-   (define rec-ctx (struct-copy expand-context ctx
+   (define expr-ctx (as-expression-context ctx))
+   (define rec-ctx (struct-copy expand-context expr-ctx
                                 [env rec-env]
                                 [scopes (cons sc (expand-context-scopes ctx))]
                                 [all-scopes-stx
@@ -149,7 +150,7 @@
                                     [rhs (in-list (m 'val-rhs))])
                            `[,ids ,(if rec?
                                        (expand (add-scope rhs sc) rec-ctx)
-                                       (expand rhs ctx))])
+                                       (expand rhs expr-ctx))])
       ,(expand-body (m 'body) sc s rec-ctx)))))
 
 (add-core-form!
@@ -206,11 +207,12 @@
       (list (datum->syntax (syntax-shift-phase-level core-stx phase) 'quote)
             null))]
     [else
+     (define expr-ctx (as-expression-context ctx))
      (rebuild
       s
       (list* (m '#%app)
              (for/list ([e (in-list es)])
-               (expand e ctx))))])))
+               (expand e expr-ctx))))])))
 
 (add-core-form!
  'quote
@@ -237,32 +239,35 @@
  'if
  (lambda (s ctx)
    (define m (match-syntax s '(if tst thn els)))
+   (define expr-ctx (as-expression-context ctx))
    (rebuild
     s
     (list (m 'if)
-          (expand (m 'tst) ctx)
-          (expand (m 'thn) ctx)
-          (expand (m 'els) ctx)))))
+          (expand (m 'tst) expr-ctx)
+          (expand (m 'thn) expr-ctx)
+          (expand (m 'els) expr-ctx)))))
 
 (add-core-form!
  'with-continuation-mark
  (lambda (s ctx)
    (define m (match-syntax s '(with-continuation-mark key val body)))
+   (define expr-ctx (as-expression-context ctx))
    (rebuild
     s
     (list (m 'with-continuation-mark)
-          (expand (m 'key) ctx)
-          (expand (m 'val) ctx)
-          (expand (m 'body) ctx)))))
+          (expand (m 'key) expr-ctx)
+          (expand (m 'val) expr-ctx)
+          (expand (m 'body) expr-ctx)))))
 
 (define (make-begin)
  (lambda (s ctx)
    (define m (match-syntax s '(begin e ...+)))
+   (define expr-ctx (as-expression-context ctx))
    (rebuild
     s
     (cons (m 'begin)
           (for/list ([e (in-list (m 'e))])
-            (expand e ctx))))))
+            (expand e expr-ctx))))))
 
 (add-core-form!
  'begin
@@ -296,7 +301,7 @@
       s
       (list (m 'set!)
             (m 'id)
-            (expand (m 'rhs) ctx)))]
+            (expand (m 'rhs) (as-expression-context ctx))))]
     [else (error "cannot assign to syntax:" s)])))
 
 (add-core-form!
@@ -319,7 +324,7 @@
  '#%expression
  (lambda (s ctx)
    (define m (match-syntax s '(#%expression e)))
-   (define exp-e (expand (m 'e) ctx))
+   (define exp-e (expand (m 'e) (as-expression-context ctx)))
    (case (expand-context-context ctx)
      [(expression) exp-e]
      [else (rebuild

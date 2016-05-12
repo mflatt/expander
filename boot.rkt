@@ -84,6 +84,7 @@
                     (eval-syntax s)
                     (eval-s-expr s))))
 (current-load (lambda (path expected-module)
+                (log-error "load ~s" path)
                 (call-with-input-file*
                  path
                  (lambda (i)
