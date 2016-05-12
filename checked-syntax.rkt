@@ -18,7 +18,8 @@
          bound-identifier=?
          free-identifier=?
          identifier-binding
-         identifier-binding-symbol)
+         identifier-binding-symbol
+         identifier-prune-lexical-context)
 
 (define (syntax->datum s)
   (unless (syntax? s)
@@ -79,3 +80,12 @@
   (unless (phase? phase)
     (raise-argument-error 'identifier-binding-symbol "(or/c exact-nonnegative-integer? #f)" phase))
   (raw:identifier-binding-symbol id phase))
+
+(define (identifier-prune-lexical-context id [syms null])
+  (unless (identifier? id)
+    (raise-argument-error 'identifier-prune-lexical-context "identifier?" id))
+  (unless (and (list? syms)
+               (andmap symbol? syms))
+    (raise-argument-error 'identifier-prune-lexical-context "(listof symbol?)" syms))
+  ;; It's a no-op in the Racket v6.5 expander
+  id)

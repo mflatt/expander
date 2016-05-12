@@ -38,10 +38,13 @@
                       syntax-e
                       syntax->datum
                       datum->syntax
+
                       bound-identifier=?
                       free-identifier=?
                       identifier-binding
                       identifier-binding-symbol
+                      identifier-prune-lexical-context
+                      
                       syntax-source
                       syntax-line
                       syntax-column

@@ -11,10 +11,12 @@
 (provide
  (struct-out module-binding)
  (struct-out local-binding)
+
  free-identifier=?
  same-binding?
  identifier-binding
  identifier-binding-symbol
+ 
  add-local-binding!
 
  empty-env
