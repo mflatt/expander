@@ -191,6 +191,7 @@
           (define m-ns (namespace->module-namespace ns mod-name 0))
           `(quote ,(or (namespace-get-variable m-ns 0 (module-binding-sym b) #f)
                        (error "internal error: bad primitive reference:"
+                              (module-binding-module b)
                               phase (module-binding-sym b) (module-binding-phase b))))]
          [(eq? mpi (compile-context-self cctx))
           ;; Direct reference to a variable defined in the same module:
