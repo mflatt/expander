@@ -149,9 +149,11 @@
     `(,letrec-values-id ,(for/list ([ids (in-list val-idss)]
                                     [rhs (in-list (m 'val-rhs))])
                            `[,ids ,(if rec?
-                                       (expand (add-scope rhs sc) rec-ctx)
-                                       (expand rhs expr-ctx))])
-      ,(expand-body (m 'body) sc s rec-ctx)))))
+                                       (expand (add-scope rhs sc)
+                                               (as-named-context rec-ctx ids))
+                                       (expand rhs
+                                               (as-named-context expr-ctx ids)))])
+      ,(expand-body (m 'body) sc s (as-tail-context rec-ctx #:wrt ctx))))))
 
 (add-core-form!
  'let-values
@@ -240,12 +242,13 @@
  (lambda (s ctx)
    (define m (match-syntax s '(if tst thn els)))
    (define expr-ctx (as-expression-context ctx))
+   (define tail-ctx (as-tail-context expr-ctx #:wrt ctx))
    (rebuild
     s
     (list (m 'if)
           (expand (m 'tst) expr-ctx)
-          (expand (m 'thn) expr-ctx)
-          (expand (m 'els) expr-ctx)))))
+          (expand (m 'thn) tail-ctx)
+          (expand (m 'els) tail-ctx)))))
 
 (add-core-form!
  'with-continuation-mark
@@ -257,17 +260,22 @@
     (list (m 'with-continuation-mark)
           (expand (m 'key) expr-ctx)
           (expand (m 'val) expr-ctx)
-          (expand (m 'body) expr-ctx)))))
+          (expand (m 'body) (as-tail-context expr-ctx #:wrt ctx))))))
 
 (define (make-begin)
  (lambda (s ctx)
    (define m (match-syntax s '(begin e ...+)))
    (define expr-ctx (as-expression-context ctx))
+   (define es (m 'e))
+   (define last-i (sub1 (length es)))
    (rebuild
     s
     (cons (m 'begin)
-          (for/list ([e (in-list (m 'e))])
-            (expand e expr-ctx))))))
+          (for/list ([e (in-list es)]
+                     [i (in-naturals)])
+            (expand e (if (= i last-i)
+                          (as-tail-context expr-ctx #:wrt ctx)
+                          expr-ctx)))))))
 
 (add-core-form!
  'begin
@@ -324,7 +332,8 @@
  '#%expression
  (lambda (s ctx)
    (define m (match-syntax s '(#%expression e)))
-   (define exp-e (expand (m 'e) (as-expression-context ctx)))
+   (define exp-e (expand (m 'e) (as-tail-context (as-expression-context ctx)
+                                                 #:wrt ctx)))
    (case (expand-context-context ctx)
      [(expression) exp-e]
      [else (rebuild

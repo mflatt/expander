@@ -454,7 +454,7 @@
                                                      requires+provides))
           ;; Expand and evaluate RHS:
           (define-values (exp-rhs vals)
-            (expand+eval-for-syntaxes-binding (m 'rhs) ids 
+            (expand+eval-for-syntaxes-binding (m 'rhs) ids
                                               (struct-copy expand-context partial-body-ctx
                                                            [need-eventually-defined need-eventually-defined])
                                               #:compile-time-for-self self))
@@ -547,7 +547,8 @@
       (case (core-form-sym (car bodys) phase)
         [(define-values)
          (define m (match-syntax (car bodys) '(define-values (id ...) rhs)))
-         (define exp-rhs (expand (m 'rhs) (as-expression-context body-ctx)))
+         (define exp-rhs (expand (m 'rhs) (as-named-context (as-expression-context body-ctx)
+                                                            (m 'id))))
          (cons (rebuild (car bodys)
                         `(,(m 'define-values) ,(m 'id) ,exp-rhs))
                (loop tail? (cdr bodys)))]

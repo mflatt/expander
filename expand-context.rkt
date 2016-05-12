@@ -6,8 +6,11 @@
 
 (provide (struct-out expand-context)
          make-expand-context
+         current-expand-context
+         
          as-expression-context
-         current-expand-context)
+         as-tail-context
+         as-named-context)
 
 (struct expand-context (scopes     ; list of scopes that should be pruned by `quote-syntax`
                         use-site-scopes ; #f or boxed list: scopes that should be pruned from binders
@@ -28,6 +31,7 @@
                         module-lifts ; lifted modules
                         lifts-to-module ; more lifts: requires, provides, etc.
                         requires+provides ; enclosing module's requires and provides during `provide`
+                        name       ; identifier to name the expression
                         ))
 
 (define (make-expand-context ns)
@@ -49,14 +53,40 @@
                   '()  ; lift-envs
                   #f   ; module-lifts
                   #f   ; lifts-for-module
-                  #f)) ; requires+provides
+                  #f   ; requires+provides
+                  #f)) ; name
 
+
+(define current-expand-context (make-parameter #f))
+
+;; ----------------------------------------
+
+;; Adjusts `ctx` to make it suitable for a subexpression of the
+;; current context
 (define (as-expression-context ctx)
   (cond
-   [(eq? 'expression (expand-context-context ctx))
+   [(and (eq? 'expression (expand-context-context ctx))
+         (not (expand-context-name ctx)))
     ctx]
    [else (struct-copy expand-context ctx
                       [context 'expression]
+                      [name #f]
                       [use-site-scopes #f])]))
 
-(define current-expand-context (make-parameter #f))
+;; Adjusts `ctx` (which should be an expression context) to make it
+;; suitable for a subexpression in tail position
+(define (as-tail-context ctx #:wrt wrt-ctx)
+  (cond
+   [(expand-context-name wrt-ctx)
+    (struct-copy expand-context ctx
+                 [name (expand-context-name wrt-ctx)])]
+   [else ctx]))
+
+;; Adjust `ctx` to make it suitable for a context in the right-hand
+;; side of a definition of `ids`
+(define (as-named-context ctx ids)
+  (cond
+   [(and (pair? ids) (null? (cdr ids)))
+    (struct-copy expand-context ctx
+                 [name (car ids)])]
+   [else ctx]))

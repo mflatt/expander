@@ -412,7 +412,7 @@
 ;; identifiers; return the expanded form as well as its values
 (define (expand+eval-for-syntaxes-binding rhs ids ctx
                                           #:compile-time-for-self [compile-time-for-self #f])
-  (define exp-rhs (expand-transformer rhs ctx))
+  (define exp-rhs (expand-transformer rhs (as-named-context ctx ids)))
   (values exp-rhs
           (eval-for-bindings ids
                              exp-rhs

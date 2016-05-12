@@ -69,6 +69,7 @@
                       syntax-local-introduce
                       syntax-local-identifier-as-binding
                       syntax-local-phase-level
+                      syntax-local-name
 
                       make-syntax-introducer
                       make-syntax-delta-introducer

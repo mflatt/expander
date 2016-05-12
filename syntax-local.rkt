@@ -24,7 +24,8 @@
          syntax-local-introduce
          syntax-local-identifier-as-binding
          syntax-local-phase-level
-         
+         syntax-local-name
+
          make-syntax-introducer
          make-syntax-delta-introducer
          
@@ -101,6 +102,13 @@
   (if ctx
       (expand-context-phase ctx)
       0))
+
+(define (syntax-local-name)
+  (define ctx (get-current-expand-context 'syntax-local-name))
+  (define id (expand-context-name ctx))
+  (and id
+       ;; Strip lexical context, but keep source-location information
+       (datum->syntax #f (syntax-e id) id)))
 
 ;; ----------------------------------------
 
