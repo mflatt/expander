@@ -108,12 +108,12 @@
    (define need-eventually-defined (make-hasheqv)) ; phase -> list of id
 
    ;; Initial require
-   (define initial-require-stx (apply-module-scopes (m 'initial-require)))
+   (define initial-require-s (apply-module-scopes (m 'initial-require)))
    (cond
     [(not keep-enclosing-scope-at-phase)
      ;; Install the initial require
      (perform-initial-require! initial-require self
-                               initial-require-stx
+                               initial-require-s
                                m-ns
                                requires+provides)]
     [else
@@ -170,7 +170,7 @@
                                                [only-immediate? #t]
                                                [post-expansion-scope inside-scope]
                                                [module-scopes new-module-scopes]
-                                               [all-scopes-stx initial-require-stx]
+                                               [all-scopes-stx initial-require-s]
                                                [need-eventually-defined (and (phase . >= . 1)
                                                                              need-eventually-defined)]
                                                [lifts (make-lift-context
@@ -280,7 +280,7 @@
       
    ;; Add `#%module-begin` around the body if it's not already present
    (define mb
-     (ensure-module-begin bodys inside-scope new-module-scopes ctx phase s))
+     (ensure-module-begin bodys inside-scope new-module-scopes  initial-require-s ctx phase s))
    
    ;; Expand the body
    (define expanded-mb
@@ -302,7 +302,7 @@
     (syntax-module-path-index-shift
      (rebuild
       s
-      `(,(m 'module) ,(m 'id:module-name) ,initial-require-stx ,expanded-mb))
+      `(,(m 'module) ,(m 'id:module-name) ,initial-require-s ,expanded-mb))
      self
      generic-self)
     self
@@ -311,7 +311,7 @@
 ;; ----------------------------------------
 
 ;; Add `#%module-begin` to `bodys`, if needed
-(define (ensure-module-begin bodys inside-scope new-module-scopes ctx phase s)
+(define (ensure-module-begin bodys inside-scope new-module-scopes initial-require-s ctx phase s)
   (cond
    [(= 1 (length bodys))
     ;; Maybe it's already a `#%module-begin` form, or maybe it
@@ -328,6 +328,7 @@
                                          [context 'module-begin]
                                          [only-immediate? #t]
                                          [post-expansion-scope inside-scope]
+                                         [all-scopes-stx initial-require-s]
                                          [module-scopes new-module-scopes])))
       (cond
        [(eq? '#%module-begin (core-form-sym partly-expanded-body phase))
@@ -335,15 +336,14 @@
         partly-expanded-body]
        [else
         ;; No, it didn't expand to `#%module-begin`
-        (add-module-begin (list partly-expanded-body) s new-module-scopes phase)])])]
+        (add-module-begin (list partly-expanded-body) s initial-require-s phase)])])]
    [else
     ;; Multiple body forms definitely need a `#%module-begin` wrapper
-    (add-module-begin bodys s new-module-scopes phase)]))
+    (add-module-begin bodys s initial-require-s phase)]))
 
 ;; Add `#%module-begin`, because it's needed
-(define (add-module-begin bodys s new-module-scopes phase)
-  (define mb-id (add-scopes (datum->syntax #f '#%module-begin)
-                            new-module-scopes))
+(define (add-module-begin bodys s initial-require-s phase)
+  (define mb-id (datum->syntax initial-require-s '#%module-begin))
   ;; If `mb-id` is not bound, we'd like to give a clear error message
   (unless (resolve mb-id phase)
     (error "no #%module-begin binding in the module's language" s))

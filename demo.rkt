@@ -734,6 +734,25 @@
  3
  7)
 
+(eval-module-declaration '(module intro-printed-submodule '#%core
+                           (#%require (for-syntax '#%core))
+                           (#%provide m)
+                           (define-syntaxes (m)
+                             (lambda (stx)
+                               (quote-syntax
+                                (module sub 'printing-mb
+                                  (+ 5 6)
+                                  (+ 7 8)))))))
+
+(eval-module-declaration '(module printed-submodule '#%core
+                           (#%require 'intro-printed-submodule)
+                           (m)))
+
+(check-print
+ (namespace-require '(submod 'printed-submodule sub) demo-ns)
+ 11
+ 15)
+
 ;; ----------------------------------------
 
 ;; Submodule

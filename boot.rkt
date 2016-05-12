@@ -91,4 +91,4 @@
                    (port-count-lines! i)
                    (eval-s-expr (read-syntax (object-name i) i))))))
 
-(namespace-require 'racket/private/pre-base)
+(namespace-require 'racket/base)
