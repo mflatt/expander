@@ -210,7 +210,7 @@
                      ;; preserved order
                      (append
                       (for/list ([done-body (in-list done-bodys)])
-                        (no-binds s))
+                        (no-binds done-body s))
                       val-binds))
                new-dups)]
         [(define-syntaxes)
@@ -279,9 +279,10 @@
 
 ;; Helper to turn an expression into a binding clause with zero
 ;; bindings
-(define (no-binds s)
+(define (no-binds expr s)
   (list null (datum->syntax #f
                             `(,(datum->syntax core-stx 'begin)
+                              ,expr
                               (,(datum->syntax core-stx '#%app)
                                ,(datum->syntax core-stx 'values)))
                             s)))
