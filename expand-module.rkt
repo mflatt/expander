@@ -128,7 +128,6 @@
                                                [phase phase]
                                                [namespace m-ns]
                                                [only-immediate? #t]
-                                               [use-site-scopes (box null)]
                                                [post-expansion-scope inside-scope]
                                                [module-scopes new-module-scopes]))
          
@@ -211,7 +210,8 @@
                           [context 'module-begin]
                           [namespace m-ns]
                           [module-scopes new-module-scopes]
-                          [module-begin-k module-begin-k])))
+                          [module-begin-k module-begin-k]
+                          [use-site-scopes (box null)])))
    
    ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    ;; Assemble the `module` result

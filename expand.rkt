@@ -218,7 +218,7 @@
                      ;; preserved order
                      (append
                       (for/list ([done-body (in-list done-bodys)])
-                        (no-binds s phase))
+                        (no-binds done-body s phase))
                       val-binds))
                new-dups)]
         [(define-syntaxes)
@@ -293,10 +293,11 @@
 
 ;; Helper to turn an expression into a binding clause with zero
 ;; bindings
-(define (no-binds s phase)
+(define (no-binds expr s phase)
   (define s-core-stx (syntax-shift-phase-level core-stx phase))
   (list null (datum->syntax #f
                             `(,(datum->syntax s-core-stx 'begin)
+                              ,expr
                               (,(datum->syntax s-core-stx '#%app)
                                ,(datum->syntax s-core-stx 'values)))
                             s)))
