@@ -9,6 +9,7 @@
 
 (provide make-requires+provides
          requires+provides-self
+         requires+provides-can-cross-phase-persistent?
          
          (struct-out required)
          add-required-module!
@@ -28,19 +29,21 @@
 
 (struct requires+provides (self       ; module-path-index to recognize definitions among requires
                            requires   ; module-path-index -> require-phase -> list of (required id phase boolean)
-                           provides)) ; phase -> sym -> binding
+                           provides   ; phase -> sym -> binding
+                           [can-cross-phase-persistent? #:mutable]))
 
 (define (make-requires+provides self)
   (requires+provides self
                      (make-hash)
-                     (make-hasheqv)))
+                     (make-hasheqv)
+                     #t))
 
 ;; ----------------------------------------
 
 (struct required (id phase can-shadow?))
 
 ;; Register that a module is requires at a given phase shift
-(define (add-required-module! r+p mod-name phase-shift)
+(define (add-required-module! r+p mod-name phase-shift is-cross-phase-persistent?)
   (hash-update! (requires+provides-requires r+p)
                 mod-name
                 (lambda (at-mod)
@@ -48,7 +51,9 @@
                                phase-shift
                                (lambda (l) l)
                                null))
-                #hasheqv()))
+                #hasheqv())
+  (unless is-cross-phase-persistent?
+    (set-requires+provides-can-cross-phase-persistent?! r+p #f)))
 
 ;; Register a specific identifier that is required
 (define (add-defined-or-required-id! r+p id phase binding

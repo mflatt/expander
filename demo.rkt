@@ -937,3 +937,43 @@
 (check-print
  (namespace-require ''use-expand-provide demo-ns)
  (list 'a-sub 'a-here))
+
+;; ----------------------------------------
+;; cross-phase persistent declaration
+
+(eval-module-declaration '(module cross-phase-persistent '#%core
+                           (#%declare #:cross-phase-persistent)
+                           (#%require '#%core)
+                           (#%provide gen)
+                           (define-values (gen) (gensym "g"))
+                           (module ignored '#%core)
+                           (module* also-ignored '#%core)
+                           (begin
+                             (define-values (y) (lambda () (error "anything")))
+                             (define-values (x) (case-lambda
+                                                  [() (error "anything")]
+                                                  [(x) (set! x x)])))
+                           (define-values (z) (list
+                                               #t
+                                               (cons 1 2)
+                                               "string"
+                                               #"bytes"
+                                               'symbol
+                                               (gensym)
+                                               (string->uninterned-symbol "u")))))
+
+(eval-module-declaration '(module use-cross-phase-persistent '#%core
+                           (#%require 'cross-phase-persistent
+                                      (for-syntax '#%core
+                                                  'cross-phase-persistent))
+                           (define-syntaxes (ct-gen)
+                             (lambda (stx)
+                               (datum->syntax
+                                (quote-syntax here)
+                                (list (quote-syntax quote)
+                                      gen))))
+                           (println (equal? gen (ct-gen)))))
+
+(check-print
+ (namespace-require ''use-cross-phase-persistent demo-ns)
+ #t)

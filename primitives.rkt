@@ -124,10 +124,13 @@
                       
                       current-namespace
                       namespace-module-registry
+                      
+                      ;; Needed to recognize cross-phase persistence
+                      cons list make-struct-type make-struct-type-property gensym string->uninterned-symbol
 
                       ;; Things that we don't have to replace, but
                       ;; used in "demo.rkt":
-                      list cons car cdr pair? null? map filter append
+                      car cdr pair? null? map filter append
                       equal? values void
                       symbol->string
                       regexp-match?

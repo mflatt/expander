@@ -19,6 +19,7 @@
          module-requires
          module-provides
          module-primitive?
+         module-cross-phase-persistent?
 
          namespace-module-instantiate!
          namespace-module-visit!
@@ -35,7 +36,8 @@
                    phases              ; phase-level -> definitions
                    module-registry     ; module-registry of (resolved-module-path -> module)
                    submodule-declarations ; resolved-module-path -> module
-                   module-instances)   ; (cons resolved-module-path phase) -> namespace
+                   module-instances    ; (cons resolved-module-path phase) -> namespace
+                   cross-phase-persistent-namespace) ; #f or namespace for persistent instances
         #:property prop:custom-write
         (lambda (ns port mode)
           (write-string "#<namespace:" port)
@@ -56,7 +58,8 @@
                 max-phase-level ; phase-level
                 ;; expected to be consistent with provides and {min,max}-phase-level:
                 instantiate     ; namespace phase phase-level ->
-                primitive?))    ; inline variable values in compiled code?
+                primitive?      ; inline variable values in compiled code?
+                cross-phase-persistent?))
 
 (define (make-empty-namespace)
   (namespace 'top
@@ -64,7 +67,8 @@
              (make-hasheqv)
              (module-registry (make-hasheq))
              (make-hasheq)
-             (make-hash)))
+             (make-hash)
+             #f))
 
 (define current-namespace (make-parameter (make-empty-namespace)))
 
@@ -80,7 +84,10 @@
                                              ;; Same set of submodules:
                                              (namespace-submodule-declarations ns)
                                              ;; Fresh set of submodules:
-                                             (make-hash))]))
+                                             (make-hash))]
+                 [cross-phase-persistent-namespace
+                  (or (namespace-cross-phase-persistent-namespace ns)
+                      ns)]))
   (hash-set! (namespace-module-instances m-ns) (cons name 0) m-ns)
   m-ns)
 
@@ -91,11 +98,13 @@
 (define (make-module self requires provides
                      min-phase-level max-phase-level
                      instantiate
-                     #:primitive? [primitive? #f])
+                     #:primitive? [primitive? #f]
+                     #:cross-phase-persistent? [cross-phase-persistent? primitive?])
   (module self requires provides
           min-phase-level max-phase-level
           instantiate
-          primitive?))
+          primitive?
+          cross-phase-persistent?))
 
 (define (remake-module m self requires provides)
   (struct-copy module m
@@ -116,21 +125,40 @@
 (define (namespace-module-instantiate! ns name phase-shift [min-phase 0])
   (unless (resolved-module-path? name)
     (error "not a resolved module path:" name))
-  (define m-ns (namespace->module-namespace ns name phase-shift #:create? #t))
   (define m (namespace->module ns name))
-  (for ([(req-phase mods) (in-hash (module-requires m))])
-    (for ([mod (in-list mods)])
-      (namespace-module-instantiate! ns (module-path-index-resolve mod)
-                                     (phase+ phase-shift req-phase)
-                                     min-phase)))
-  (for ([phase-level (in-range (module-min-phase-level m)
-                               (add1 (module-max-phase-level m)))])
-    (define phase (phase+ phase-level phase-shift))
-    (when (phase . >= . min-phase)
-      (define defs (namespace->definitions m-ns phase-level))
-      (unless (definitions-instantiated? defs)
-        (set-definitions-instantiated?! defs #t)
-        ((module-instantiate m) m-ns phase-shift phase-level (module-self m))))))
+  (cond
+   [(and (module-cross-phase-persistent? m)
+         (or (not (zero? phase-shift))
+             (namespace-cross-phase-persistent-namespace ns)))
+    (or (namespace->module-namespace ns name phase-shift)
+        (let ([c-ns (or (namespace-cross-phase-persistent-namespace ns)
+                        ns)])
+          (namespace-module-instantiate! c-ns name 0 0)
+          (define m-ns (namespace->module-namespace c-ns name 0 #:create? #t))
+          (hash-set! (namespace-module-instances ns) (cons name phase-shift) m-ns)
+          (for ([(req-phase mods) (in-hash (module-requires m))])
+            (for ([mod (in-list mods)])
+              (define name (module-path-index-resolve mod))
+              (hash-set! (namespace-module-instances ns)
+                         (cons name (phase+ phase-shift req-phase))
+                         (hash-ref (namespace-module-instances c-ns)
+                                   (cons name 0)))))
+          m-ns))]
+   [else
+    (define m-ns (namespace->module-namespace ns name phase-shift #:create? #t))
+    (for ([(req-phase mods) (in-hash (module-requires m))])
+      (for ([mod (in-list mods)])
+        (namespace-module-instantiate! ns (module-path-index-resolve mod)
+                                       (phase+ phase-shift req-phase)
+                                       min-phase)))
+    (for ([phase-level (in-range (module-min-phase-level m)
+                                 (add1 (module-max-phase-level m)))])
+      (define phase (phase+ phase-level phase-shift))
+      (when (phase . >= . min-phase)
+        (define defs (namespace->definitions m-ns phase-level))
+        (unless (definitions-instantiated? defs)
+          (set-definitions-instantiated?! defs #t)
+          ((module-instantiate m) m-ns phase-shift phase-level (module-self m)))))]))
 
 (define (namespace-module-visit! ns name phase)
   (namespace-module-instantiate! ns name phase 1))
@@ -145,12 +173,10 @@
            (let ([m (namespace->module ns name)])
              (unless m
                (error "no module declared to instantiate:" name))
-             (define m-ns (namespace name
-                                     (new-multi-scope)
-                                     (make-hasheqv)
-                                     (namespace-module-registry ns)
-                                     (namespace-submodule-declarations ns)
-                                     (namespace-module-instances ns)))
+             (define m-ns (struct-copy namespace ns
+                                       [name name]
+                                       [scope (new-multi-scope)]
+                                       [phases (make-hasheqv)]))
              (hash-set! (namespace-module-instances ns) (cons name phase) m-ns)
              m-ns))))
 

@@ -254,6 +254,8 @@
           (hash-set! phase-to-top-init phase top-init)
           top-init)))
   
+  (define cross-phase-persistent? #f)
+  
   (define body-cctx (struct-copy compile-context cctx
                                  [self self]
                                  [root-module-name root-module-name]))
@@ -290,6 +292,11 @@
         [(#%require #%provide)
          ;; Nothing to do at run time
          (void)]
+        [(#%declare)
+         (define m (match-syntax body '(#%declare kw ...)))
+         (for ([kw (in-list (m 'kw))])
+           (when (eq? (syntax-e kw) '#:cross-phase-persistent)
+             (set! cross-phase-persistent? #t)))]
         [(module module*)
          ;; Submodules are handled separately below
          (void)]
@@ -343,6 +350,7 @@
      (current-namespace)
      (module-shift-for-declare
       (make-module
+       #:cross-phase-persistent? ,cross-phase-persistent?
        ',self
        ,requires
        ,provides

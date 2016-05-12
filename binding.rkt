@@ -147,13 +147,14 @@
 (define (binding-lookup b env lift-envs ns phase id)
   (cond
    [(module-binding? b)
+    (define at-phase (- phase (module-binding-phase b)))
     (define m (namespace->module-namespace ns
                                            (module-path-index-resolve
                                             (module-binding-module b))
-                                           (- phase
-                                              (module-binding-phase b))))
+                                           at-phase))
     (unless m
-      (error "namespace mismatch: cannot locate module" (module-binding-module b)))
+      (error "namespace mismatch: cannot locate module"
+             (module-binding-module b) at-phase))
     (namespace-get-transformer m (module-binding-phase b) (module-binding-sym b)
                                variable)]
    [(local-binding? b)

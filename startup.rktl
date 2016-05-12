@@ -11,7 +11,8 @@
 (module #%kernel '#%core
   (#%require '#%pre-kernel)
   (#%provide (all-from '#%core)
-             (all-from '#%pre-kernel)))
+             (all-from '#%pre-kernel))
+  (#%declare #:cross-phase-persistent))
 
 ;; ------------------------------------------------------
 ;; Minimal syntax (no error checks!) needed for the rest

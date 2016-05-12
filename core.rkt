@@ -55,7 +55,8 @@
 (define (declare-core-module! ns)
   (declare-module!
    ns
-   (make-module core-mpi
+   (make-module #:primitive? #t
+                core-mpi
                 #hasheq()
                 (hasheqv 0 (for/hasheq ([sym (in-sequences
                                               (in-hash-keys core-primitives)

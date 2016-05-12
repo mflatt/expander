@@ -168,8 +168,13 @@
                           (adjust-rename-to-id adjust)
                           in-stx))
   (define done-syms (make-hash))
-  (add-required-module! requires+provides mpi phase-shift)
+  (define m (namespace->module m-ns module-name))
+  (unless m
+    (error "module not declared:" module-name))
+  (add-required-module! requires+provides mpi phase-shift
+                        (module-cross-phase-persistent? m))
   (bind-all-provides!
+   m
    bind-in-stx phase-shift m-ns module-name mpi
    #:filter (lambda (binding)
               (define sym (module-binding-nominal-sym binding))
@@ -227,11 +232,8 @@
 
 ;; ----------------------------------------
 
-(define (bind-all-provides! in-stx phase-shift ns module-name mpi
+(define (bind-all-provides! m in-stx phase-shift ns module-name mpi
                             #:filter filter)
-  (define m (namespace->module ns module-name))
-  (unless m
-    (error "module not declared:" module-name))
   (define self (module-self m))
   (for ([(provide-phase-level provides) (in-hash (module-provides m))])
     (define phase (phase+ phase-shift provide-phase-level))

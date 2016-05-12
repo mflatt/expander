@@ -14,7 +14,8 @@
          "expand.rkt"
          "expand-require.rkt"
          "expand-provide.rkt"
-         "compile.rkt")
+         "compile.rkt"
+         "cross-phase.rkt")
 
 (add-core-form!
  'module
@@ -42,6 +43,12 @@
                  [module-begin-k #f]))))
 
 (add-core-form!
+ '#%declare
+ (lambda (s ctx)
+   ;; The `#%module-begin` expander handles `#%declare`
+   (error "not in module body:" s)))
+
+(add-core-form!
  '#%top
  (lambda (s ctx)
    (define m (match-syntax s '(#%top . id)))
@@ -61,7 +68,8 @@
 ;; ----------------------------------------
 
 (define (expand-module s ctx enclosing-self
-                       #:keep-enclosing-scope-at-phase [keep-enclosing-scope-at-phase #f])
+                       #:keep-enclosing-scope-at-phase [keep-enclosing-scope-at-phase #f]
+                       #:enclosing-is-cross-phase-persistent? [enclosing-is-cross-phase-persistent? #f])
   (define m (match-syntax s '(module id:module-name initial-require body ...)))
    
    (define initial-require (syntax->datum (m 'initial-require)))
@@ -113,7 +121,8 @@
      ;; as an import and visit it
      (add-required-module! requires+provides
                            enclosing-self
-                           keep-enclosing-scope-at-phase)
+                           keep-enclosing-scope-at-phase
+                           enclosing-is-cross-phase-persistent?)
      (namespace-module-visit! m-ns (module-path-index-resolve enclosing-self)
                               keep-enclosing-scope-at-phase)])
    
@@ -136,6 +145,9 @@
      (define bodys
        (for/list ([body (in-list (mb-m 'body))])
          (add-scope body inside-scope)))
+     
+     ;; Accumulate `#%declare` content
+     (define declared-keywords (make-hasheq))
      
      ;; The expansion of the module body happens in 4 passes:
      ;;  Pass 1: Partial expansion to determine imports and definitions
@@ -183,6 +195,7 @@
                                    #:need-eventually-defined need-eventually-defined
                                    #:module-scopes new-module-scopes
                                    #:defined-syms defined-syms
+                                   #:declared-keywords declared-keywords
                                    #:loop phase-1-and-2-loop))
 
          ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -217,9 +230,17 @@
                          #:ctx (struct-copy expand-context ctx
                                             [requires+provides requires+provides])))
 
+     ;; Validate any cross-phase persistence request
+     (define is-cross-phase-persistent? (hash-ref declared-keywords '#:cross-phase-persistent #f))
+     (when is-cross-phase-persistent?
+       (unless (requires+provides-can-cross-phase-persistent? requires+provides)
+         (error "cannot be cross-phase persistent due to required modules"
+                (hash-ref declared-keywords '#:cross-phase-persistent)))
+       (check-cross-phase-persistent-form fully-expanded-bodys-except-post-submodules))
+
      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
      ;; Pass 4: expand `module*` submodules
-     
+
      (define submod-ctx (struct-copy expand-context ctx
                                      [namespace m-ns]
                                      [module-scopes new-module-scopes]))
@@ -240,8 +261,12 @@
                                #:original s
                                #:phase phase
                                #:self self
+                               #:enclosing-is-cross-phase-persistent? is-cross-phase-persistent?
                                #:ctx submod-ctx))
-
+     
+     ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+     ;; Finish
+     
      ;; Assemble the `#%module-begin` result:
      (rebuild
       mb
@@ -266,7 +291,7 @@
                           [module-scopes new-module-scopes]
                           [module-begin-k module-begin-k]
                           [use-site-scopes (box null)])))
-   
+
    ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    ;; Assemble the `module` result
    
@@ -373,6 +398,7 @@
                                 #:need-eventually-defined need-eventually-defined
                                 #:module-scopes module-scopes
                                 #:defined-syms defined-syms
+                                #:declared-keywords declared-keywords
                                 #:loop phase-1-and-2-loop)
   (let loop ([tail? tail?] [bodys bodys])
     (cond
@@ -460,6 +486,18 @@
           ;; Submodule to save for after this module
           (cons exp-body
                 (loop tail? (cdr bodys)))]
+         [(#%declare)
+          (define m (match-syntax exp-body '(#%declare kw ...)))
+          (for ([kw (in-list (m 'kw))])
+            (unless (keyword? (syntax-e kw))
+              (error "expected a keyword in `#%declare`:" kw))
+            (unless (memq (syntax-e kw) '(#:cross-phase-persistent #:empty-namespace))
+              (error "not an allowed declaration keyword:" kw))
+            (when (hash-ref declared-keywords (syntax-e kw) #f)
+              (error "keyword declared multiple times:" kw))
+            (hash-set! declared-keywords (syntax-e kw) kw))
+          (cons exp-body
+                (loop tail? (cdr bodys)))]
          [else
           ;; save expression for next pass
           (cons exp-body
@@ -513,7 +551,7 @@
          (cons (rebuild (car bodys)
                         `(,(m 'define-values) ,(m 'id) ,exp-rhs))
                (loop tail? (cdr bodys)))]
-        [(define-syntaxes #%require #%provide begin-for-syntax module module*)
+        [(define-syntaxes #%require #%provide begin-for-syntax module module* #%declare)
          (cons (car bodys)
                (loop tail? (cdr bodys)))]
         [else
@@ -625,6 +663,7 @@
                                 #:original s
                                 #:phase phase
                                 #:self self
+                                #:enclosing-is-cross-phase-persistent? enclosing-is-cross-phase-persistent?
                                 #:ctx submod-ctx)
   (let loop ([bodys fully-expanded-bodys-except-post-submodules] [phase phase])
     (cond
@@ -642,7 +681,8 @@
              (define shifted-s (syntax-shift-phase-level (car bodys) neg-phase))
              (define submod
                (expand-submodule shifted-s self submod-ctx
-                                 #:keep-enclosing-scope-at-phase neg-phase))
+                                 #:keep-enclosing-scope-at-phase neg-phase
+                                 #:enclosing-is-cross-phase-persistent? enclosing-is-cross-phase-persistent?))
              (syntax-shift-phase-level submod phase)]
             [else
              (expand-submodule (car bodys) self submod-ctx)]))
@@ -729,7 +769,8 @@
 ;; ----------------------------------------
 
 (define (expand-submodule s self ctx
-                          #:keep-enclosing-scope-at-phase [keep-enclosing-scope-at-phase #f])
+                          #:keep-enclosing-scope-at-phase [keep-enclosing-scope-at-phase #f]
+                          #:enclosing-is-cross-phase-persistent? [enclosing-is-cross-phase-persistent? #f])
   (define submod
     (expand-module s
                    (struct-copy expand-context ctx
@@ -737,7 +778,8 @@
                                 [only-immediate? #f]
                                 [post-expansion-scope #f])
                    self
-                   #:keep-enclosing-scope-at-phase keep-enclosing-scope-at-phase))
+                   #:keep-enclosing-scope-at-phase keep-enclosing-scope-at-phase
+                   #:enclosing-is-cross-phase-persistent? enclosing-is-cross-phase-persistent?))
   
   ;; Compile and declare the submodule for use by later forms
   ;; in the enclosing module:
@@ -770,3 +812,4 @@
     (parse-and-perform-requires! (list (m 'req)) self
                                  m-ns phase
                                  requires+provides)))
+
