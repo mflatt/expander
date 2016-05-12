@@ -12,7 +12,8 @@
          "core.rkt"
          "expand-context.rkt"
          "lift-context.rkt"
-         "already-expanded.rkt")
+         "already-expanded.rkt"
+         "liberal-def-ctx.rkt")
 
 (provide expand
          expand-body
@@ -204,6 +205,7 @@
   ;; this partial-expansion phase uncovers macro- and variable
   ;; definitions in the definition context
   (define body-ctx (struct-copy expand-context ctx
+                                [context (list (make-liberal-define-context))]
                                 [only-immediate? #t]
                                 [post-expansion-scope inside-sc]
                                 [scopes (list* outside-sc

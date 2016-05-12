@@ -15,6 +15,7 @@
          "core.rkt"
          "set-bang-trans.rkt"
          "rename-trans.rkt"
+         "liberal-def-ctx.rkt"
          "syntax-local.rkt"
          "def-ctx.rkt"
          "local-expand.rkt"
@@ -108,6 +109,9 @@
                       rename-transformer?
                       prop:rename-transformer
                       make-rename-transformer
+
+                      prop:liberal-define-context
+                      liberal-define-context?
                       
                       resolved-module-path?
                       make-resolved-module-path

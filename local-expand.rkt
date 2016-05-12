@@ -88,26 +88,24 @@
                              [else (append stop-ids
                                            (for/list ([sym (in-list auto-stop-syms)])
                                              (datum->syntax p-core-stx sym)))])))
-  (define local-ctx (if same-kind?
-                        ctx
-                        (struct-copy expand-context ctx
-                                     [context context]
-                                     [env (add-intdef-bindings (expand-context-env ctx)
-                                                               intdefs)]
-                                     [use-site-scopes
-                                      (and (list? context)
-                                           (or (expand-context-use-site-scopes ctx)
-                                               (box null)))]
-                                     [post-expansion-scope
-                                      (and (and same-kind?
-                                                (memq context '(module top-level))
-                                                (expand-context-post-expansion-scope ctx)))]
-                                     [only-immediate? (not stop-ids)]
-                                     [stops (free-id-set phase (or all-stop-ids null))]
-                                     [current-introduction-scopes null]
-                                     [all-scopes-stx (add-intdef-scopes
-                                                      (expand-context-all-scopes-stx ctx)
-                                                      intdefs)])))
+  (define local-ctx (struct-copy expand-context ctx
+                                 [context context]
+                                 [env (add-intdef-bindings (expand-context-env ctx)
+                                                           intdefs)]
+                                 [use-site-scopes
+                                  (and (list? context)
+                                       (or (expand-context-use-site-scopes ctx)
+                                           (box null)))]
+                                 [post-expansion-scope
+                                  (and (and same-kind?
+                                            (memq context '(module top-level))
+                                            (expand-context-post-expansion-scope ctx)))]
+                                 [only-immediate? (not stop-ids)]
+                                 [stops (free-id-set phase (or all-stop-ids null))]
+                                 [current-introduction-scopes null]
+                                 [all-scopes-stx (add-intdef-scopes
+                                                  (expand-context-all-scopes-stx ctx)
+                                                  intdefs)]))
   (define input-s (add-intdef-scopes (flip-introduction-scopes s ctx) intdefs))
   (define output-s (cond
                     [(and as-transformer? capture-lifts?)
