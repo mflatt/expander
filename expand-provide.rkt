@@ -48,12 +48,13 @@
          [(for-syntax)
           (check-nested 'raw)
           (define m (match-syntax spec '(for-syntax spec ...)))
-          (rebuild
-           spec
-           `(,(m 'for-syntax) ,@(loop (m 'spec)
-                                      (phase+ 1 at-phase)
-                                      protected?
-                                      'phaseless)))]
+          (list
+           (rebuild
+            spec
+            `(,(m 'for-syntax) ,@(loop (m 'spec)
+                                       (phase+ 1 at-phase)
+                                       protected?
+                                       'phaseless))))]
          [(for-label)
           (check-nested 'raw)
           (define m (match-syntax spec '(for-label spec ...)))
