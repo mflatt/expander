@@ -8,6 +8,7 @@
          namespace-module-registry
          make-module-namespace
          namespace->module
+         namespace-module-name
          
          namespace-syntax-introduce
          namespace-scope
@@ -31,7 +32,7 @@
          namespace-get-variable-box
          namespace-get-transformer)
 
-(struct namespace (name                ; for debugging
+(struct namespace (module-name         ; #f or resolved module name
                    scope               ; scope for top-level bindings
                    phases              ; phase-level -> definitions
                    module-registry     ; module-registry of (resolved-module-path -> module)
@@ -41,7 +42,7 @@
         #:property prop:custom-write
         (lambda (ns port mode)
           (write-string "#<namespace:" port)
-          (fprintf port " ~.s" (namespace-name ns))
+          (fprintf port " ~.s" (namespace-module-name ns))
           (write-string ">" port)))
 
 ;; Wrapper to make the registry opqaue
@@ -61,14 +62,18 @@
                 primitive?      ; inline variable values in compiled code?
                 cross-phase-persistent?))
 
-(define (make-empty-namespace)
+(define (make-empty-namespace [share-from-ns #f])
   (namespace 'top
              (new-multi-scope)
              (make-hasheqv)
-             (module-registry (make-hasheq))
+             (if share-from-ns
+                 (namespace-module-registry share-from-ns)
+                 (module-registry (make-hasheq)))
              (make-hasheq)
              (make-hash)
-             #f))
+             (and share-from-ns
+                  (or (namespace-cross-phase-persistent-namespace share-from-ns)
+                      share-from-ns))))
 
 (define current-namespace (make-parameter (make-empty-namespace)))
 
@@ -78,16 +83,13 @@
 (define (make-module-namespace ns name for-submodule?)
   (define m-ns
     ;; Keeps all module declarations, but makes a fresh space of instances
-    (struct-copy namespace (make-empty-namespace)
-                 [module-registry (namespace-module-registry ns)]
+    (struct-copy namespace (make-empty-namespace ns)
+                 [module-name name]
                  [submodule-declarations (if for-submodule?
                                              ;; Same set of submodules:
                                              (namespace-submodule-declarations ns)
                                              ;; Fresh set of submodules:
-                                             (make-hash))]
-                 [cross-phase-persistent-namespace
-                  (or (namespace-cross-phase-persistent-namespace ns)
-                      ns)]))
+                                             (make-hash))]))
   (hash-set! (namespace-module-instances m-ns) (cons name 0) m-ns)
   m-ns)
 
@@ -174,7 +176,7 @@
              (unless m
                (error "no module declared to instantiate:" name))
              (define m-ns (struct-copy namespace ns
-                                       [name name]
+                                       [module-name name]
                                        [scope (new-multi-scope)]
                                        [phases (make-hasheqv)]))
              (hash-set! (namespace-module-instances ns) (cons name phase) m-ns)

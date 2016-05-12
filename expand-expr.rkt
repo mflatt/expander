@@ -300,6 +300,22 @@
     [else (error "cannot assign to syntax:" s)])))
 
 (add-core-form!
+ '#%variable-reference
+ (lambda (s ctx)
+   (define id-m (try-match-syntax s '(#%variable-reference id)))
+   (define top-m (and (not id-m)
+                      (try-match-syntax s '(#%variable-reference (#%top . id)))))
+   (define empty-m (and (not id-m)
+                        (not top-m)
+                        (match-syntax s '(#%variable-reference))))
+   (when (or id-m top-m)
+     (define binding (resolve+shift ((or id-m top-m) 'id) (expand-context-phase ctx)))
+     (unless binding
+       (error "no binding for variable reference:" s)))
+   
+   s))
+
+(add-core-form!
  '#%expression
  (lambda (s ctx)
    (define m (match-syntax s '(#%expression e)))

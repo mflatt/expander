@@ -701,7 +701,7 @@
 
 (define (check-ids-unbound ids phase requires+provides #:in s)
   (for ([id (in-list ids)])
-    (check-not-required-or-defined requires+provides id phase #:in s)))
+    (check-not-defined requires+provides id phase #:in s)))
 
 (define (select-defined-syms-and-bind ids defined-syms self phase
                                       module-scopes
@@ -727,6 +727,7 @@
     (define b (module-binding self phase defined-sym
                               self phase defined-sym
                               0))
+    (remove-required-id! requires+provides id phase)
     (add-binding! id b phase)
     (add-defined-or-required-id! requires+provides id phase b)
     defined-sym))

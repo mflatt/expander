@@ -204,10 +204,11 @@
               (when adjusted-sym
                 (define s (datum->syntax bind-in-stx adjusted-sym))
                 (define bind-phase (phase+ phase-shift provide-phase))
-                (check-not-required-or-defined requires+provides
-                                               s bind-phase 
-                                               #:unless-matches binding
-                                               #:in in-stx)
+                (check-not-defined #:check-not-required? #t
+                                   requires+provides
+                                   s bind-phase 
+                                   #:unless-matches binding
+                                   #:in in-stx)
                 (add-defined-or-required-id! requires+provides
                                              s bind-phase binding
                                              #:can-shadow? can-shadow?))

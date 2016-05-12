@@ -21,7 +21,8 @@
          "local-expand.rkt"
          "taint.rkt"
          "checked-syntax.rkt"
-         "module-path.rkt")
+         "module-path.rkt"
+         "variable-reference.rkt")
 
 (provide primitive-ids)
 
@@ -131,6 +132,17 @@
                       
                       current-namespace
                       namespace-module-registry
+                      
+                      variable-reference?
+                      variable-reference-constant?
+                      variable-reference->empty-namespace
+                      variable-reference->namespace
+                      variable-reference->resolved-module-path
+                      variable-reference->module-path-index
+                      variable-reference->module-source
+                      variable-reference->phase
+                      variable-reference->module-base-phase
+                      variable-reference->module-declaration-inspector
                       
                       ;; Needed to recognize cross-phase persistence
                       cons list make-struct-type make-struct-type-property gensym string->uninterned-symbol

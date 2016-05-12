@@ -9,6 +9,7 @@
          "require+provide.rkt"
          "module-path.rkt"
          "expand-require.rkt"
+         "variable-reference.rkt"
          (only-in racket/base [current-namespace base:current-namespace]))
 
 (provide make-compile-context
@@ -24,10 +25,10 @@
                          root-module-name ; set to a symbol if `self` is non-#f
                          top-init))  ; accumulates top-level initialization
 
-(struct top-init (variable-references ; variable-reference -> sym
-                  syntax-literals))   ; box of list syntax-literal
+(struct top-init (variable-uses      ; variable-use -> sym
+                  syntax-literals))  ; box of list syntax-literal
 
-(struct variable-reference (module phase sym) #:transparent)
+(struct variable-use (module phase sym) #:transparent)
 (struct syntax-literal (stx sym))
 
 (define (make-compile-context #:namespace [namespace (current-namespace)]
@@ -136,6 +137,27 @@
                (set-box! b (cons (syntax-literal q sym) (unbox b)))
                sym)
              q)]
+        [(#%variable-reference)
+         (define id-m (try-match-syntax s '(#%variable-reference id)))
+         (define top-m (and (not id-m)
+                            (try-match-syntax s '(#%variable-reference (#%top . id)))))
+         (define id (or (and id-m (id-m 'id))
+                        (and top-m (top-m 'id))))
+         (define binding (and id (resolve+shift id phase)))
+         (define in-mod? (compile-context-self cctx))
+         `(variable-reference 
+           ',(compile-context-self cctx)
+           ,(if in-mod?
+                ns-id
+                (compile-context-namespace cctx))
+           ,(if in-mod?
+                `(+ ,phase-shift-id ,phase)
+                phase)
+           ,(if in-mod?
+                phase-shift-id
+                0)
+           ;; FIXME: compute mutations
+           #f)]
         [else
          (error "unrecognized core form:" core-sym)])]
      [(identifier? s)
@@ -176,14 +198,14 @@
          [else
           ;; Reference to a variable defined in another module; we'll look up
           ;; the variable's box once at the top
-          (define key (variable-reference (module-binding-module b)
-                                          (module-binding-phase b)
-                                          (module-binding-sym b)))
-          (define variable-references (top-init-variable-references
-                                       (compile-context-top-init cctx)))
-          (define sym (or (hash-ref variable-references key #f)
-                          (let ([sym (gensym (variable-reference-sym key))])
-                            (hash-set! variable-references key sym)
+          (define key (variable-use (module-binding-module b)
+                                    (module-binding-phase b)
+                                    (module-binding-sym b)))
+          (define variable-uses (top-init-variable-uses
+                                 (compile-context-top-init cctx)))
+          (define sym (or (hash-ref variable-uses key #f)
+                          (let ([sym (gensym (variable-use-sym key))])
+                            (hash-set! variable-uses key sym)
                             sym)))
           (cond
            [(eq? mpi (compile-context-compile-time-for-self cctx))
@@ -372,28 +394,28 @@
 ;; ----------------------------------------
   
 (define (make-top-init)
-  (top-init (make-variable-references)
+  (top-init (make-variable-uses)
             (box null)))
 
-(define (make-variable-references)
+(define (make-variable-uses)
   (make-hash))
 
 (define (generate-top-init top-init phase cctx)
   (append
-   (generate-variable-references (top-init-variable-references top-init) phase cctx)
+   (generate-variable-uses (top-init-variable-uses top-init) phase cctx)
    (generate-syntax-literals (unbox (top-init-syntax-literals top-init)) phase cctx)))
 
-(define (generate-variable-references variable-references phase cctx)
+(define (generate-variable-uses variable-uses phase cctx)
   (define in-mod? (compile-context-self cctx))
   (define (ref->key ref)
-    (cons (module-path-index-resolve (variable-reference-module ref))
-          (variable-reference-phase ref)))
+    (cons (module-path-index-resolve (variable-use-module ref))
+          (variable-use-phase ref)))
   (define module-nss
-    (for/fold ([module-nss #hash()]) ([(ref) (in-hash-keys variable-references)])
+    (for/fold ([module-nss #hash()]) ([(ref) (in-hash-keys variable-uses)])
       (define key (ref->key ref))
       (if (hash-ref module-nss key #f)
           module-nss
-          (hash-set module-nss key (cons (gensym) (variable-reference-module ref))))))
+          (hash-set module-nss key (cons (gensym) (variable-use-module ref))))))
   (append
    (for/list ([(key m-ns-sym+mpi) (in-hash module-nss)])
      (define binding-module (cdr m-ns-sym+mpi))
@@ -415,30 +437,30 @@
                                        (if in-mod?
                                            `(+ ,phase-shift-id ,phase)
                                            phase)))))
-   (for/list ([(ref box-sym) (in-hash variable-references)])
+   (for/list ([(ref box-sym) (in-hash variable-uses)])
      (define m-ns-sym+mpi (hash-ref module-nss (ref->key ref)))
      (define m-ns-sym (car m-ns-sym+mpi))
      (define mpi (cdr m-ns-sym+mpi))
-     (define sym (variable-reference-sym ref))
+     (define sym (variable-use-sym ref))
      `(define ,box-sym 
        (namespace-get-variable-box ,m-ns-sym
-                                   ,(variable-reference-phase ref)
+                                   ,(variable-use-phase ref)
                                    ',sym
                                    (lambda ()
                                      ,(if (eq? mpi (compile-context-compile-time-for-self cctx))
                                           `(begin
                                             (namespace-set-variable! ,m-ns-sym
-                                                                     ,(variable-reference-phase ref)
+                                                                     ,(variable-use-phase ref)
                                                                      ',sym
                                                                      ',undefined)
                                             (namespace-get-variable-box ,m-ns-sym
-                                                                        ,(variable-reference-phase ref)
+                                                                        ,(variable-use-phase ref)
                                                                         ',sym
                                                                         #f))
                                           `(begin
                                             (error "link failed:"
                                                    ',sym
-                                                   ,(variable-reference-phase ref)
+                                                   ,(variable-use-phase ref)
                                                    ,m-ns-sym)))))))))
 
 (define (generate-syntax-literals syntax-literals phase cctx)
@@ -497,6 +519,7 @@
 (add-expand-time! 'module-path-index-shift module-path-index-shift)
 (add-expand-time! 'module-path-index-resolve module-path-index-resolve)
 (add-expand-time! 'check-defined check-defined)
+(add-expand-time! 'variable-reference variable-reference)
 
 (define run-time-namespace (make-base-namespace))
 (define (add-run-time! sym val)
@@ -516,6 +539,7 @@
 (add-run-time! 'module-shift-for-declare module-shift-for-declare)
 (add-run-time! 'substitute-module-declare-name substitute-module-declare-name)
 (add-run-time! 'syntax-module-path-index-shift syntax-module-path-index-shift)
+(add-run-time! 'variable-reference variable-reference)
 
 (define orig-eval (current-eval))
 

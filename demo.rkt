@@ -594,20 +594,37 @@
                                (println a)
                                (orig:list a b)))))
 
+(eval-module-declaration '(module definition-shadows-plain-require '#%core
+                           (#%require '#%core)
+                           (#%provide map)
+                           (define-values (map)
+                             (lambda (f l)
+                               (if (null? l)
+                                   '()
+                                   (cons (car l) ; don't use `f`
+                                         (map f (cdr l))))))))
+
 (eval-module-declaration '(module require-shadows-initial-require '#%core
-                           (#%require 'definition-shadows-initial-require)
-                           (list 'a 'b)))
+                           (#%require 'definition-shadows-initial-require
+                                      'definition-shadows-plain-require)
+                           (println (map pair? (list 'a 'b)))))
 
 (check-print
  (namespace-require ''require-shadows-initial-require demo-ns)
- 'a)
+ 'a
+ '(a b))
 
 (check-error
  (eval-module-declaration '(module m '#%core
-                            (#%require '#%core)
-                            (#%provide list)
-                            (define-values (list) 0)))
- #rx"already required or defined")
+                            (#%require '#%core 
+                                       'definition-shadows-initial-require)))
+ #rx"already required")
+
+(check-error
+ (eval-module-declaration '(module m '#%core
+                            (define-values (list) 5)
+                            (#%require '#%core)))
+ #rx"already defined")
 
 ;; ----------------------------------------
 

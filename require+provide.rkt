@@ -14,7 +14,8 @@
          (struct-out required)
          add-required-module!
          add-defined-or-required-id!
-         check-not-required-or-defined
+         remove-required-id!
+         check-not-defined
          extract-module-requires
          extract-module-definitions
          
@@ -72,12 +73,28 @@
                                null))
                 #hasheqv()))
 
-;; Check whether an identifier has a binding that is from a non-shadowable
-;; require
-(define (check-not-required-or-defined r+p id phase #:in orig-s
-                                       #:unless-matches [ok-binding #f])
+;; Removes a required identifier, in anticiation of it being defined
+(define (remove-required-id! r+p id phase)
   (define b (resolve+shift id phase #:exactly? #t))
   (when b
+    (hash-update! (requires+provides-requires r+p)
+                  (module-binding-nominal-module b)
+                  (lambda (at-mod)
+                    (hash-set at-mod
+                              (module-binding-nominal-require-phase b)
+                              null))
+                  #hasheqv())))
+
+;; Check whether an identifier has a binding that is from a non-shadowable
+;; require
+(define (check-not-defined #:check-not-required? [check-not-required? #f]
+                           r+p id phase #:in orig-s
+                           #:unless-matches [ok-binding #f])
+  (define b (resolve+shift id phase #:exactly? #t))
+  (define defined? (and b (eq? (requires+provides-self r+p)
+                               (module-binding-module b))))
+  (when (and b
+             (or check-not-required? defined?))
     (define at-mod (hash-ref (requires+provides-requires r+p)
                              (module-binding-nominal-module b)
                              #f))
@@ -89,7 +106,8 @@
                       (not (required-can-shadow? r))
                       (or (not ok-binding)
                           (not (same-binding? b ok-binding))))
-             (error "already required or defined:" id "in" orig-s "at" phase))))))
+             (error (format "already ~a:" (if defined? "defined" "required"))
+                    id "in" orig-s "at" phase))))))
 
 ;; Get all the bindings imported from a given module
 (define (extract-module-requires r+p mod-name phase)
