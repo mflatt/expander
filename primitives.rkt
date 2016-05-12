@@ -45,6 +45,7 @@
                       identifier-binding
                       identifier-binding-symbol
                       identifier-prune-lexical-context
+                      syntax-track-origin
                       
                       syntax-source
                       syntax-line
@@ -89,6 +90,7 @@
                       
                       syntax-local-module-defined-identifiers
                       syntax-local-module-required-identifiers
+                      syntax-local-module-exports
                       
                       syntax-local-get-shadower
                       

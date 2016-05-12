@@ -10,7 +10,8 @@
                     [identifier-binding raw:identifier-binding]
                     [identifier-binding-symbol raw:identifier-binding-symbol])
          "syntax-local.rkt"
-         "srcloc.rkt")
+         "srcloc.rkt"
+         "contract.rkt")
 
 (provide syntax->datum
          datum->syntax
@@ -19,11 +20,11 @@
          free-identifier=?
          identifier-binding
          identifier-binding-symbol
-         identifier-prune-lexical-context)
+         identifier-prune-lexical-context
+         syntax-track-origin)
 
 (define (syntax->datum s)
-  (unless (syntax? s)
-    (raise-argument-error 'syntax->datum "syntax?" s))
+  (check 'syntax->datum syntax? s)
   (raw:syntax->datum s))
 
 (define (datum->syntax stx-c s [stx-l #f] [stx-p #f] [ignored #f])
@@ -38,8 +39,7 @@
   (raw:datum->syntax stx-c s (to-srcloc-stx stx-l) stx-p))
 
 (define (syntax->list s)
-  (unless (syntax? s)
-    (raise-argument-error 'syntax->list "syntax?" s))
+  (check syntax->list syntax? s)
   (define l
     (let loop ([s s])
       (cond
@@ -50,42 +50,43 @@
        l))
 
 (define (bound-identifier=? a b [phase (syntax-local-phase-level)])
-  (unless (identifier? a)
-    (raise-argument-error 'bound-identifier=? "identifier?" a))
-  (unless (identifier? b)
-    (raise-argument-error 'bound-identifier=? "identifier?" b))
+  (check 'bound-identifier=? identifier? a)
+  (check 'bound-identifier=? identifier? b)
   (unless (phase? phase)
-    (raise-argument-error 'bound-identifier=? "(or/c exact-nonnegative-integer? #f)" phase))
+    (raise-argument-error 'bound-identifier=? phase?-string phase))
   (raw:bound-identifier=? a b phase))
 
 (define (free-identifier=? a b [phase (syntax-local-phase-level)])
-  (unless (identifier? a)
-    (raise-argument-error 'free-identifier=? "identifier?" a))
-  (unless (identifier? b)
-    (raise-argument-error 'free-identifier=? "identifier?" b))
+  (check 'free-identifier=? identifier? a)
+  (check 'free-identifier=? identifier? b)
   (unless (phase? phase)
-    (raise-argument-error 'free-identifier=? "(or/c exact-nonnegative-integer? #f)" phase))
+    (raise-argument-error 'free-identifier=? phase?-string phase))
   (raw:free-identifier=? a b phase))
 
 (define (identifier-binding id [phase (syntax-local-phase-level)])
-  (unless (identifier? id)
-    (raise-argument-error 'identifier-binding "identifier?" id))
+  (check 'identifier-binding identifier? id)
   (unless (phase? phase)
-    (raise-argument-error 'identifier-binding "(or/c exact-nonnegative-integer? #f)" phase))
+    (raise-argument-error 'identifier-binding phase?-string phase))
   (raw:identifier-binding id phase))
 
 (define (identifier-binding-symbol id [phase (syntax-local-phase-level)])
-  (unless (identifier? id)
-    (raise-argument-error 'identifier-binding-symbol "identifier?" id))
+  (check 'identifier-binding-symbol identifier? id)
   (unless (phase? phase)
-    (raise-argument-error 'identifier-binding-symbol "(or/c exact-nonnegative-integer? #f)" phase))
+    (raise-argument-error 'identifier-binding-symbol phase?-string phase))
   (raw:identifier-binding-symbol id phase))
 
 (define (identifier-prune-lexical-context id [syms null])
-  (unless (identifier? id)
-    (raise-argument-error 'identifier-prune-lexical-context "identifier?" id))
+  (check 'identifier-prune-lexical-context identifier? id)
   (unless (and (list? syms)
                (andmap symbol? syms))
     (raise-argument-error 'identifier-prune-lexical-context "(listof symbol?)" syms))
   ;; It's a no-op in the Racket v6.5 expander
   id)
+
+(define (syntax-track-origin new-stx old-stx id)
+  (check 'syntax-track-origin syntax? new-stx)
+  (check 'syntax-track-origin syntax? old-stx)
+  (check 'syntax-track-origin identifier? id)
+  ;; No-op for now
+  new-stx)
+

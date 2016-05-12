@@ -10,7 +10,9 @@
          "rename-trans.rkt"
          "lift-context.rkt"
          "require+provide.rkt"
-         "module-path.rkt")
+         "module-path.rkt"
+         "namespace.rkt"
+         "contract.rkt")
 
 (provide get-current-expand-context
          flip-introduction-scopes
@@ -44,6 +46,7 @@
          
          syntax-local-module-defined-identifiers
          syntax-local-module-required-identifiers
+         syntax-local-module-exports
          
          syntax-local-get-shadower)
 
@@ -86,14 +89,12 @@
   (expand-context-context ctx))
 
 (define (syntax-local-introduce s)
-  (unless (syntax? s)
-    (raise-argument-error 'syntax-local-introduce "syntax?" s))
+  (check 'syntax-local-introduce syntax? s)
   (define ctx (get-current-expand-context 'syntax-local-introduce))
   (flip-introduction-scopes s ctx))
 
 (define (syntax-local-identifier-as-binding id)
-  (unless (identifier? id)
-    (raise-argument-error 'syntax-local-identifier-as-binding "identifier?" id))
+  (check syntax-local-identifier-as-binding identifier? id)
   (define ctx (get-current-expand-context 'syntax-local-identifier-as-binding))
   (remove-use-site-scopes id ctx))
 
@@ -115,8 +116,7 @@
 (define (make-syntax-introducer [as-use-site? #f])
   (define sc (new-scope))
   (lambda (s [mode 'flip])
-    (unless (syntax? s)
-      (raise-argument-error 'syntax-introducer "syntax?" s))
+    (check 'syntax-introducer syntax? s)
     (case mode
       [(add) (add-scope s sc)]
       [(remove) (remove-scope s sc)]
@@ -124,12 +124,10 @@
       [else (raise-argument-error 'syntax-introducer "(or/c 'add 'remove 'flip)" mode)])))
 
 (define (make-syntax-delta-introducer ext-s base-s [phase (syntax-local-phase-level)])
-  (unless (syntax? ext-s)
-    (raise-argument-error 'make-syntax-delta-introducer "syntax?" ext-s))
-  (unless (syntax? base-s)
-    (raise-argument-error 'make-syntax-delta-introducer "syntax?" base-s))
+  (check 'make-syntax-delta-introducer syntax? ext-s)
+  (check 'make-syntax-delta-introducer syntax? base-s)
   (unless (phase? phase)
-    (raise-argument-error 'make-syntax-delta-introducer "phase?" phase))
+    (raise-argument-error 'make-syntax-delta-introducer phase?-string phase))
   (define ext-scs (syntax-scope-set ext-s phase))
   (define base-scs (syntax-scope-set base-s phase))
   (define delta-scs (set->list (set-subtract ext-scs base-scs)))
@@ -144,8 +142,7 @@
 
 (define (do-syntax-local-value who id [failure-thunk #f]
                                #:immediate? [immediate? #f])
-  (unless (identifier? id)
-    (raise-argument-error who "identifier?" id))
+  (check who identifier? id)
   (unless (or (not failure-thunk)
               (and (procedure? failure-thunk)
                    (procedure-arity-includes? failure-thunk 0)))
@@ -184,10 +181,8 @@
 ;; ----------------------------------------
 
 (define (do-lift-values-expression who n s)
-  (unless (syntax? s)
-    (raise-argument-error who "syntax?" s))
-  (unless (exact-nonnegative-integer? n)
-    (raise-argument-error who "exact-nonnegative-integer?" n))
+  (check who syntax? s)
+  (check who exact-nonnegative-integer? n)
   (define ctx (get-current-expand-context who))
   (define lifts (expand-context-lifts ctx))
   (define ids (for/list ([i (in-range n)])
@@ -210,8 +205,7 @@
 ;; ----------------------------------------
 
 (define (syntax-local-lift-module s)
-  (unless (syntax? s)
-    (raise-argument-error 'syntax-local-lift-module "syntax?" s))
+  (check 'syntax-local-lift-module syntax? s)
   (define ctx (get-current-expand-context 'syntax-local-lift-module))
   (define phase (expand-context-phase ctx))
   (case (core-form-sym s phase)
@@ -225,8 +219,7 @@
 
 (define (do-local-lift-to-module who add! s filter
                                  #:more-checks [more-checks void])
-  (unless (syntax? s)
-    (raise-argument-error who "syntax?" s))
+  (check who syntax? s)
   (more-checks)
   (define ctx (get-current-expand-context who))
   (define phase (expand-context-phase ctx))
@@ -242,10 +235,9 @@
                            s
                            #:more-checks
                            (lambda ()
-                             (unless (syntax? use-s)
-                               (raise-argument-error 'syntax-local-lift-module-require
-                                                     "syntax?"
-                                                     use-s)))
+                             (check 'syntax-local-lift-module-require
+                                    syntax?
+                                    use-s))
                            (lambda (s phase end-as-expressions?)
                              (wrap-form '#%require
                                         (add-scope s sc)
@@ -290,10 +282,9 @@
   
   
 (define (syntax-local-module-required-identifiers mod-path phase-level)
-  (unless (module-path? mod-path)
-    (raise-argument-error 'syntax-local-module-required-identifiers "module-path?" mod-path))
+  (check 'syntax-local-module-required-identifiers module-path? mod-path)
   (unless (phase? phase-level)
-    (raise-argument-error 'syntax-local-module-required-identifiers "(or/c #f exact-nonnegative-integer?)" phase-level))
+    (raise-argument-error 'syntax-local-module-required-identifiers phase?-string phase-level))
   (unless (syntax-local-transforming-module-provides?)
     (raise-arguments-error 'syntax-local-module-required-identifiers "not currently transforming module provides"))
   (define ctx (current-expand-context))
@@ -315,9 +306,22 @@
 
 ;; ----------------------------------------
 
+(define (syntax-local-module-exports mod-path)
+  (check 'syntax-local-module-exports module-path? mod-path)
+  (define ctx (get-current-expand-context 'syntax-local-module-exports))
+  (define ns (expand-context-namespace ctx))
+  (define mod-name (resolve-module-path mod-path (namespace-module-name ns)))
+  (define m (namespace->module ns mod-name))
+  (unless m (error "module not declared:" mod-name))
+  (for/list ([(phase syms) (in-hash (module-provides m))])
+    (cons phase
+          (for/list ([sym (in-hash-keys syms)])
+            sym))))
+  
+;; ----------------------------------------
+
 (define (syntax-local-get-shadower id [only-generated? #f])
-  (unless (identifier? id)
-    (raise-argument-error 'syntax-local-get-shadower "identifier?" id))
+  (check 'syntax-local-get-shadower identifier? id)
   (define ctx (get-current-expand-context 'syntax-local-get-shadower))
   (add-scopes id (set->list
                   (syntax-scope-set (expand-context-all-scopes-stx ctx)

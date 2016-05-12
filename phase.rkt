@@ -2,7 +2,8 @@
 
 (provide phase?
          phase+
-         phase-)
+         phase-
+         phase?-string)
 
 ;; Terminology:
 ;;
@@ -24,3 +25,6 @@
 
 (define (phase- a b)
   (and a (- a b)))
+
+;; For contract errors:
+(define phase?-string "(or/c exact-integer? #f)")
