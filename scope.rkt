@@ -53,12 +53,31 @@
 ;; the phase-independent scopes. Since a multi-scope corresponds to
 ;; a module, the number of multi-scopes in a syntax is expected to
 ;; be small.
-(struct multi-scope (scopes)) ; phase -> representative-scope
+(struct multi-scope (id        ; identity
+                     scopes)) ; phase -> representative-scope
+
 (struct representative-scope scope (owner   ; a multi-scope for which this one is a phase-specific identity
-                                    phase)) ; phase of this scope
+                                    phase)  ; phase of this scope
+        #:property prop:custom-write
+        (lambda (sc port mode)
+          (write-string "#<scope:" port)
+          (display (scope-id sc) port)
+          (write-string "=" port)
+          (display (multi-scope-id (representative-scope-owner sc)) port)
+          (write-string "@" port)
+          (display (representative-scope-phase sc) port)
+          (write-string ">" port)))
+
 (struct shifted-multi-scope (phase        ; phase shift applies to all scopes in multi-scope
                              multi-scope) ; a multi-scope
-        #:transparent)
+        #:transparent
+        #:property prop:custom-write
+        (lambda (sc port mode)
+          (write-string "#<scope:" port)
+          (display (multi-scope-id (shifted-multi-scope-multi-scope sc)) port)
+          (write-string "@" port)
+          (display (shifted-multi-scope-phase sc) port)
+          (write-string ">" port)))
 
 ;; Each new scope increments the counter, so we can check whether one
 ;; scope is newer than another.
@@ -74,7 +93,7 @@
   (scope (new-scope-id!) kind (make-bindings)))
 
 (define (new-multi-scope [name (gensym)])
-  (shifted-multi-scope 0 (multi-scope (make-hasheqv))))
+  (shifted-multi-scope 0 (multi-scope (new-scope-id!) (make-hasheqv))))
 
 (define (multi-scope-to-scope-at-phase ms phase)
   ;; Get the identity of `ms` at phase`
