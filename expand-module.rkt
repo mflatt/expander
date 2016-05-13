@@ -280,7 +280,14 @@
       
    ;; Add `#%module-begin` around the body if it's not already present
    (define mb
-     (ensure-module-begin bodys inside-scope new-module-scopes  initial-require-s ctx phase s))
+     (ensure-module-begin bodys 
+                          #:inside-scope inside-scope
+                          #:new-module-scopes new-module-scopes
+                          #:initial-require-s initial-require-s
+                          #:m-ns m-ns
+                          #:ctx ctx 
+                          #:phase phase
+                          #:s s))
    
    ;; Expand the body
    (define expanded-mb
@@ -311,7 +318,14 @@
 ;; ----------------------------------------
 
 ;; Add `#%module-begin` to `bodys`, if needed
-(define (ensure-module-begin bodys inside-scope new-module-scopes initial-require-s ctx phase s)
+(define (ensure-module-begin bodys
+                             #:inside-scope inside-scope
+                             #:new-module-scopes new-module-scopes
+                             #:initial-require-s initial-require-s
+                             #:m-ns m-ns
+                             #:ctx ctx 
+                             #:phase phase
+                             #:s s)
   (cond
    [(= 1 (length bodys))
     ;; Maybe it's already a `#%module-begin` form, or maybe it
@@ -326,6 +340,7 @@
       (define partly-expanded-body
         (expand (car bodys) (struct-copy expand-context ctx
                                          [context 'module-begin]
+                                         [namespace m-ns]
                                          [only-immediate? #t]
                                          [post-expansion-scope inside-scope]
                                          [all-scopes-stx initial-require-s]
