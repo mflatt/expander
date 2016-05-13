@@ -16,7 +16,7 @@
 
 ;; Common expansion for `lambda` and `case-lambda`
 (define (lambda-clause-expander s formals bodys ctx)
-  (define sc (new-scope))
+  (define sc (new-scope 'local))
   (define phase (expand-context-phase ctx))
   ;; Parse and check formal arguments:
   (define ids (parse-and-flatten-formals formals sc))
@@ -101,7 +101,7 @@
                                     body ...+))
                   (match-syntax s '(let-values ([(val-id ...) val-rhs] ...)
                                     body ...+))))
-   (define sc (new-scope))
+   (define sc (new-scope 'local))
    (define phase (expand-context-phase ctx))
    ;; Add the new scope to each binding identifier:
    (define trans-idss (for/list ([ids (in-list (if syntaxes? (m 'trans-id) null))])

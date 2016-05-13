@@ -15,7 +15,8 @@
          "expand-require.rkt"
          "expand-provide.rkt"
          "compile.rkt"
-         "cross-phase.rkt")
+         "cross-phase.rkt"
+         "debug.rkt")
 
 (add-core-form!
  'module
@@ -63,7 +64,10 @@
                    null)
      id]
     [else
-     (error "unbound identifier:" (m 'id))])))
+     (error "unbound identifier:" (m 'id)
+            (syntax-debug-info (m 'id)
+                               (expand-context-phase ctx)
+                               #t))])))
 
 ;; ----------------------------------------
 
@@ -77,7 +81,7 @@
                (module-path? initial-require))
      (error "not a module path:" (m 'initial-require)))
    
-   (define outside-scope (new-scope))
+   (define outside-scope (new-scope 'module))
    (define inside-scope (new-multi-scope))
    (define new-module-scopes (append (list inside-scope outside-scope)
                                      (if keep-enclosing-scope-at-phase

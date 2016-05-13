@@ -22,6 +22,9 @@
          
          bound-identifier=?)
 
+(module+ for-debug
+  (provide (struct-out scope)))
+
 ;; A scope represents a distinct "dimension" of binding. We can attach
 ;; the bindings for a set of scopes to an arbitrary scope in the set;
 ;; we pick the most recently allocated scope to make a binding search
@@ -29,6 +32,7 @@
 ;; generally not share a most-recent scope.
 
 (struct scope (id          ; internal scope identity; used for sorting
+               kind        ; debug info
                bindings)   ; sym -> scope-set -> binding
         ;; Custom printer:
         #:property prop:custom-write
@@ -66,8 +70,8 @@
 (define (make-bindings)
   (make-hasheq))
 
-(define (new-scope)
-  (scope (new-scope-id!) (make-bindings)))
+(define (new-scope kind)
+  (scope (new-scope-id!) kind (make-bindings)))
 
 (define (new-multi-scope [name (gensym)])
   (shifted-multi-scope 0 (multi-scope (make-hasheqv))))
@@ -75,7 +79,7 @@
 (define (multi-scope-to-scope-at-phase ms phase)
   ;; Get the identity of `ms` at phase`
   (or (hash-ref (multi-scope-scopes ms) phase #f)
-      (let ([s (representative-scope (new-scope-id!) (make-bindings) ms phase)])
+      (let ([s (representative-scope (new-scope-id!) 'module (make-bindings) ms phase)])
         (hash-set! (multi-scope-scopes ms) phase s)
         s)))
 

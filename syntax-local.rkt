@@ -114,7 +114,7 @@
 ;; ----------------------------------------
 
 (define (make-syntax-introducer [as-use-site? #f])
-  (define sc (new-scope))
+  (define sc (new-scope (if as-use-site? 'use-site 'macro)))
   (lambda (s [mode 'flip])
     (check 'syntax-introducer syntax? s)
     (case mode
@@ -188,7 +188,7 @@
   (define ids (for/list ([i (in-range n)])
                 ;; FIXME: use deterministic counter
                 (define name (gensym 'lifted))
-                (add-scope (datum->syntax #f name) (new-scope))))
+                (add-scope (datum->syntax #f name) (new-scope 'macro))))
   ;; returns converted ids:
   (add-lifted! lifts ids s (expand-context-phase ctx)))
 
@@ -229,7 +229,7 @@
         phase))
 
 (define (syntax-local-lift-require s use-s)
-  (define sc (new-scope))
+  (define sc (new-scope 'macro))
   (do-local-lift-to-module 'syntax-local-lift-module-require
                            add-lifted-to-module-require!
                            s

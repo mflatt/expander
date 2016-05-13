@@ -45,6 +45,7 @@
                       identifier-binding
                       identifier-binding-symbol
                       identifier-prune-lexical-context
+                      syntax-debug-info
                       syntax-track-origin
                       
                       syntax-source

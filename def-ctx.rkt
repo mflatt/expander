@@ -30,7 +30,7 @@
 ;; syntax-local-make-definition-context
 (define (syntax-local-make-definition-context [parent-ctx #f] [add-scope? #t])
   (void (get-current-expand-context 'syntax-local-make-definition-context))
-  (define sc (new-scope))
+  (define sc (new-scope 'intdef))
   (internal-definition-context sc add-scope? (box null)))
 
 ;; syntax-local-bind-syntaxes

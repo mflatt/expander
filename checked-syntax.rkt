@@ -11,7 +11,9 @@
                     [identifier-binding-symbol raw:identifier-binding-symbol])
          "syntax-local.rkt"
          "srcloc.rkt"
-         "contract.rkt")
+         "contract.rkt"
+         (rename-in "debug.rkt"
+                    [syntax-debug-info raw:syntax-debug-info]))
 
 (provide syntax->datum
          datum->syntax
@@ -82,6 +84,12 @@
     (raise-argument-error 'identifier-prune-lexical-context "(listof symbol?)" syms))
   ;; It's a no-op in the Racket v6.5 expander
   id)
+
+(define (syntax-debug-info s [phase (syntax-local-phase-level)] [all-bindings? #f])
+  (check 'syntax-debug-info syntax? s)
+  (unless (phase? phase)
+    (raise-argument-error 'syntax-debug-info phase?-string phase))
+  (raw:syntax-debug-info s phase all-bindings?))
 
 (define (syntax-track-origin new-stx old-stx id)
   (check 'syntax-track-origin syntax? new-stx)

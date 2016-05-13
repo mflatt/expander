@@ -235,7 +235,6 @@
   (define rec? (eq? core-sym 'letrec-values))
   (define m (match-syntax s '(let-values ([(id ...) rhs] ...) body)))
   (define phase (compile-context-phase cctx))
-  (define sc (new-scope))
   (define idss (m 'id))
   (define symss (for/list ([ids (in-list idss)])
                   (for/list ([id (in-list ids)])

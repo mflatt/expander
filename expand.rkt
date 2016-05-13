@@ -129,7 +129,7 @@
 ;; Given a macro transformer `t`, apply it --- adding appropriate
 ;; scopes to represent the expansion step
 (define (apply-transformer t s ctx)
-  (define intro-scope (new-scope))
+  (define intro-scope (new-scope 'macro))
   (define intro-s (add-scope s intro-scope))
   ;; In a definition context, we need use-site scopes
   (define-values (use-s use-scopes) (maybe-add-use-site-scope intro-s ctx))
@@ -153,7 +153,7 @@
     ;; We're in a recursive definition context where use-site scopes
     ;; are needed, so create one, record it, and add to the given
     ;; syntax
-    (define sc (new-scope))
+    (define sc (new-scope 'use-site))
     (define b (expand-context-use-site-scopes ctx))
     (set-box! b (cons sc (unbox b)))
     (values (add-scope s sc) (list sc))]
@@ -193,10 +193,10 @@
 (define (expand-body bodys sc s ctx)
   ;; The outside-edge scope identifies the original content of the
   ;; definition context
-  (define outside-sc (new-scope))
+  (define outside-sc (new-scope 'local))
   ;; The inside-edge scope identifiers any form that appears (perhaps
   ;; through macro expansion) in the definition context
-  (define inside-sc (new-scope))
+  (define inside-sc (new-scope 'intdef))
   (define init-bodys
     (for/list ([body (in-list bodys)])
       (add-scope (add-scope (add-scope body sc) outside-sc) inside-sc)))
