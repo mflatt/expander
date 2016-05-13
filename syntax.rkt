@@ -1,5 +1,6 @@
 #lang racket/base
-(require racket/set)
+(require racket/set
+         "prefab.rkt")
 
 (provide
  (struct-out syntax) ; includes `syntax?` and `syntax-e`
@@ -8,6 +9,8 @@
  
  syntax->datum
  datum->syntax
+ 
+ syntax-map
  
  syntax-property)
 
@@ -41,12 +44,7 @@
   (and (syntax? s) (symbol? (syntax-e s))))
 
 (define (syntax->datum s)
-  (let loop ([s (syntax-e s)])
-    (cond
-     [(syntax? s) (loop (syntax-e s))]
-     [(pair? s) (cons (loop (car s))
-                      (loop (cdr s)))]
-     [else s])))
+  (syntax-map s (lambda (tail? x) x) (lambda (s d) d)))
 
 (define (datum->syntax stx-c s [stx-l #f] [stx-p #f])
   (define (wrap e)
@@ -62,13 +60,56 @@
                 empty-mpi-shifts)
             (and stx-l (syntax-srcloc stx-l))
             (if stx-p (syntax-props stx-p) empty-props)))
-  (cond
-   [(syntax? s) s]
-   [(list? s) (wrap (for/list ([e (in-list s)])
-                      (datum->syntax stx-c e stx-l stx-p)))]
-   [(pair? s) (wrap (cons (datum->syntax stx-c (car s) stx-l stx-p)
-                          (datum->syntax stx-c (cdr s) stx-l stx-p)))]
-   [else (wrap s)]))
+  (syntax-map s
+              (lambda (tail? x) (if tail? x (wrap x)))
+              #f))
+
+;; `(syntax-map s f d->s)` walks over `s`:
+;; 
+;;  * `(f tail? d)` is called to each datum `d`, where `tail?`
+;;  indicates that the value is a pair/null in a `cdr` --- so that it
+;;  doesn't need to be wrapped for `datum->syntax`, for example
+;;
+;;  * if `d->s` is #f, then syntax object are returned as-is
+;;
+;;  * otherwise, `(d->s orig-s d)` is called for each syntax object
+;;  and the return of traversing its datum
+;;
+(define (syntax-map s f d->s)
+  (let loop ([tail? #f] [s s])
+    (cond
+     [(syntax? s) (if d->s
+                      (d->s s (loop #f (syntax-e s)))
+                      s)]
+     [(pair? s) (f tail? (cons (loop #f (car s))
+                               (loop #t (cdr s))))]
+     [(vector? s) (f #f (vector->immutable-vector
+                         (for/vector #:length (vector-length s) ([e (in-vector s)])
+                                     (loop #f e))))]
+     [(box? s) (f #f (box-immutable (loop #f (unbox s))))]
+     [(immutable-prefab-struct-key s)
+      => (lambda (key)
+           (f #f
+              (apply make-prefab-struct
+                     key
+                     (for/list ([e (in-vector (struct->vector s) 1)])
+                       (loop #f e)))))]
+     [(and (hash? s) (immutable? s))
+      (cond
+       [(hash-eq? s)
+        (f #f
+           (for/hasheq ([(k v) (in-hash s)])
+             (values k (loop #f v))))]
+       [(hash-eqv? s)
+        (f #f
+           (for/hasheqv ([(k v) (in-hash s)])
+             (values k (loop #f v))))]
+       [else
+        (f #f
+           (for/hash ([(k v) (in-hash s)])
+             (values k (loop #f v))))])]
+     [(null? s) (f tail? s)]
+     [else (f #f s)])))
 
 (define syntax-property
   (case-lambda

@@ -182,15 +182,13 @@
   (if (eq? from-mpi to-mpi)
       s
       (let ([shift (cons from-mpi to-mpi)])
-        (let loop ([s s])
-          (cond
-           [(syntax? s) (struct-copy syntax s
-                                     [e (loop (syntax-e s))]
-                                     [mpi-shifts
-                                      (cons shift (syntax-mpi-shifts s))])]
-           [(pair? s) (cons (loop (car s))
-                            (loop (cdr s)))]
-           [else s])))))
+        (syntax-map s
+                    (lambda (tail? d) d)
+                    (lambda (s d)
+                      (struct-copy syntax s
+                                   [e d]
+                                   [mpi-shifts
+                                    (cons shift (syntax-mpi-shifts s))]))))))
 
 ;; Use `resolve` instead of `resolve+shift` when the module of a module
 ;; binding is relevant; module path index shifts attached to `s` are

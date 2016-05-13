@@ -89,9 +89,11 @@
 ;; FIXME: Adding, removing, or flipping a scope currently recurs
 ;; through a syntax object eagerly, but it should be lazy
 (define (apply-scope s sc op)
-  (cond
-   [(syntax? s) (struct-copy syntax s
-                             [e (apply-scope (syntax-e s) sc op)]
+  (syntax-map s
+              (lambda (tail? x) x)
+              (lambda (s d)
+                (struct-copy syntax s
+                             [e d]
                              [scopes
                               (if (shifted-multi-scope? sc)
                                   (syntax-scopes s)
@@ -99,10 +101,7 @@
                              [shifted-multi-scopes
                               (if (shifted-multi-scope? sc)
                                   (op (syntax-shifted-multi-scopes s) sc)
-                                  (syntax-shifted-multi-scopes s))])]
-   [(pair? s) (cons (apply-scope (car s) sc op)
-                    (apply-scope (cdr s) sc op))]
-   [else s]))
+                                  (syntax-shifted-multi-scopes s))]))))
 
 ;; When a representative-scope is manipulated, we want to
 ;; manipulate the multi scope, instead (at a particular
@@ -154,16 +153,14 @@
 (define (syntax-shift-phase-level s phase)
   (if (eqv? phase 0)
       s
-      (let loop ([s s])
-        (cond
-         [(syntax? s) (struct-copy syntax s
-                                   [e (loop (syntax-e s))]
-                                   [shifted-multi-scopes
-                                    (for/set ([sms (in-set (syntax-shifted-multi-scopes s))])
-                                      (shift-multi-scope sms phase))])]
-         [(pair? s) (cons (loop (car s))
-                          (loop (cdr s)))]
-         [else s]))))
+      (syntax-map s
+                  (lambda (tail? d) d)
+                  (lambda (s d)
+                    (struct-copy syntax s
+                                 [e d]
+                                 [shifted-multi-scopes
+                                  (for/set ([sms (in-set (syntax-shifted-multi-scopes s))])
+                                    (shift-multi-scope sms phase))])))))
 
 ;; ----------------------------------------
 

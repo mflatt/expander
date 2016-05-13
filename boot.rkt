@@ -94,5 +94,5 @@
                                     (lambda ()
                                       (read-syntax (object-name i) i))))))))
 
-;(namespace-require 'racket)
-(namespace-require '(file "/tmp/m.rkt"))
+(namespace-require 'racket)
+
