@@ -49,26 +49,6 @@
    ;; The `#%module-begin` expander handles `#%declare`
    (error "not in module body:" s)))
 
-(add-core-form!
- '#%top
- (lambda (s ctx)
-   (define m (match-syntax s '(#%top . id)))
-   (cond
-    [(expand-context-need-eventually-defined ctx)
-     ;; In top level or `begin-for-syntax`, encountered a reference to a
-     ;; variable that might be defined later; record it for later checking
-     (define id (m 'id))
-     (hash-update! (expand-context-need-eventually-defined ctx)
-                   (expand-context-phase ctx)
-                   (lambda (l) (cons id l))
-                   null)
-     id]
-    [else
-     (error "unbound identifier:" (m 'id)
-            (syntax-debug-info (m 'id)
-                               (expand-context-phase ctx)
-                               #t))])))
-
 ;; ----------------------------------------
 
 (define (expand-module s ctx enclosing-self
@@ -786,12 +766,15 @@
       [(define-syntaxes)
        ;; already evaluated during expandion
        (void)]
-      [(#f)
-       ;; an expression
-       (expand-time-eval `(#%expression ,(compile-top (car bodys) phase m-ns)))]
+      [(#%provide #%require module module* begin-for-syntax #%declare)
+       ;; handled earlier or later
+       (void)]
       [else
-       ;; other forms handled earlier or later
-       (void)])))
+       ;; an expression
+       (expand-time-eval (compile-top body (make-compile-context
+                                            #:namespace m-ns
+                                            #:phase phase
+                                            #:compile-time-for-self self)))])))
 
 ;; ----------------------------------------
 

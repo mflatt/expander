@@ -285,15 +285,50 @@
  'begin0
  (make-begin))
 
+(define (register-eventual-variable!? id ctx)
+  (cond
+   [(expand-context-need-eventually-defined ctx)
+    ;; In top level or `begin-for-syntax`, encountered a reference to a
+    ;; variable that might be defined later; record it for later checking
+    (hash-update! (expand-context-need-eventually-defined ctx)
+                  (expand-context-phase ctx)
+                  (lambda (l) (cons id l))
+                  null)
+    #t]
+   [else #f]))
+
+(add-core-form!
+ '#%top
+ (lambda (s ctx)
+   (define m (match-syntax s '(#%top . id)))
+   (define id (m 'id))
+   (cond
+    [(register-eventual-variable!? id ctx)
+     id]
+    [else
+     (error "unbound identifier:" (m 'id)
+            (syntax-debug-info (m 'id)
+                               (expand-context-phase ctx)
+                               #t))])))
+
 (add-core-form!
  'set!
  (lambda (s ctx)
    (define m (match-syntax s '(set! id rhs)))
-   (define binding (resolve+shift (m 'id) (expand-context-phase ctx)))
-   (unless binding
-     (error "no binding for assignment:" s))
-   (define t (lookup binding ctx s))
+   (define id (m 'id))
+   (define binding (resolve+shift id (expand-context-phase ctx)))
+   (define t (and binding (lookup binding ctx s)))
    (cond
+    [(or (variable? t)
+         (and (not binding)
+              (register-eventual-variable!? id ctx)))
+     (rebuild
+      s
+      (list (m 'set!)
+            id
+            (expand (m 'rhs) (as-expression-context ctx))))]
+    [(not binding)
+     (error "no binding for assignment:" s)]
     [(set!-transformer? t)
      (expand (apply-transformer (transformer->procedure t) s ctx binding) ctx)]
     [(rename-transformer? t)
@@ -304,12 +339,6 @@
                             s
                             s)
              ctx)]
-    [(variable? t)
-     (rebuild
-      s
-      (list (m 'set!)
-            (m 'id)
-            (expand (m 'rhs) (as-expression-context ctx))))]
     [else (error "cannot assign to syntax:" s)])))
 
 (add-core-form!

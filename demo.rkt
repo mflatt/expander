@@ -37,7 +37,9 @@
   (for ([out (in-list outs)]) (println out o-expected))
   (unless (equal? (get-output-bytes o)
                   (get-output-bytes o-expected))
-    (error "output check failed")))
+    (error "output check failed:"
+           (get-output-bytes o)
+           "vs." (get-output-bytes o-expected))))
 
 (define-syntax-rule (check-error expr rx)
   (check-thunk-error (lambda () expr) rx))
@@ -633,12 +635,21 @@
 
 ;; ----------------------------------------
 
-(eval-module-declaration '(module forward-reference-in-begin-for-syntax '#%core
-                           (#%require (for-syntax '#%core))
-                           (begin-for-syntax
-                             (define-values (even) (lambda () odd)))
-                           (begin-for-syntax
-                             (define-values (odd) (lambda () even)))))
+(check-print
+ (eval-module-declaration '(module forward-reference-in-begin-for-syntax '#%core
+                            (#%require (for-syntax '#%core))
+                            (begin-for-syntax
+                              (define-values (even) (lambda () odd)))
+                            (begin-for-syntax
+                              (define-values (odd) (lambda () even)))
+                            (begin-for-syntax
+                              (define-values (assign-later!) (lambda () (set! later also-later))))
+                            (begin-for-syntax
+                             (define-values (later) 5)
+                             (define-values (also-later) 6)
+                             (assign-later!)
+                             (println later))))
+ 6)
 
 ;; ----------------------------------------
 

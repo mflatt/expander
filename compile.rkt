@@ -117,9 +117,8 @@
                          (compile e)))]
         [(set!)
          (define m (match-syntax s '(set! id rhs)))
-         `(set!
-           ,(compile (m 'id))
-           ,(compile (m 'rhs)))]
+         `(,@(compile-identifier (m 'id) cctx
+                                 #:set-to (compile (m 'rhs))))]
         [(let-values letrec-values)
          (compile-let core-sym s cctx)]
         [(#%expression)
@@ -161,62 +160,7 @@
         [else
          (error "unrecognized core form:" core-sym)])]
      [(identifier? s)
-      (define normal-b (resolve+shift s phase))
-      (define b
-        (cond
-         [(and (not normal-b)
-               (compile-context-compile-time-for-self cctx))
-          ;; Assume a forward reference
-          (module-binding #f
-                          (compile-context-compile-time-for-self cctx) phase (syntax-e s)
-                          (compile-context-compile-time-for-self cctx) phase (syntax-e s)
-                          0)]
-         [else normal-b]))
-      (cond
-       [(local-binding? b)
-        (define sym (key->symbol (local-binding-key b)))
-        (unless sym
-          (error "missing a binding after expansion:" s))
-        sym]
-       [(module-binding? b)
-        (define mpi (module-binding-module b))
-        (define mod-name (module-path-index-resolve mpi))
-        (define ns (compile-context-namespace cctx))
-        (define mod (namespace->module ns mod-name))
-        (cond
-         [(and mod (module-primitive? mod))
-          ;; Inline a core binding:
-          (unless (zero? (module-binding-phase b))
-            (error "internal error: non-zero phase for a primitive"))
-          (namespace-module-instantiate! ns mod-name 0)
-          (define m-ns (namespace->module-namespace ns mod-name 0))
-          `(quote ,(or (namespace-get-variable m-ns 0 (module-binding-sym b) #f)
-                       (error "internal error: bad primitive reference:"
-                              (module-binding-module b)
-                              phase (module-binding-sym b) (module-binding-phase b))))]
-         [(eq? mpi (compile-context-self cctx))
-          ;; Direct reference to a variable defined in the same module:
-          (module-binding-sym b)]
-         [else
-          ;; Reference to a variable defined in another module; we'll look up
-          ;; the variable's box once at the top
-          (define key (variable-use (module-binding-module b)
-                                    (module-binding-phase b)
-                                    (module-binding-sym b)))
-          (define variable-uses (top-init-variable-uses
-                                 (compile-context-top-init cctx)))
-          (define sym (or (hash-ref variable-uses key #f)
-                          (let ([sym (gensym (variable-use-sym key))])
-                            (hash-set! variable-uses key sym)
-                            sym)))
-          (cond
-           [(eq? mpi (compile-context-compile-time-for-self cctx))
-            ;; To allow forward references, we need an use-before-definition check
-            `(check-defined (unbox ,sym) ',(module-binding-sym b))]
-           [else
-            `(unbox ,sym)])])]
-       [else
-        (error "not a reference to a module or local binding:" s)])]
+      (compile-identifier s cctx)]
      [else
       (error "bad syntax after expansion:" s)])))
 
@@ -244,6 +188,80 @@
                           [rhs (in-list (m 'rhs))])
                  `[,syms ,(compile rhs cctx)])
     ,(compile (m 'body) cctx)))
+
+(define (compile-identifier s cctx #:set-to [rhs #f])
+  (define (direct sym)
+    (if rhs
+        `(set! ,sym ,rhs)
+        sym))
+  (define (indirect sym)
+    (if rhs
+        `(set-box! ,sym ,rhs)
+        `(unbox ,sym)))
+  (define phase (compile-context-phase cctx))
+  (define normal-b (resolve+shift s phase))
+  (define b
+    (cond
+     [(and (not normal-b)
+           (compile-context-compile-time-for-self cctx))
+      ;; Assume a forward reference
+      (module-binding #f
+                      (compile-context-compile-time-for-self cctx) phase (syntax-e s)
+                      (compile-context-compile-time-for-self cctx) phase (syntax-e s)
+                      0)]
+     [else normal-b]))
+  (cond
+   [(local-binding? b)
+    (define sym (key->symbol (local-binding-key b)))
+    (unless sym
+      (error "missing a binding after expansion:" s))
+    (direct sym)]
+   [(module-binding? b)
+    (define mpi (module-binding-module b))
+    (define mod-name (module-path-index-resolve mpi))
+    (define ns (compile-context-namespace cctx))
+    (define mod (namespace->module ns mod-name))
+    (cond
+     [(and mod (module-primitive? mod))
+      ;; Inline a core binding:
+      (unless (zero? (module-binding-phase b))
+        (error "internal error: non-zero phase for a primitive"))
+      (when rhs
+        (error "internal error: cannot assign to a primitive:" s))
+      (namespace-module-instantiate! ns mod-name 0)
+      (define m-ns (namespace->module-namespace ns mod-name 0))
+      `(quote ,(or (namespace-get-variable m-ns 0 (module-binding-sym b) #f)
+                   (error "internal error: bad primitive reference:"
+                          (module-binding-module b)
+                          phase (module-binding-sym b) (module-binding-phase b))))]
+     [(eq? mpi (compile-context-self cctx))
+      ;; Direct reference to a variable defined in the same module:
+      (direct (module-binding-sym b))]
+     [else
+      ;; Reference to a variable defined in another module; we'll look up
+      ;; the variable's box once at the top
+      (define key (variable-use (module-binding-module b)
+                                (module-binding-phase b)
+                                (module-binding-sym b)))
+      (define variable-uses (top-init-variable-uses
+                             (compile-context-top-init cctx)))
+      (define sym (or (hash-ref variable-uses key #f)
+                      (let ([sym (gensym (variable-use-sym key))])
+                        (hash-set! variable-uses key sym)
+                        sym)))
+      (cond
+       [(eq? mpi (compile-context-compile-time-for-self cctx))
+        ;; To allow forward references, we need an use-before-definition check
+        (define check `(check-defined (unbox ,sym) ',(module-binding-sym b)))
+        (if rhs
+            `(begin
+              ,check
+              ,(indirect sym))
+            check)]
+       [else
+        (indirect sym)])])]
+   [else
+    (error "not a reference to a module or local binding:" s)]))
 
 ;; ----------------------------------------
                        
