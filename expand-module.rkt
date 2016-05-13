@@ -345,7 +345,8 @@
                         `(,(m 'define-syntaxes) ,ids ,exp-rhs))
                (loop (cdr bodys)))]
         [(#%require)
-         (define m (match-syntax exp-body '(#%require req ...)))
+         (define ready-body (remove-use-site-scopes exp-body partial-body-ctx))
+         (define m (match-syntax ready-body '(#%require req ...)))
          (parse-and-perform-requires! (m 'req) self
                                       m-ns phase
                                       requires+provides)
