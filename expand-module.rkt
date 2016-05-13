@@ -542,12 +542,12 @@
       [(define-syntaxes)
        ;; already evaluated during expandion
        (void)]
-      [(#f)
-       ;; an expression
-       (expand-time-eval `(#%expression ,(compile (car bodys) phase m-ns)))]
+      [(#%provide #%require module module* begin-for-syntax)
+       ;; handled earlier or later
+       (void)]
       [else
-       ;; other forms handled earlier or later
-       (void)])))
+       ;; an expression
+       (expand-time-eval (compile body phase m-ns))])))
 
 ;; ----------------------------------------
 
