@@ -92,13 +92,17 @@
                     (eval-s-expr s))))
 (current-load (lambda (path expected-module)
                 (log-error "load ~s" path)
-                (call-with-input-file*
-                 path
-                 (lambda (i)
-                   (port-count-lines! i)
-                   (eval-s-expr (with-module-reading-parameterization
-                                    (lambda ()
-                                      (read-syntax (object-name i) i))))))))
+                (with-handlers ([exn:fail? (lambda (exn)
+                                             (log-error "...during ~s..." path)
+                                             (raise exn))])
+                  (call-with-input-file*
+                   path
+                   (lambda (i)
+                     (port-count-lines! i)
+                     (eval-s-expr (with-module-reading-parameterization
+                                      (lambda ()
+                                        (read-syntax (object-name i) i)))))))))
 
 (namespace-require 'racket)
+
 

@@ -135,10 +135,7 @@
                                   (hash-keys phase-to-requireds)
                                   (list phase)))]
               [reqd (in-list (hash-ref phase-to-requireds phase null))])
-    (if (zero? phase)
-        reqd
-        (struct-copy required reqd
-                     [phase (phase+ phase (required-phase reqd))]))))
+    reqd))
 
 ;; ----------------------------------------
 
