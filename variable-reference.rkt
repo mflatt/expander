@@ -39,7 +39,7 @@
 
 (define (variable-reference->phase vr)
  (check 'variable-reference->phase variable-reference? vr)
- (variable-reference->phase vr))
+ (variable-reference-phase vr))
 
 (define (variable-reference->module-base-phase vr)
   (check 'variable-reference->module-base-phase variable-reference? vr)
