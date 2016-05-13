@@ -527,7 +527,12 @@
                            (define-syntaxes (m) (lambda (stx) ten))
                            (define-values (x) 1)
                            (println x)
-                           (#%provide (prefix-all-defined def:))
+                           (define-values (posn make-posn struct:posn posn? 
+                                                posn-x posn-y
+                                                set-posn-x! set-posn-y!)
+                             (values 1 2 3 4 5 6 7 8))
+                           (#%provide (prefix-all-defined def:)
+                                      (struct posn (x y))) 
                            (println (m))
                            (m)))
 

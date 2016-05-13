@@ -7,6 +7,7 @@
          "module-path.rkt"
          racket/set
          racket/runtime-path
+         syntax/modread
          (only-in racket/base
                   [dynamic-require base:dynamic-require]))
 
@@ -89,6 +90,8 @@
                  path
                  (lambda (i)
                    (port-count-lines! i)
-                   (eval-s-expr (read-syntax (object-name i) i))))))
+                   (eval-s-expr (with-module-reading-parameterization
+                                    (lambda ()
+                                      (read-syntax (object-name i) i))))))))
 
-(namespace-require 'racket/base)
+(namespace-require 'racket)
