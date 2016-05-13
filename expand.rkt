@@ -43,7 +43,7 @@
        (expand-implicit '#%top s ctx)]
       [else
        ;; Variable or form as identifier macro
-       (dispatch (lookup binding ctx s) s ctx)]))]
+       (dispatch (lookup binding ctx s) s ctx binding)]))]
    [(and (pair? (syntax-e s))
          (identifier? (car (syntax-e s))))
     ;; An "application" form that starts with an identifier
@@ -64,7 +64,7 @@
          (expand-implicit '#%app s ctx)]
         [else
          ;; Syntax or core form as "application"
-         (dispatch t s ctx)])]))]
+         (dispatch t s ctx binding)])]))]
    [(or (pair? (syntax-e s))
         (null? (syntax-e s)))
     ;; An "application" form that doesn't start with an identifier, so
@@ -99,9 +99,9 @@
     [(core-form? t)
      (if (expand-context-only-immediate? ctx)
          s
-         (dispatch t (datum->syntax s (cons sym s) s) ctx))]
+         (dispatch t (datum->syntax s (cons sym s) s) ctx b))]
     [(transformer? t)
-     (dispatch t (datum->syntax s (cons sym s) s) ctx)]
+     (dispatch t (datum->syntax s (cons sym s) s) ctx b)]
     [else
      (error (format "no transformer binding for ~a:" sym)
             s)])))
@@ -110,7 +110,7 @@
 ;; where `t` is either a core form, a macro transformer, some
 ;; other compile-time value (which is an error), or a token
 ;; indincating that the binding is a run-time variable
-(define (dispatch t s ctx)
+(define (dispatch t s ctx binding)
   (cond
    [(core-form? t)
     (if (expand-context-only-immediate? ctx)
@@ -118,7 +118,7 @@
         ((core-form-expander t) s ctx))]
    [(transformer? t)
     ;; Apply transformer and expand again
-    (expand (apply-transformer (transformer->procedure t) s ctx) ctx)]
+    (expand (apply-transformer (transformer->procedure t) s ctx binding) ctx)]
    [(variable? t)
     ;; A reference to a variable expands to itself
     s]
@@ -128,11 +128,11 @@
 
 ;; Given a macro transformer `t`, apply it --- adding appropriate
 ;; scopes to represent the expansion step
-(define (apply-transformer t s ctx)
+(define (apply-transformer t s ctx binding)
   (define intro-scope (new-scope 'macro))
   (define intro-s (add-scope s intro-scope))
   ;; In a definition context, we need use-site scopes
-  (define-values (use-s use-scopes) (maybe-add-use-site-scope intro-s ctx))
+  (define-values (use-s use-scopes) (maybe-add-use-site-scope intro-s ctx binding))
   ;; Call the transformer; the current expansion context may be needed
   ;; for `syntax-local-....` functions
   (define m-ctx (struct-copy expand-context ctx
@@ -147,9 +147,11 @@
   ;; any expansion result
   (maybe-add-post-expansion-scope result-s ctx))
 
-(define (maybe-add-use-site-scope s ctx)
+(define (maybe-add-use-site-scope s ctx binding)
   (cond
-   [(expand-context-use-site-scopes ctx)
+   [(and (expand-context-use-site-scopes ctx)
+         (eq? (expand-context-frame-id ctx)
+              (binding-frame-id binding)))
     ;; We're in a recursive definition context where use-site scopes
     ;; are needed, so create one, record it, and add to the given
     ;; syntax
@@ -201,6 +203,7 @@
     (for/list ([body (in-list bodys)])
       (add-scope (add-scope (add-scope body sc) outside-sc) inside-sc)))
   (define phase (expand-context-phase ctx))
+  (define frame-id (gensym))
   ;; Create an expansion context for expanding only immediate macros;
   ;; this partial-expansion phase uncovers macro- and variable
   ;; definitions in the definition context
@@ -212,6 +215,7 @@
                                                inside-sc
                                                (expand-context-scopes ctx))]
                                 [use-site-scopes (box null)]
+                                [frame-id frame-id]
                                 [all-scopes-stx
                                  (add-scope
                                   (add-scope (expand-context-all-scopes-stx ctx)
@@ -245,7 +249,7 @@
          (define ids (remove-use-site-scopes (m 'id) body-ctx))
          (define new-dups (check-no-duplicate-ids ids phase exp-body dups))
          (define keys (for/list ([id (in-list ids)])
-                        (add-local-binding! id phase)))
+                        (add-local-binding! id phase #:frame-id frame-id)))
          (define extended-env (for/fold ([env (expand-context-env body-ctx)]) ([key (in-list keys)])
                                 (env-extend env key variable)))
          (loop (struct-copy expand-context body-ctx
@@ -271,7 +275,7 @@
          (define ids (remove-use-site-scopes (m 'id) body-ctx))
          (define new-dups (check-no-duplicate-ids ids phase exp-body dups))
          (define keys (for/list ([id (in-list ids)])
-                        (add-local-binding! id phase)))
+                        (add-local-binding! id phase #:frame-id frame-id)))
          (define vals (eval-for-syntaxes-binding (m 'rhs) ids ctx))
          (define extended-env (for/fold ([env (expand-context-env body-ctx)]) ([key (in-list keys)]
                                                                                [val (in-list vals)])

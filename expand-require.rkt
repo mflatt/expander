@@ -238,9 +238,9 @@
   (define self (module-self m))
   (for ([(provide-phase-level provides) (in-hash (module-provides m))])
     (define phase (phase+ phase-shift provide-phase-level))
-    (for ([(sym binding) (in-hash provides)])
-      (define from-mod (module-binding-module binding))
-      (define b (struct-copy module-binding binding
+    (for ([(sym out-binding) (in-hash provides)])
+      (define from-mod (module-binding-module out-binding))
+      (define b (struct-copy module-binding out-binding
                              [module (if (eq? from-mod self)
                                          mpi
                                          (module-path-index-shift from-mod
@@ -249,7 +249,8 @@
                              [nominal-module mpi]
                              [nominal-phase provide-phase-level]
                              [nominal-sym sym]
-                             [nominal-require-phase phase-shift]))
+                             [nominal-require-phase phase-shift]
+                             [frame-id #:parent binding #f]))
       (let-values ([(sym) (filter b)])
         (when sym
           (add-binding! (datum->syntax in-stx sym) b phase))))))

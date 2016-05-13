@@ -282,20 +282,22 @@
   
   
 (define (syntax-local-module-required-identifiers mod-path phase-level)
-  (check 'syntax-local-module-required-identifiers module-path? mod-path)
-  (unless (phase? phase-level)
-    (raise-argument-error 'syntax-local-module-required-identifiers phase?-string phase-level))
+  (unless (or (not mod-path) (module-path? mod-path))
+    (raise-argument-error 'syntax-local-module-required-identifiers "(or/c module-path? #f)" mod-path))
+  (unless (or (eq? phase-level #t) (phase? phase-level))
+    (raise-argument-error 'syntax-local-module-required-identifiers (format "(or/c ~a #t)" phase?-string) phase-level))
   (unless (syntax-local-transforming-module-provides?)
     (raise-arguments-error 'syntax-local-module-required-identifiers "not currently transforming module provides"))
   (define ctx (current-expand-context))
   (define requires+provides (expand-context-requires+provides ctx))
-  (define mpi (module-path-index-join mod-path (requires+provides-self requires+provides)))
-  (define requireds (extract-module-requires requires+provides
-                                             mpi
-                                             phase-level))
-  (and requireds
-       (for/list ([(phase ids) (in-hash (requireds->phase-ht requireds))])
-         (cons phase ids))))
+  (define mpi (and mod-path
+                   (module-path-index-join mod-path (requires+provides-self requires+provides))))
+  (define requireds
+    (extract-all-module-requires requires+provides
+                                 mpi
+                                 (if (eq? phase-level #t) 'all phase-level)))
+  (for/list ([(phase ids) (in-hash (requireds->phase-ht requireds))])
+    (cons phase ids)))
 
 (define (requireds->phase-ht requireds)
   (for/fold ([ht (hasheqv)]) ([r (in-list requireds)])

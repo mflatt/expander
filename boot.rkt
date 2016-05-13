@@ -11,6 +11,10 @@
          (only-in racket/base
                   [dynamic-require base:dynamic-require]))
 
+;; The `#lang` reader doesn't use the reimplemented module system,
+;; so make sure the reader is loaded for `racket/base`:
+(base:dynamic-require 'racket/base/lang/reader #f)
+
 (define-runtime-path startup.rktl "startup.rktl")
 
 (define boot-ns (make-empty-core-namespace))
@@ -32,7 +36,8 @@
                 #hasheqv()
                 (hasheqv 0 (for/hash ([sym (in-list syms)])
                              (values sym
-                                     (module-binding to-mpi 0 sym
+                                     (module-binding #f
+                                                     to-mpi 0 sym
                                                      to-mpi 0 sym
                                                      0))))
                 0 0
@@ -58,6 +63,7 @@
 (copy-racket-module! '#%foreign)
 (copy-racket-module! '#%unsafe)
 (copy-racket-module! '#%flfxnum)
+(copy-racket-module! '#%extfl)
 (copy-racket-module! '#%network)
 (copy-racket-module! '#%place)
 (copy-racket-module! '#%futures)

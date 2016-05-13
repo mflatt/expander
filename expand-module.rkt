@@ -167,6 +167,7 @@
          ;; Pass 1: partially expand to discover all bindings and install all 
          ;; defined macro transformers
          
+         (define frame-id (gensym))
          (define partial-body-ctx (struct-copy expand-context ctx
                                                [context 'module]
                                                [phase phase]
@@ -175,10 +176,11 @@
                                                [post-expansion-scope inside-scope]
                                                [module-scopes new-module-scopes]
                                                [all-scopes-stx initial-require-s]
+                                               [frame-id frame-id]
                                                [need-eventually-defined (and (phase . >= . 1)
                                                                              need-eventually-defined)]
                                                [lifts (make-lift-context
-                                                       (make-wrap-as-definition self
+                                                       (make-wrap-as-definition self frame-id
                                                                                 inside-scope new-module-scopes
                                                                                 defined-syms requires+provides))]
                                                [module-lifts (make-module-lift-context #t)]
@@ -195,6 +197,7 @@
                                    #:ctx partial-body-ctx
                                    #:namespace m-ns
                                    #:self self
+                                   #:frame-id frame-id
                                    #:requires-and-provides requires+provides
                                    #:need-eventually-defined need-eventually-defined
                                    #:module-scopes new-module-scopes
@@ -413,6 +416,7 @@
                                 #:ctx partial-body-ctx
                                 #:namespace m-ns
                                 #:self self
+                                #:frame-id frame-id
                                 #:requires-and-provides requires+provides
                                 #:need-eventually-defined need-eventually-defined
                                 #:module-scopes module-scopes
@@ -459,7 +463,7 @@
           (define m (match-syntax exp-body '(define-values (id ...) rhs)))
           (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
           (check-ids-unbound ids phase requires+provides #:in exp-body)
-          (define syms (select-defined-syms-and-bind ids defined-syms self phase
+          (define syms (select-defined-syms-and-bind ids defined-syms self phase frame-id
                                                      module-scopes
                                                      requires+provides))
           (cons exp-body
@@ -468,7 +472,7 @@
           (define m (match-syntax exp-body '(define-syntaxes (id ...) rhs)))
           (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
           (check-ids-unbound ids phase requires+provides #:in exp-body)
-          (define syms (select-defined-syms-and-bind ids defined-syms self phase
+          (define syms (select-defined-syms-and-bind ids defined-syms self phase frame-id
                                                      module-scopes
                                                      requires+provides))
           ;; Expand and evaluate RHS:
@@ -524,13 +528,13 @@
                 (loop tail? (cdr bodys)))]))])))
 
 ;; Convert lifted identifiers plus expression to a `define-values` form:
-(define (make-wrap-as-definition self
+(define (make-wrap-as-definition self frame-id
                                  inside-scope module-scopes
                                  defined-syms requires+provides)
   (lambda (ids rhs phase)
     (define scoped-ids (for/list ([id (in-list ids)])
                          (add-scope id inside-scope)))
-    (select-defined-syms-and-bind scoped-ids defined-syms self phase
+    (select-defined-syms-and-bind scoped-ids defined-syms self phase frame-id
                                   module-scopes
                                   requires+provides)
     (values scoped-ids
@@ -724,7 +728,7 @@
   (for ([id (in-list ids)])
     (check-not-defined requires+provides id phase #:in s)))
 
-(define (select-defined-syms-and-bind ids defined-syms self phase
+(define (select-defined-syms-and-bind ids defined-syms self phase frame-id
                                       module-scopes
                                       requires+provides)
   (define defined-syms-at-phase
@@ -745,7 +749,8 @@
                 (loop (add1 pos))
                 s))))
     (hash-set! defined-syms-at-phase defined-sym id)
-    (define b (module-binding self phase defined-sym
+    (define b (module-binding frame-id
+                              self phase defined-sym
                               self phase defined-sym
                               0))
     (remove-required-id! requires+provides id phase)

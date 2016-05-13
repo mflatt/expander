@@ -167,7 +167,8 @@
          [(and (not normal-b)
                (compile-context-compile-time-for-self cctx))
           ;; Assume a forward reference
-          (module-binding (compile-context-compile-time-for-self cctx) phase (syntax-e s)
+          (module-binding #f
+                          (compile-context-compile-time-for-self cctx) phase (syntax-e s)
                           (compile-context-compile-time-for-self cctx) phase (syntax-e s)
                           0)]
          [else normal-b]))

@@ -295,7 +295,7 @@
    (define t (lookup binding ctx s))
    (cond
     [(set!-transformer? t)
-     (expand (apply-transformer (transformer->procedure t) s ctx) ctx)]
+     (expand (apply-transformer (transformer->procedure t) s ctx binding) ctx)]
     [(rename-transformer? t)
      (expand (datum->syntax s
                             (list (m 'set!)

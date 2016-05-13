@@ -17,6 +17,7 @@
                         module-scopes ; list of scopes for enclosing module or top level
                         all-scopes-stx ; all scopes from enclosing binding context; for `syntax-local-get-shadower`
                         context    ; 'expression, 'module, or 'top-level
+                        frame-id   ; #f or a gensym to identify a binding frame
                         phase      ; current expansion phase
                         namespace  ; namespace for modules and top-levels
                         env        ; environment for local bindings
@@ -40,6 +41,7 @@
                   (list (namespace-scope ns)) ; module-scopes
                   empty-syntax
                   'top-level
+                  #f   ; frame-id
                   0
                   ns
                   empty-env
@@ -71,7 +73,8 @@
    [else (struct-copy expand-context ctx
                       [context 'expression]
                       [name #f]
-                      [use-site-scopes #f])]))
+                      [use-site-scopes #f]
+                      [frame-id #f])]))
 
 ;; Adjusts `ctx` (which should be an expression context) to make it
 ;; suitable for a subexpression in tail position

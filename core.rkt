@@ -46,7 +46,8 @@
 
 (define (add-core-binding! sym)
   (add-binding! (datum->syntax core-stx sym)
-                (module-binding core-mpi 0 sym
+                (module-binding #f
+                                core-mpi 0 sym
                                 core-mpi 0 sym
                                 0)
                 0))
@@ -61,7 +62,8 @@
                 (hasheqv 0 (for/hasheq ([sym (in-sequences
                                               (in-hash-keys core-primitives)
                                               (in-hash-keys core-forms))])
-                             (values sym (module-binding core-mpi 0 sym
+                             (values sym (module-binding #f
+                                                         core-mpi 0 sym
                                                          core-mpi 0 sym
                                                          0))))
                 0 1

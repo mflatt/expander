@@ -18,6 +18,7 @@
          check-not-defined
          extract-module-requires
          extract-module-definitions
+         extract-all-module-requires
          
          reset-provides!
          add-provide!
@@ -118,6 +119,26 @@
 ;; Get all the definitions
 (define (extract-module-definitions r+p)
   (extract-module-requires r+p (requires+provides-self r+p) 0))
+
+;; Like `extract-module-requires`, but merging modules and phases
+(define (extract-all-module-requires r+p
+                                     mod-name ; or #f for "all"
+                                     phase)   ; or 'all for "all"
+  (define self (requires+provides-self r+p))
+  (define requires (requires+provides-requires r+p))
+  (for*/list ([mod-name (in-list (if mod-name
+                                     (list mod-name)
+                                     (hash-keys requires)))]
+              #:unless (eq? mod-name self)
+              [phase-to-requireds (in-value (hash-ref requires mod-name #hasheqv()))]
+              [phase (in-list (if (eq? phase 'all)
+                                  (hash-keys phase-to-requireds)
+                                  (list phase)))]
+              [reqd (in-list (hash-ref phase-to-requireds phase null))])
+    (if (zero? phase)
+        reqd
+        (struct-copy required reqd
+                     [phase (phase+ phase (required-phase reqd))]))))
 
 ;; ----------------------------------------
 

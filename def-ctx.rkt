@@ -9,6 +9,7 @@
 
 (provide add-intdef-scopes
          add-intdef-bindings
+         internal-definition-context-frame-id
          
          internal-definition-context?
          syntax-local-make-definition-context
@@ -18,7 +19,8 @@
          internal-definition-context-seal
          identifier-remove-from-definition-context)
 
-(struct internal-definition-context (scope         ; scope that represents the context
+(struct internal-definition-context (frame-id      ; identifies the frame for use-site scopes
+                                     scope         ; scope that represents the context
                                      add-scope?    ; whether the scope is auto-added for expansion
                                      env-mixins))  ; bindings for this context: box of list of mix-binding
 
@@ -29,9 +31,10 @@
 
 ;; syntax-local-make-definition-context
 (define (syntax-local-make-definition-context [parent-ctx #f] [add-scope? #t])
-  (void (get-current-expand-context 'syntax-local-make-definition-context))
+  (define ctx (get-current-expand-context 'syntax-local-make-definition-context))
+  (define frame-id (or (expand-context-frame-id ctx) (gensym)))
   (define sc (new-scope 'intdef))
-  (internal-definition-context sc add-scope? (box null)))
+  (internal-definition-context frame-id sc add-scope? (box null)))
 
 ;; syntax-local-bind-syntaxes
 (define (syntax-local-bind-syntaxes ids s intdef)
@@ -51,7 +54,8 @@
                                                               ctx))
                        (add-intdef-scopes pre-id intdef #:always? #t)))
   (define syms (for/list ([intdef-id (in-list intdef-ids)])
-                 (add-local-binding! intdef-id phase)))
+                 (add-local-binding! intdef-id phase
+                                     #:frame-id (internal-definition-context-frame-id intdef))))
   (define vals
     (cond
      [s

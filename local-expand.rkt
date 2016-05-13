@@ -96,6 +96,11 @@
                                   (and (list? context)
                                        (or (expand-context-use-site-scopes ctx)
                                            (box null)))]
+                                 [frame-id (cond
+                                            [same-kind? (expand-context-frame-id ctx)]
+                                            [(pair? intdefs)
+                                             (internal-definition-context-frame-id (car intdefs))]
+                                            [else #f])]
                                  [post-expansion-scope
                                   (and (and same-kind?
                                             (memq context '(module top-level))

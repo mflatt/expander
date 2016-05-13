@@ -5,7 +5,7 @@
 
 (define-syntax-rule (check who pred arg)
   (unless (pred arg)
-    (raise-argument-error 'who (as-string pred) arg)))
+    (raise-argument-error who (as-string pred) arg)))
 
 (define-syntax (as-string stx)
   (syntax-case stx ()

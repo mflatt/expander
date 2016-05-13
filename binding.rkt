@@ -9,6 +9,7 @@
          "module-path.rkt")
 
 (provide
+ (struct-out binding)
  (struct-out module-binding)
  (struct-out local-binding)
 
@@ -36,18 +37,21 @@
 
 ;; ----------------------------------------
 
+(struct binding (frame-id)) ; used to trigger use-site scopes
+
 ;; See `identifier-binding` docs for information about these fields:
-(struct module-binding (module phase sym
-                         nominal-module nominal-phase nominal-sym
-                         nominal-require-phase)
+(struct module-binding binding (module phase sym
+                                 nominal-module nominal-phase nominal-sym
+                                 nominal-require-phase)
         #:transparent)
 
 ;; Represent a local binding with a key, where the value of
 ;; the key is kept in a separate environment. That indirection
 ;; ensures that a fuly expanded program doesn't reference
 ;; compile-time values from local bindings, but it records that
-;; the binding was local.
-(struct local-binding (key))
+;; the binding was local. The `frame-id` field is used to
+;; trigger use-site scopes as needed
+(struct local-binding binding (key))
 
 (define (free-identifier=? a b phase)
   (define ab (resolve+shift a phase))
@@ -101,9 +105,9 @@
    [else #f]))
 
 ;; Helper for registering a local binding in a set of scopes:
-(define (add-local-binding! id phase)
+(define (add-local-binding! id phase #:frame-id [frame-id #f])
   (define key (gensym (syntax-e id)))
-  (add-binding! id (local-binding key) phase)
+  (add-binding! id (local-binding frame-id key) phase)
   key)
 
 ;; ----------------------------------------
