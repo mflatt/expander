@@ -414,7 +414,7 @@
           (get-and-clear-ends! (expand-context-lifts-to-module partial-body-ctx)))
         (if (null? bodys)
             null
-            (loop #t bodys))]
+            (loop #t (add-post-expansion-scope bodys partial-body-ctx)))]
        [else null])]
      [else
       (define exp-body (expand (car bodys) partial-body-ctx))
@@ -525,6 +525,11 @@
                               ids
                               rhs))
                        inside-scope))))
+
+(define (add-post-expansion-scope bodys ctx)
+  (define sc (expand-context-post-expansion-scope ctx))
+  (for/list ([body (in-list bodys)])
+    (add-scope body sc)))
 
 ;; ----------------------------------------
 

@@ -13,7 +13,8 @@
          "expand-context.rkt"
          "lift-context.rkt"
          "already-expanded.rkt"
-         "liberal-def-ctx.rkt")
+         "liberal-def-ctx.rkt"
+         "debug.rkt")
 
 (provide expand
          expand-body
@@ -104,7 +105,8 @@
      (dispatch t (datum->syntax s (cons sym s) s) ctx b)]
     [else
      (error (format "no transformer binding for ~a:" sym)
-            s)])))
+            s
+            (syntax-debug-info s (expand-context-phase ctx) #t))])))
 
 ;; Expand `s` given that the value `t` of the relevant binding,
 ;; where `t` is either a core form, a macro transformer, some

@@ -10,7 +10,8 @@
          "expand-context.rkt"
          "expand.rkt"
          "set-bang-trans.rkt"
-         "rename-trans.rkt")
+         "rename-trans.rkt"
+         "debug.rkt")
 
 ;; ----------------------------------------
 

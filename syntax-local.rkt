@@ -218,6 +218,7 @@
 ;; ----------------------------------------
 
 (define (do-local-lift-to-module who add! s filter
+                                 #:intro? [intro? #t]
                                  #:more-checks [more-checks void])
   (check who syntax? s)
   (more-checks)
@@ -225,14 +226,18 @@
   (define phase (expand-context-phase ctx))
   (define lifts-to-module (expand-context-lifts-to-module ctx))
   (add! lifts-to-module
-        (filter s phase (lift-to-module-context-end-as-expressions? lifts-to-module))
+        (filter (if intro?
+                    (flip-introduction-scopes s ctx)
+                    s)
+                phase
+                (lift-to-module-context-end-as-expressions? lifts-to-module))
         phase))
 
 (define (syntax-local-lift-require s use-s)
   (define sc (new-scope 'macro))
   (do-local-lift-to-module 'syntax-local-lift-module-require
                            add-lifted-to-module-require!
-                           s
+                           s #:intro? #f
                            #:more-checks
                            (lambda ()
                              (check 'syntax-local-lift-module-require
