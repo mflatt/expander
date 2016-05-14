@@ -54,6 +54,7 @@
                      #:alts (hasheq 'eval eval
                                     'compile compile
                                     'expand expand
+                                    'dynamic-require dynamic-require
                                     'make-empty-namespace make-empty-namespace
                                     'namespace-syntax-introduce namespace-syntax-introduce
                                     'namespace-require namespace-require))

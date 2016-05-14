@@ -34,10 +34,18 @@
                                (make-requires+provides #f)))
 
 (define (dynamic-require mod-path sym [fail-k (lambda () (error "failed:" mod-path sym))])
-  (unless (module-path? mod-path)
-    (raise-argument-error 'dynamic-require "module-path?" mod-path))
+  (unless (or (module-path? mod-path)
+              (module-path-index? mod-path)
+              (resolved-module-path? mod-path))
+    (raise-argument-error 'dynamic-require
+                          "(or/c module-path? module-path-index? resolved-module-path?)"
+                          mod-path))
   (define ns (current-namespace))
-  (define mod-name (resolve-module-path mod-path #f))
+  (define mod-name 
+    (cond
+     [(module-path? mod-path) (resolve-module-path mod-path #f)]
+     [(module-path-index? mod-path) (module-path-index-resolve mod-path #t)]
+     [else mod-path]))
   (namespace-module-instantiate! ns mod-name 0)
   (define m-ns (namespace->module-namespace ns mod-name 0 #:complain-on-failure? #t))
   (namespace-get-variable m-ns 0 sym fail-k))
