@@ -105,5 +105,3 @@
                                          (read-syntax (object-name i) i))))))))))
 
 (namespace-require 'racket)
-
-

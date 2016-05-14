@@ -1,6 +1,6 @@
 #lang racket/base
 (require racket/set
-         "prefab.rkt")
+         "datum-map.rkt")
 
 (provide
  (struct-out syntax) ; includes `syntax?` and `syntax-e`
@@ -76,40 +76,14 @@
 ;;  and the return of traversing its datum
 ;;
 (define (syntax-map s f d->s)
-  (let loop ([tail? #f] [s s])
-    (cond
-     [(syntax? s) (if d->s
-                      (d->s s (loop #f (syntax-e s)))
-                      s)]
-     [(pair? s) (f tail? (cons (loop #f (car s))
-                               (loop #t (cdr s))))]
-     [(vector? s) (f #f (vector->immutable-vector
-                         (for/vector #:length (vector-length s) ([e (in-vector s)])
-                                     (loop #f e))))]
-     [(box? s) (f #f (box-immutable (loop #f (unbox s))))]
-     [(immutable-prefab-struct-key s)
-      => (lambda (key)
-           (f #f
-              (apply make-prefab-struct
-                     key
-                     (for/list ([e (in-vector (struct->vector s) 1)])
-                       (loop #f e)))))]
-     [(and (hash? s) (immutable? s))
-      (cond
-       [(hash-eq? s)
-        (f #f
-           (for/hasheq ([(k v) (in-hash s)])
-             (values k (loop #f v))))]
-       [(hash-eqv? s)
-        (f #f
-           (for/hasheqv ([(k v) (in-hash s)])
-             (values k (loop #f v))))]
-       [else
-        (f #f
-           (for/hash ([(k v) (in-hash s)])
-             (values k (loop #f v))))])]
-     [(null? s) (f tail? s)]
-     [else (f #f s)])))
+  (let loop ([s s])
+    (datum-map s
+               (lambda (tail? v)
+                 (cond
+                  [(syntax? v) (if d->s
+                                   (d->s v (loop (syntax-e v)))
+                                   v)]
+                  [else (f tail? v)])))))
 
 (define syntax-property
   (case-lambda
