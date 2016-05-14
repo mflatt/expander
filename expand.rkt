@@ -104,7 +104,16 @@
     [(transformer? t)
      (dispatch t (datum->syntax s (cons sym s) s) ctx b)]
     [else
-     (error (format "no transformer binding for ~a:" sym)
+     (define phase (expand-context-phase ctx))
+     (error (format "~a ~a~a:"
+                    (if b
+                        "binding is not a transformer for"
+                        "no binding for")
+                    sym
+                    (case phase
+                      [(0) ""]
+                      [(1) " in the transformer phase"]
+                      [else (format " at phase ~a" phase)]))
             s
             (syntax-debug-info s (expand-context-phase ctx) #t))])))
 
@@ -140,7 +149,10 @@
   (define m-ctx (struct-copy expand-context ctx
                              [current-introduction-scopes (cons intro-scope
                                                                 use-scopes)]))
-  (define transformed-s (parameterize ([current-expand-context m-ctx])
+  (define transformed-s (parameterize ([current-expand-context m-ctx]
+                                       [current-namespace (namespace->namespace-at-phase-level
+                                                           (expand-context-namespace ctx)
+                                                           (add1 (expand-context-phase ctx)))])
                           (t use-s)))
   (unless (syntax? transformed-s)
     (error "transformer produced non-syntax:" transformed-s))
@@ -419,11 +431,14 @@
 (define (expand+eval-for-syntaxes-binding rhs ids ctx
                                           #:compile-time-for-self [compile-time-for-self #f])
   (define exp-rhs (expand-transformer rhs (as-named-context ctx ids)))
+  (define phase (add1 (expand-context-phase ctx)))
   (values exp-rhs
           (eval-for-bindings ids
                              exp-rhs
-                             (add1 (expand-context-phase ctx))
-                             (expand-context-namespace ctx)
+                             phase
+                             (namespace->namespace-at-phase-level
+                              (expand-context-namespace ctx)
+                              phase)
                              #:compile-time-for-self compile-time-for-self)))
 
 ;; Expand and evaluate `s` as a compile-time expression, returning

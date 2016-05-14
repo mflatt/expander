@@ -151,7 +151,7 @@
          (define partial-body-ctx (struct-copy expand-context ctx
                                                [context 'module]
                                                [phase phase]
-                                               [namespace m-ns]
+                                               [namespace (namespace->namespace-at-phase-level m-ns phase)]
                                                [only-immediate? #t]
                                                [post-expansion-scope inside-scope]
                                                [module-scopes new-module-scopes]
@@ -282,6 +282,7 @@
              (struct-copy expand-context ctx
                           [context 'module-begin]
                           [namespace m-ns]
+                          [phase phase]
                           [module-scopes new-module-scopes]
                           [module-begin-k module-begin-k]
                           [use-site-scopes (box null)])))
@@ -328,6 +329,7 @@
         (expand (car bodys) (struct-copy expand-context ctx
                                          [context 'module-begin]
                                          [namespace m-ns]
+                                         [phase phase]
                                          [only-immediate? #t]
                                          [post-expansion-scope inside-scope]
                                          [all-scopes-stx initial-require-s]

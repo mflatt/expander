@@ -6,7 +6,8 @@
          "srcloc.rkt"
          "phase.rkt"
          (except-in "scope.rkt"
-                    bound-identifier=?)
+                    bound-identifier=?
+                    syntax-shift-phase-level)
          "namespace.rkt"
          (except-in "binding.rkt"
                     free-identifier=?
@@ -47,6 +48,7 @@
                       identifier-prune-lexical-context
                       syntax-debug-info
                       syntax-track-origin
+                      syntax-shift-phase-level
                       
                       syntax-source
                       syntax-line
@@ -136,6 +138,7 @@
                       
                       current-namespace
                       namespace-module-registry
+                      namespace?
                       
                       variable-reference?
                       variable-reference-constant?

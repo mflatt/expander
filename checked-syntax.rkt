@@ -4,7 +4,8 @@
                     [syntax->datum raw:syntax->datum]
                     [datum->syntax raw:datum->syntax])
          (rename-in "scope.rkt"
-                    [bound-identifier=? raw:bound-identifier=?])
+                    [bound-identifier=? raw:bound-identifier=?]
+                    [syntax-shift-phase-level raw:syntax-shift-phase-level])
          (rename-in "binding.rkt"
                     [free-identifier=? raw:free-identifier=?]
                     [identifier-binding raw:identifier-binding]
@@ -23,6 +24,7 @@
          identifier-binding
          identifier-binding-symbol
          identifier-prune-lexical-context
+         syntax-shift-phase-level
          syntax-track-origin)
 
 (define (syntax->datum s)
@@ -90,6 +92,12 @@
   (unless (phase? phase)
     (raise-argument-error 'syntax-debug-info phase?-string phase))
   (raw:syntax-debug-info s phase all-bindings?))
+
+(define (syntax-shift-phase-level s phase)
+  (check syntax-shift-phase-level syntax? s)
+  (unless (phase? phase)
+    (raise-argument-error 'syntax-debug-info phase?-string phase))
+  (raw:syntax-shift-phase-level s phase))
 
 (define (syntax-track-origin new-stx old-stx id)
   (check 'syntax-track-origin syntax? new-stx)

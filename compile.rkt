@@ -32,7 +32,7 @@
 (struct syntax-literal (stx sym))
 
 (define (make-compile-context #:namespace [namespace (current-namespace)]
-                              #:phase [phase 0]
+                              #:phase [phase (namespace-phase namespace)]
                               #:self [self #f]
                               #:compile-time-for-self [compile-time-for-self #f]
                               #:root-module-name [root-module-name #f])

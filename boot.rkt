@@ -7,7 +7,8 @@
          "module-path.rkt"
          racket/set
          racket/runtime-path
-         syntax/modread
+         (only-in syntax/modread
+                  with-module-reading-parameterization)
          (only-in racket/base
                   [dynamic-require base:dynamic-require]))
 
@@ -57,7 +58,8 @@
                                     'dynamic-require dynamic-require
                                     'make-empty-namespace make-empty-namespace
                                     'namespace-syntax-introduce namespace-syntax-introduce
-                                    'namespace-require namespace-require))
+                                    'namespace-require namespace-require
+                                    'namespace-module-identifier namespace-module-identifier))
 
 (copy-racket-module! '#%paramz)
 (copy-racket-module! '#%expobs)
@@ -100,9 +102,10 @@
                    path
                    (lambda (i)
                      (port-count-lines! i)
-                     (eval-s-expr (with-module-reading-parameterization
+                     (eval-syntax (with-module-reading-parameterization
                                       (lambda ()
-                                        (read-syntax (object-name i) i)))))))))
+                                        (check-module-form
+                                         (read-syntax (object-name i) i))))))))))
 
 (namespace-require 'racket)
 

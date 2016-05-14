@@ -1,8 +1,10 @@
 #lang racket/base
-(require "checked-syntax.rkt"
+(require (only-in "syntax.rkt" syntax-e)
+         "checked-syntax.rkt"
          (only-in "scope.rkt" add-scope)
          "namespace.rkt"
          "core.rkt"
+         "phase.rkt"
          "require+provide.rkt"
          "expand-context.rkt"
          (rename-in "expand.rkt" [expand expand-in-context])
@@ -30,7 +32,7 @@
                                (list (add-scope (datum->syntax #f req)
                                                 (namespace-scope ns)))
                                #f ns
-                               0
+                               (namespace-phase ns)
                                (make-requires+provides #f)))
 
 (define (dynamic-require mod-path sym [fail-k (lambda () (error "failed:" mod-path sym))])
@@ -46,8 +48,9 @@
      [(module-path? mod-path) (resolve-module-path mod-path #f)]
      [(module-path-index? mod-path) (module-path-index-resolve mod-path #t)]
      [else mod-path]))
-  (namespace-module-instantiate! ns mod-name 0)
-  (define m-ns (namespace->module-namespace ns mod-name 0 #:complain-on-failure? #t))
+  (define phase (namespace-phase ns))
+  (namespace-module-instantiate! ns mod-name phase)
+  (define m-ns (namespace->module-namespace ns mod-name phase #:complain-on-failure? #t))
   (namespace-get-variable m-ns 0 sym fail-k))
 
 (define (expand s [ns (current-namespace)])
@@ -72,6 +75,27 @@
                        (make-expand-context ns))
                       (make-compile-context #:namespace ns)))))
 
+(define (namespace-module-identifier [where (current-namespace)])
+  (unless (or (namespace? where)
+              (phase? where))
+    (raise-argument-error 'namespace-module-identifier
+                          (string-append "(or/c namespace? " phase?-string ")")
+                          where))
+  (datum->syntax (syntax-shift-phase-level core-stx
+                                           (if (namespace? where)
+                                               (namespace-phase where)
+                                               where))
+                 'module))
+
+(define (check-module-form s)
+  (unless (and (pair? (syntax-e s))
+               (eq? 'module (syntax-e (car (syntax-e s)))))
+    (error "not a module form:" s))
+  (datum->syntax
+   #f
+   (cons (namespace-module-identifier)
+         (cdr (syntax-e s)))))
+         
 ;; ----------------------------------------
 
 ;; Externally visible functions:
@@ -90,6 +114,8 @@
          namespace-syntax-introduce
          namespace-require
          dynamic-require
+         namespace-module-identifier
+         check-module-form
          
          expand
          compile

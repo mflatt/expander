@@ -42,7 +42,7 @@
                   empty-syntax
                   'top-level
                   #f   ; frame-id
-                  0
+                  (namespace-phase ns)
                   ns
                   empty-env
                   #f   ; only-immediate?
