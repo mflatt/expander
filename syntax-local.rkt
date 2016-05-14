@@ -319,7 +319,7 @@
   (define ns (expand-context-namespace ctx))
   (define mod-name (resolve-module-path mod-path (namespace-module-name ns)))
   (define m (namespace->module ns mod-name))
-  (unless m (error "module not declared:" mod-name))
+  (unless m (raise-unknown-module-error 'syntax-local-module-exports))
   (for/list ([(phase syms) (in-hash (module-provides m))])
     (cons phase
           (for/list ([sym (in-hash-keys syms)])

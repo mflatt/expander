@@ -804,13 +804,33 @@
  (namespace-require '(submod 'with-#f-submodule c) demo-ns)
  'c)
 
-(eval-module-declaration '(module with-shifted-#f-submodule '#%core
+(eval-module-declaration '(module used-by-shifted-submodule '#%core
+                           (define-values (x) 'x)
+                           (#%provide x)))
+
+(eval-module-declaration '(module with-shifted-pre-submodule '#%core
                            (#%require (for-syntax '#%core))
+                           (begin-for-syntax
+                             (module xa '#%core
+                               (#%require 'used-by-shifted-submodule)
+                               (#%provide xa)
+                               (define-values (xa) x)))
+                           (#%require (submod "." xa))
+                           (println xa)))
+
+(check-print
+ (namespace-require ''with-shifted-pre-submodule demo-ns)
+ 'x)
+
+(eval-module-declaration '(module with-shifted-#f-submodule '#%core
+                           (#%require (for-syntax '#%core
+                                                  'used-by-shifted-submodule))
                            (define-values (d) 'd)
                            (begin-for-syntax
                              (define-values (d-stx) (quote-syntax d))
                              (module* d #f
                                (#%provide get-d-stx)
+                               x
                                (define-values (get-d-stx) (lambda () d-stx))))))
 
 (eval-module-declaration '(module use-shifted-#f-submodule '#%core

@@ -169,8 +169,7 @@
                           in-stx))
   (define done-syms (make-hash))
   (define m (namespace->module m-ns module-name))
-  (unless m
-    (error "module not declared:" module-name))
+  (unless m (raise-unknown-module-error 'require module-name))
   (add-required-module! requires+provides mpi phase-shift
                         (module-cross-phase-persistent? m))
   (bind-all-provides!

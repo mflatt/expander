@@ -217,9 +217,7 @@
    [(null? shifts) mpi]
    [else
     (define shifted-mpi (apply-shifts mpi (cdr shifts)))
-    (if (eq? shifted-mpi (caar shifts))
-        (cdar shifts)
-        shifted-mpi)]))
+    (module-path-index-shift shifted-mpi (caar shifts) (cdar shifts))]))
 
 ;; Apply a single shift to a single binding
 (define (binding-module-path-index-shift b from-mpi to-mpi)

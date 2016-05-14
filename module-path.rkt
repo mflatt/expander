@@ -91,10 +91,18 @@
           (cond
            [(module-path-index-path r)
             (fprintf port ":~.s" (let loop ([r r])
-                                   (if (and r (module-path-index-path r))
-                                       (cons (module-path-index-path r)
-                                             (loop (module-path-index-base r)))
-                                       null)))]
+                                   (cond
+                                    [(not r) null]
+                                    [(module-path-index-path r)
+                                     (cons (module-path-index-path r)
+                                           (loop (module-path-index-base r)))]
+                                    [(module-path-index-resolved r)
+                                     (list
+                                      '+
+                                      (format-resolved-module-path-name
+                                       (resolved-module-path-name
+                                        (module-path-index-resolved r))))]
+                                    [else null])))]
            [(module-path-index-resolved r)
             (fprintf port "=~.s" (format-resolved-module-path-name
                                   (resolved-module-path-name
@@ -206,7 +214,7 @@
                              shifted-base
                              #f
                              (make-shift-cache)))
-        (shift-cache-set! (module-path-index-shift-cache base) mpi shifted-mpi)
+        (shift-cache-set! (module-path-index-shift-cache shifted-base) mpi shifted-mpi)
         shifted-mpi])])]))
 
 (define (make-shift-cache)

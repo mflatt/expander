@@ -482,8 +482,9 @@
                 (loop tail? (cdr bodys)))]
          [(module)
           ;; Submodule to parse immediately
+          (define ready-body (remove-use-site-scopes exp-body partial-body-ctx))
           (define submod
-            (expand-submodule exp-body self partial-body-ctx))
+            (expand-submodule ready-body self partial-body-ctx))
           (cons submod
                 (loop tail? (cdr bodys)))]
          [(module*)
@@ -653,13 +654,15 @@
                    self
                    self))
   
-  (parameterize ([current-namespace m-ns])
+  
+  (define root-module-name (resolved-module-path-root-name
+                            (module-path-index-resolve self)))
+  (parameterize ([current-namespace m-ns]
+                 [current-module-declare-name (make-resolved-module-path root-module-name)])
     (run-time-eval (compile-module tmp-mod
                                    (make-compile-context #:namespace m-ns
                                                          #:self enclosing-self
-                                                         #:root-module-name
-                                                         (resolved-module-path-root-name
-                                                          (module-path-index-resolve self)))
+                                                         #:root-module-name root-module-name)
                                    #:self self
                                    #:as-submodule? #t))))
 
@@ -791,7 +794,8 @@
                    (struct-copy expand-context ctx
                                 [context 'module]
                                 [only-immediate? #f]
-                                [post-expansion-scope #f])
+                                [post-expansion-scope #f]
+                                [phase 0])
                    self
                    #:keep-enclosing-scope-at-phase keep-enclosing-scope-at-phase
                    #:enclosing-is-cross-phase-persistent? enclosing-is-cross-phase-persistent?))
@@ -799,13 +803,14 @@
   ;; Compile and declare the submodule for use by later forms
   ;; in the enclosing module:
   (define ns (expand-context-namespace ctx))
-  (parameterize ([current-namespace ns])
+  (define root-module-name (resolved-module-path-root-name
+                            (module-path-index-resolve self)))
+  (parameterize ([current-namespace ns]
+                 [current-module-declare-name (make-resolved-module-path root-module-name)])
     (run-time-eval (compile-module submod 
                                    (make-compile-context #:namespace ns
                                                          #:self self
-                                                         #:root-module-name
-                                                         (resolved-module-path-root-name
-                                                          (module-path-index-resolve self)))
+                                                         #:root-module-name root-module-name)
                                    #:as-submodule? #t)))
 
   ;; Return the expanded submodule

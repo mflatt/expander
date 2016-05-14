@@ -9,6 +9,7 @@
          make-module-namespace
          namespace->module
          namespace-module-name
+         raise-unknown-module-error
          
          namespace-syntax-introduce
          namespace-scope
@@ -127,10 +128,17 @@
   ;; Tell resolver that the module is declared
   ((current-module-name-resolver) mod-name #f))
 
+
+(define (raise-unknown-module-error who mod-name)
+  (raise-arguments-error who
+                         "unknown module" 
+                         "module name" mod-name))
+
 (define (namespace-module-instantiate! ns name phase-shift [min-phase 0])
   (unless (resolved-module-path? name)
     (error "not a resolved module path:" name))
   (define m (namespace->module ns name))
+  (unless m (raise-unknown-module-error 'instantiate name))
   (cond
    [(and (module-cross-phase-persistent? m)
          (or (not (zero? phase-shift))
