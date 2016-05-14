@@ -1,5 +1,6 @@
 #lang racket/base
-(require (only-in "syntax.rkt" syntax-e)
+(require racket/serialize
+         (only-in "syntax.rkt" syntax-e)
          "checked-syntax.rkt"
          (only-in "scope.rkt" add-scope)
          "namespace.rkt"
@@ -26,6 +27,9 @@
   (define ns (make-empty-namespace))
   (declare-core-module! ns)
   ns)
+
+(compile-install-primitives! (make-empty-core-namespace)
+                             core-module-name)
 
 (define (namespace-require req [ns (current-namespace)])
   (parse-and-perform-requires! #:run? #t
@@ -56,11 +60,12 @@
 (define (expand s [ns (current-namespace)])
   (expand-in-context s (make-expand-context ns)))
 
-(struct compiled-expression (s-expr)
+(serializable-struct compiled-expression (s-expr)
         #:property prop:custom-write
         (lambda (c port mode)
           (fprintf port "#<compiled-expression:~.s>" (compiled-expression-s-expr c))))
 
+(require racket/serialize)
 (define (compile s [ns (current-namespace)])
   (compiled-expression (compile-top s (make-compile-context #:namespace ns))))
 

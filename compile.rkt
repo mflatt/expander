@@ -16,14 +16,16 @@
          compile-top
          compile-module
          expand-time-eval
-         run-time-eval)
+         run-time-eval
+         compile-install-primitives!)
 
 (struct compile-context (namespace   ; compile-time namespace
                          phase       ; phase (top level) or phase level (within a module)
                          self        ; if non-#f module path index, compiling the body of a module
                          compile-time-for-self ; for allowing forward references across `begin-for-syntax`
                          root-module-name ; set to a symbol if `self` is non-#f
-                         top-init))  ; accumulates top-level initialization
+                         top-init    ; accumulates top-level initialization
+                         def-syms))  ; selects names that don't collide with primitives: sym -> sym 
 
 (struct top-init (variable-uses      ; variable-use -> sym
                   syntax-literals))  ; box of list syntax-literal
@@ -43,7 +45,8 @@
                    self
                    compile-time-for-self
                    root-module-name
-                   #f))
+                   #f
+                   (make-hasheq)))
 
 (define phase-shift-id (gensym 'phase))
 (define ns-id (gensym 'namespace))
@@ -229,13 +232,12 @@
         (error "internal error: cannot assign to a primitive:" s))
       (namespace-module-instantiate! ns mod-name 0)
       (define m-ns (namespace->module-namespace ns mod-name 0))
-      `(quote ,(or (namespace-get-variable m-ns 0 (module-binding-sym b) #f)
-                   (error "internal error: bad primitive reference:"
-                          (module-binding-module b)
-                          phase (module-binding-sym b) (module-binding-phase b))))]
+      ;; Expect each primitive to be bound:
+      (module-binding-sym b)]
      [(eq? mpi (compile-context-self cctx))
       ;; Direct reference to a variable defined in the same module:
-      (direct (module-binding-sym b))]
+      (direct (convert-def-sym (module-binding-sym b)
+                               (compile-context-def-syms cctx)))]
      [else
       ;; Reference to a variable defined in another module; we'll look up
       ;; the variable's box once at the top
@@ -296,9 +298,12 @@
   
   (define cross-phase-persistent? #f)
   
+  (define def-syms (make-hasheq))
+  
   (define body-cctx (struct-copy compile-context cctx
                                  [self self]
-                                 [root-module-name root-module-name]))
+                                 [root-module-name root-module-name]
+                                 [def-syms def-syms]))
   
   (let loop! ([bodys bodys] [phase 0])
     (for ([body (in-list bodys)])
@@ -306,26 +311,30 @@
         [(define-values)
          (define m (match-syntax body '(define-values (id ...) rhs)))
          (define syms (def-ids-to-syms (m 'id) phase self))
+         (define dsyms (convert-def-syms syms def-syms))
          (add-body!
           phase
           `(begin
-            (define-values ,syms ,(compile (m 'rhs)
-                                           (struct-copy compile-context body-cctx
-                                                        [phase phase]
-                                                        [top-init (find-or-create-top-init! phase)])))
-            ,@(for/list ([sym (in-list syms)])
-                `(namespace-set-variable! ,ns-id ,phase ',sym ,sym))))]
+            (define-values ,dsyms ,(compile (m 'rhs)
+                                            (struct-copy compile-context body-cctx
+                                                         [phase phase]
+                                                         [top-init (find-or-create-top-init! phase)])))
+            ,@(for/list ([sym (in-list syms)]
+                         [dsym (in-list dsyms)])
+                `(namespace-set-variable! ,ns-id ,phase ',sym ,dsym))))]
         [(define-syntaxes)
          (define m (match-syntax body '(define-syntaxes (id ...) rhs)))
          (define syms (def-ids-to-syms (m 'id) phase self))
+         (define dsyms (convert-def-syms syms def-syms))
          (add-body!
           (add1 phase)
-          `(let-values ([,syms ,(compile (m 'rhs)
-                                         (struct-copy compile-context body-cctx
-                                                      [phase (add1 phase)]
-                                                      [top-init (find-or-create-top-init! (add1 phase))]))])
-            ,@(for/list ([sym (in-list syms)])
-                `(namespace-set-transformer! ,ns-id ,phase ',sym ,sym))))]
+          `(let-values ([,dsyms ,(compile (m 'rhs)
+                                          (struct-copy compile-context body-cctx
+                                                       [phase (add1 phase)]
+                                                       [top-init (find-or-create-top-init! (add1 phase))]))])
+            ,@(for/list ([sym (in-list syms)]
+                         [dsym (in-list dsyms)])
+                `(namespace-set-transformer! ,ns-id ,phase ',sym ,dsym))))]
         [(begin-for-syntax)
          (define m (match-syntax body `(begin-for-syntax e ...)))
          (loop! (m 'e) (add1 phase))]
@@ -513,6 +522,16 @@
              self "vs." (module-binding-module b)))
     (module-binding-sym b)))
 
+(define (convert-def-sym sym def-syms)
+  (or (hash-ref def-syms sym #f)
+      (let ([def-sym (gensym sym)])
+        (hash-set! def-syms sym def-sym)
+        def-sym)))
+
+(define (convert-def-syms syms def-syms)
+  (for/list ([sym (in-list syms)])
+    (convert-def-sym sym def-syms)))
+
 ;; ----------------------------------------
 
 (define undefined (gensym 'undefined))
@@ -568,3 +587,13 @@
 (define (run-time-eval compiled)
   (parameterize ([base:current-namespace run-time-namespace])
     (orig-eval compiled)))
+
+(define (compile-install-primitives! ns mod-name)
+  (namespace-module-instantiate! ns mod-name 0)
+  (define m (namespace->module ns mod-name))
+  (define m-ns (namespace->module-namespace ns mod-name 0))
+  (for ([(sym b) (in-hash (hash-ref (module-provides m) 0))])
+    (define val (namespace-get-variable m-ns 0 (module-binding-sym b) #f))
+    (when val
+      (namespace-set-variable-value! sym val #t expand-time-namespace)
+      (namespace-set-variable-value! sym val #t run-time-namespace))))

@@ -176,7 +176,7 @@
     (unless ((hash-ref (namespace-done-phases m-ns) phase-shift +inf.0) . <= . min-phase)
       (for ([(req-phase mods) (in-hash (module-requires m))])
         (for ([mod (in-list mods)])
-          (namespace-module-instantiate! ns (module-path-index-resolve mod)
+          (namespace-module-instantiate! ns (module-path-index-resolve mod #t)
                                          (phase+ phase-shift req-phase)
                                          min-phase)))
       (for ([phase-level (in-range (module-min-phase-level m)

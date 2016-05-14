@@ -1,5 +1,6 @@
 #lang racket/base
 (require racket/set
+         racket/serialize
          "syntax.rkt"
          "phase.rkt")
 
@@ -31,15 +32,16 @@
 ;; faster and to improve GC, since non-nested binding contexts will
 ;; generally not share a most-recent scope.
 
-(struct scope (id          ; internal scope identity; used for sorting
-               kind        ; debug info
-               bindings)   ; sym -> scope-set -> binding
-        ;; Custom printer:
-        #:property prop:custom-write
-        (lambda (sc port mode)
-          (write-string "#<scope:" port)
-          (display (scope-id sc) port)
-          (write-string ">" port)))
+(serializable-struct scope (id          ; internal scope identity; used for sorting
+                            kind        ; debug info
+                            bindings)   ; sym -> scope-set -> binding
+                     #:mutable ; for deserialization of cycles
+                     ;; Custom printer:
+                     #:property prop:custom-write
+                     (lambda (sc port mode)
+                       (write-string "#<scope:" port)
+                       (display (scope-id sc) port)
+                       (write-string ">" port)))
 
 ;; A "multi-scope" represents a group of scopes, each of which exists
 ;; only at a specific phase, and each in a distinct phase. This
@@ -53,31 +55,35 @@
 ;; the phase-independent scopes. Since a multi-scope corresponds to
 ;; a module, the number of multi-scopes in a syntax is expected to
 ;; be small.
-(struct multi-scope (id        ; identity
-                     scopes)) ; phase -> representative-scope
+(serializable-struct multi-scope (id        ; identity
+                                  scopes) ; phase -> representative-scope
+                     #:mutable) ; for deserialization of cycles
 
-(struct representative-scope scope (owner   ; a multi-scope for which this one is a phase-specific identity
+(serializable-struct representative-scope scope (owner   ; a multi-scope for which this one is a phase-specific identity
                                     phase)  ; phase of this scope
-        #:property prop:custom-write
-        (lambda (sc port mode)
-          (write-string "#<scope:" port)
-          (display (scope-id sc) port)
-          (write-string "=" port)
-          (display (multi-scope-id (representative-scope-owner sc)) port)
-          (write-string "@" port)
-          (display (representative-scope-phase sc) port)
-          (write-string ">" port)))
+                     #:mutable ; for deserialization of cycles
+                     #:property prop:custom-write
+                     (lambda (sc port mode)
+                       (write-string "#<scope:" port)
+                       (display (scope-id sc) port)
+                       (when (representative-scope-owner sc)
+                         (write-string "=" port)
+                         (display (multi-scope-id (representative-scope-owner sc)) port))
+                       (write-string "@" port)
+                       (display (representative-scope-phase sc) port)
+                       (write-string ">" port)))
 
-(struct shifted-multi-scope (phase        ; phase shift applies to all scopes in multi-scope
-                             multi-scope) ; a multi-scope
-        #:transparent
-        #:property prop:custom-write
-        (lambda (sc port mode)
-          (write-string "#<scope:" port)
-          (display (multi-scope-id (shifted-multi-scope-multi-scope sc)) port)
-          (write-string "@" port)
-          (display (shifted-multi-scope-phase sc) port)
-          (write-string ">" port)))
+(serializable-struct shifted-multi-scope (phase        ; phase shift applies to all scopes in multi-scope
+                                          multi-scope) ; a multi-scope
+                     #:mutable ; for deserialization of cycles
+                     #:transparent
+                     #:property prop:custom-write
+                     (lambda (sc port mode)
+                       (write-string "#<scope:" port)
+                       (display (multi-scope-id (shifted-multi-scope-multi-scope sc)) port)
+                       (write-string "@" port)
+                       (display (shifted-multi-scope-phase sc) port)
+                       (write-string ">" port)))
 
 ;; Each new scope increments the counter, so we can check whether one
 ;; scope is newer than another.

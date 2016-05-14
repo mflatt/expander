@@ -1,5 +1,6 @@
 #lang racket/base
 (require racket/set
+         racket/serialize
          "syntax.rkt"
          "scope.rkt"
          "phase.rkt"
@@ -41,14 +42,14 @@
 
 ;; ----------------------------------------
 
-(struct binding (frame-id   ; used to trigger use-site scopes
-                 free=id))  ; `free-identifier=?` equivalence via a rename-transformer binding
+(serializable-struct binding (frame-id   ; used to trigger use-site scopes
+                              free=id))  ; `free-identifier=?` equivalence via a rename-transformer binding
 
 ;; See `identifier-binding` docs for information about these fields:
-(struct module-binding binding (module phase sym
-                                 nominal-module nominal-phase nominal-sym
-                                 nominal-require-phase)
-        #:transparent)
+(serializable-struct module-binding binding (module phase sym
+                                              nominal-module nominal-phase nominal-sym
+                                              nominal-require-phase)
+                     #:transparent)
 
 (define (make-module-binding module phase sym
                              #:nominal-module [nominal-module module]
@@ -68,7 +69,7 @@
 ;; compile-time values from local bindings, but it records that
 ;; the binding was local. The `frame-id` field is used to
 ;; trigger use-site scopes as needed
-(struct local-binding binding (key))
+(serializable-struct local-binding binding (key))
 
 (define (free-identifier=? a b phase)
   (define ab (resolve+shift a phase))

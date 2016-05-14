@@ -10,7 +10,6 @@ TODO:
  origin tracking
  taints
  expander observer
- compile to serializable form
 
 ----------------------------------------
 

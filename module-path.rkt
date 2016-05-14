@@ -1,5 +1,6 @@
 #lang racket/base
-(require racket/list)
+(require racket/list
+         racket/serialize)
 
 (provide resolved-module-path?
          make-resolved-module-path
@@ -29,7 +30,12 @@
         (lambda (r port mode)
           (write-string "#<resolved-module-path:" port)
           (fprintf port "~.s" (format-resolved-module-path-name (resolved-module-path-name r)))
-          (write-string ">" port)))
+          (write-string ">" port))
+        #:property prop:serializable
+        (make-serialize-info (lambda (r) (vector (resolved-module-path-name r)))
+                             #'deserialize-resolved-module-path
+                             #f
+                             (or (current-load-relative-directory) (current-directory))))
 
 (define (format-resolved-module-path-name p)
   (cond
@@ -70,6 +76,14 @@
         (hash-set! resolved-module-paths p r)
         r)))
 
+(define deserialize-resolved-module-path
+  (make-deserialize-info
+   (lambda (n) (make-resolved-module-path n))
+   (lambda (x) (error "cannot make cycles"))))
+
+(module+ deserialize-info
+  (provide deserialize-resolved-module-path))
+
 ;; ----------------------------------------
 
 (struct module-path-index (path base [resolved #:mutable] shift-cache)
@@ -107,7 +121,18 @@
             (fprintf port "=~.s" (format-resolved-module-path-name
                                   (resolved-module-path-name
                                    (module-path-index-resolved r))))])
-          (write-string ">" port)))
+          (write-string ">" port))
+        #:property prop:serializable
+        (make-serialize-info (lambda (mpi)
+                               (define path (module-path-index-path mpi))
+                               (cond
+                                [(not path)
+                                 (vector (or (module-path-index-resolved mpi) 'self))]
+                                [else
+                                 (vector path (module-path-index-base mpi))]))
+                             #'deserialize-module-path-index
+                             #f
+                             (or (current-load-relative-directory) (current-directory))))
 
 (define (module-path-index-resolve mpi [load? #f])
   (unless (module-path-index? mpi)
@@ -225,6 +250,16 @@
 
 (define (shift-cache-set! cache v r)
   (hash-set! cache v r))
+
+(define deserialize-module-path-index
+  (make-deserialize-info
+   (case-lambda 
+     [(path base) (module-path-index-join path base)]
+     [(name) (make-self-module-path-index name)])
+   (lambda () (error "cannot make cycles"))))
+
+(module+ deserialize-info
+  (provide deserialize-module-path-index))
 
 ;; ----------------------------------------
 

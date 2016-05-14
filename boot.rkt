@@ -1,5 +1,6 @@
 #lang racket/base
-(require "main.rkt"
+(require racket/cmdline
+         "main.rkt"
          "namespace.rkt"
          "binding.rkt"
          "primitives.rkt"
@@ -10,7 +11,19 @@
          (only-in syntax/modread
                   with-module-reading-parameterization)
          (only-in racket/base
-                  [dynamic-require base:dynamic-require]))
+                  [dynamic-require base:dynamic-require])
+         (only-in "compile.rkt"
+                  compile-install-primitives!)
+         "cache-for-boot.rkt")
+
+(define cache-dir #f)
+(command-line
+ #:once-each
+ [("-c" "--cache") dir "Save and load fomr <dir>"
+  (set! cache-dir (path->complete-path dir))])
+
+(when cache-dir
+  (cache-prime! cache-dir))
 
 ;; The `#lang` reader doesn't use the reimplemented module system,
 ;; so make sure the reader is loaded for `racket/base`:
@@ -44,7 +57,8 @@
                     (for ([sym (in-list syms)])
                       (namespace-set-variable! ns 0 sym
                                                (or (hash-ref alts sym #f)
-                                                   (base:dynamic-require mod-name sym)))))))))
+                                                   (base:dynamic-require mod-name sym))))))))
+  (compile-install-primitives! boot-ns (module-path-index-resolve to-mpi)))
 
 (copy-racket-module! '#%kernel
                      #:to '#%pre-kernel
@@ -91,17 +105,29 @@
                     (eval-syntax s)
                     (eval-s-expr s))))
 (current-load (lambda (path expected-module)
-                (log-error "load ~s" path)
-                (with-handlers ([exn:fail? (lambda (exn)
-                                             (log-error "...during ~s..." path)
-                                             (raise exn))])
-                  (call-with-input-file*
-                   path
-                   (lambda (i)
-                     (port-count-lines! i)
-                     (eval-syntax (with-module-reading-parameterization
-                                      (lambda ()
-                                        (check-module-form
-                                         (read-syntax (object-name i) i))))))))))
+                (cond
+                 [(and cache-dir
+                       (get-cached-compiled cache-dir path
+                                            (lambda ()
+                                              (log-error "cached ~s" path))))
+                  => eval]
+                 [else
+                  (log-error "compile ~s" path)
+                  (with-handlers ([exn:fail? (lambda (exn)
+                                               (log-error "...during ~s..." path)
+                                               (raise exn))])
+                    (define s
+                      (call-with-input-file*
+                       path
+                       (lambda (i)
+                         (port-count-lines! i)
+                         (with-module-reading-parameterization
+                             (lambda ()
+                               (check-module-form
+                                (read-syntax (object-name i) i)))))))
+                    (define c (compile (expand s)))
+                    (when cache-dir
+                      (cache-compiled! cache-dir path c))
+                    (eval c))])))
 
 (namespace-require 'racket)

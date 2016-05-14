@@ -1,5 +1,6 @@
 #lang racket/base
 (require racket/set
+         racket/serialize
          "datum-map.rkt")
 
 (provide
@@ -14,23 +15,23 @@
  
  syntax-property)
 
-(struct syntax (e      ; datum and nested syntax objects
-                scopes ; scopes that apply at all phases
-                shifted-multi-scopes ; scopes with a distinct identity at each phase
-                mpi-shifts ; chain of module-path-index substitutions
-                srcloc ; source location
-                props) ; properties
-        ;; Custom printer:
-        #:property prop:custom-write
-        (lambda (s port mode)
-          (write-string "#<syntax" port)
-          (define srcloc (syntax-srcloc s))
-          (when srcloc
-            (define srcloc-str (srcloc->string srcloc))
-            (when srcloc-str
-              (fprintf port ":~a" srcloc-str)))
-          (fprintf port " ~.s" (syntax->datum s))
-          (write-string ">" port)))
+(serializable-struct syntax (e      ; datum and nested syntax objects
+                             scopes ; scopes that apply at all phases
+                             shifted-multi-scopes ; scopes with a distinct identity at each phase
+                             mpi-shifts ; chain of module-path-index substitutions
+                             srcloc ; source location
+                             props) ; properties
+                     ;; Custom printer:
+                     #:property prop:custom-write
+                     (lambda (s port mode)
+                       (write-string "#<syntax" port)
+                       (define srcloc (syntax-srcloc s))
+                       (when srcloc
+                         (define srcloc-str (srcloc->string srcloc))
+                         (when srcloc-str
+                           (fprintf port ":~a" srcloc-str)))
+                       (fprintf port " ~.s" (syntax->datum s))
+                       (write-string ">" port)))
 
 (define empty-scopes (seteq))
 (define empty-shifted-multi-scopes (set))
