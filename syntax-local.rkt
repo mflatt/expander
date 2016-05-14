@@ -189,8 +189,12 @@
                 ;; FIXME: use deterministic counter
                 (define name (gensym 'lifted))
                 (add-scope (datum->syntax #f name) (new-scope 'macro))))
-  ;; returns converted ids:
-  (add-lifted! lifts ids s (expand-context-phase ctx)))
+  (map (lambda (id) (flip-introduction-scopes id ctx))
+       ;; returns converted ids:
+       (add-lifted! lifts
+                    ids
+                    (flip-introduction-scopes s ctx)
+                    (expand-context-phase ctx))))
 
 (define (syntax-local-lift-expression s)
   (car (do-lift-values-expression 'syntax-local-lift-expression 1 s)))

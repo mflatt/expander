@@ -159,7 +159,7 @@
                                                [frame-id frame-id]
                                                [need-eventually-defined (and (phase . >= . 1)
                                                                              need-eventually-defined)]
-                                               [lifts (make-lift-context
+                                               [lifts (make-lift-context ; FIXME: share single instance for same phase?
                                                        (make-wrap-as-definition self frame-id
                                                                                 inside-scope new-module-scopes
                                                                                 defined-syms requires+provides))]
@@ -527,7 +527,7 @@
                         #f
                         (list (datum->syntax (syntax-shift-phase-level core-stx phase)
                                              'define-values)
-                              ids
+                              scoped-ids
                               rhs))
                        inside-scope))))
 
@@ -558,39 +558,38 @@
             (loop #t bodys))]
        [else bodys])]
      [else
-      (case (core-form-sym (car bodys) phase)
-        [(define-values)
-         (define m (match-syntax (car bodys) '(define-values (id ...) rhs)))
-         (define exp-rhs (expand (m 'rhs) (as-named-context (as-expression-context body-ctx)
-                                                            (m 'id))))
-         (cons (rebuild (car bodys)
-                        `(,(m 'define-values) ,(m 'id) ,exp-rhs))
-               (loop tail? (cdr bodys)))]
-        [(define-syntaxes #%require #%provide begin-for-syntax module module* #%declare)
-         (cons (car bodys)
-               (loop tail? (cdr bodys)))]
-        [else
-         (define body (expand (car bodys) (as-expression-context body-ctx)))
-         (define lifts
-           ;; If there were any lifts, the right-hand sides need to be expanded
-           (loop #f (get-and-clear-lifts! (expand-context-lifts body-ctx))))
-         (define lifted-requires-and-provides
-           ;; Get any requires and provides, keeping them as-is
-           (get-and-clear-requires-and-provides! (expand-context-lifts-to-module body-ctx)))
-         (define lifted-modules
-           ;; If there were any module lifts, the `module` forms need to
-           ;; be expanded
-           (expand-non-module*-submodules (get-and-clear-module-lifts!
-                                           (expand-context-module-lifts body-ctx))
-                                          phase
-                                          self
-                                          body-ctx))
-         (append
-          lifts
-          lifted-requires-and-provides
-          lifted-modules
-          (cons body
-                (loop tail? (cdr bodys))))])])))
+      (define exp-body
+        (case (core-form-sym (car bodys) phase)
+          [(define-values)
+           (define m (match-syntax (car bodys) '(define-values (id ...) rhs)))
+           (define exp-rhs (expand (m 'rhs) (as-named-context (as-expression-context body-ctx)
+                                                              (m 'id))))
+           (rebuild (car bodys)
+                    `(,(m 'define-values) ,(m 'id) ,exp-rhs))]
+          [(define-syntaxes #%require #%provide begin-for-syntax module module* #%declare)
+           (car bodys)]
+          [else
+           (expand (car bodys) (as-expression-context body-ctx))]))
+      (define lifts
+        ;; If there were any lifts, the right-hand sides need to be expanded
+        (loop #f (get-and-clear-lifts! (expand-context-lifts body-ctx))))
+      (define lifted-requires-and-provides
+        ;; Get any requires and provides, keeping them as-is
+        (get-and-clear-requires-and-provides! (expand-context-lifts-to-module body-ctx)))
+      (define lifted-modules
+        ;; If there were any module lifts, the `module` forms need to
+        ;; be expanded
+        (expand-non-module*-submodules (get-and-clear-module-lifts!
+                                        (expand-context-module-lifts body-ctx))
+                                       phase
+                                       self
+                                       body-ctx))
+      (append
+       lifts
+       lifted-requires-and-provides
+       lifted-modules
+       (cons exp-body
+             (loop tail? (cdr bodys))))])))
 
 (define (check-defined-by-now need-eventually-defined self)
   ;; If `need-eventually-defined` is not empty, report an error

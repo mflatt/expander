@@ -66,11 +66,12 @@
 (define (wrap-lifts-as-let lifts body s phase)
   (datum->syntax
    s
-   (list (datum->syntax
-          (syntax-shift-phase-level core-stx phase)
-          'let-values)
-         lifts
-         body)))
+   (for/fold ([body body]) ([lift (in-list (reverse lifts))])
+     (list (datum->syntax
+            (syntax-shift-phase-level core-stx phase)
+            'let-values)
+           (list lift)
+           body))))
 
 (define (wrap-lifts-as-begin lifts body s phase)
   (datum->syntax

@@ -925,6 +925,8 @@
                                       (syntax-local-lift-expression
                                        (quote-syntax (+ 1 2)))))))
                            (m)
+                           (list (m))
+                           (define-values (dummy) (m))
                            (define-syntaxes (n)
                              (lambda (stx)
                                (syntax-local-lift-module
@@ -961,6 +963,8 @@
 
 (check-print
  (namespace-require '(submod 'lifts main) demo-ns)
+ 3
+ 3
  3
  'pre
  'sub

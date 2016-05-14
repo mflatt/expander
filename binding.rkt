@@ -123,7 +123,7 @@
 
 ;; Helper for registering a local binding in a set of scopes:
 (define (add-local-binding! id phase #:frame-id [frame-id #f])
-  (define key (gensym (syntax-e id)))
+  (define key (gensym (format "~a/" (syntax-e id))))
   (add-binding! id (local-binding frame-id #f key) phase)
   key)
 

@@ -245,7 +245,7 @@
       (define variable-uses (top-init-variable-uses
                              (compile-context-top-init cctx)))
       (define sym (or (hash-ref variable-uses key #f)
-                      (let ([sym (gensym (variable-use-sym key))])
+                      (let ([sym (gensym (format "~a+" (variable-use-sym key)))])
                         (hash-set! variable-uses key sym)
                         sym)))
       (cond
