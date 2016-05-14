@@ -151,7 +151,7 @@
          (define partial-body-ctx (struct-copy expand-context ctx
                                                [context 'module]
                                                [phase phase]
-                                               [namespace (namespace->namespace-at-phase-level m-ns phase)]
+                                               [namespace (namespace->namespace-at-phase m-ns phase)]
                                                [only-immediate? #t]
                                                [post-expansion-scope inside-scope]
                                                [module-scopes new-module-scopes]

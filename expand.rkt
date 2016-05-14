@@ -150,7 +150,7 @@
                              [current-introduction-scopes (cons intro-scope
                                                                 use-scopes)]))
   (define transformed-s (parameterize ([current-expand-context m-ctx]
-                                       [current-namespace (namespace->namespace-at-phase-level
+                                       [current-namespace (namespace->namespace-at-phase
                                                            (expand-context-namespace ctx)
                                                            (add1 (expand-context-phase ctx)))])
                           (t use-s)))
@@ -438,7 +438,7 @@
           (eval-for-bindings ids
                              exp-rhs
                              phase
-                             (namespace->namespace-at-phase-level
+                             (namespace->namespace-at-phase
                               (expand-context-namespace ctx)
                               phase)
                              #:compile-time-for-self compile-time-for-self)))
