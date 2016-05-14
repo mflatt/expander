@@ -74,7 +74,7 @@
                     (namespace-phase share-from-ns)
                     0))
   (define ns
-    (namespace 'top
+    (namespace #f
                (new-multi-scope) ; scope
                phase
                (make-hasheqv)    ; phase-to-namespace

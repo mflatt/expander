@@ -55,7 +55,22 @@
   (define phase (namespace-phase ns))
   (namespace-module-instantiate! ns mod-name phase)
   (define m-ns (namespace->module-namespace ns mod-name phase #:complain-on-failure? #t))
-  (namespace-get-variable m-ns 0 sym fail-k))
+  (namespace-get-variable m-ns 0 sym
+                          (lambda ()
+                            ;; Maybe syntax?
+                            (define missing (gensym 'missing))
+                            (define t (namespace-get-transformer m-ns 0 sym missing))
+                            (cond
+                             [(eq? t missing) (fail-k)]
+                             [else
+                              ;; expand in a fresh namespace
+                              (define tmp-ns (make-empty-namespace ns))
+                              (define name (resolved-module-path-name mod-name))
+                              (define mod-path (if (path? name)
+                                                   name
+                                                   `(quote ,name)))
+                              (namespace-require mod-path tmp-ns)
+                              (eval sym tmp-ns)]))))
 
 (define (expand s [ns (current-namespace)])
   (expand-in-context s (make-expand-context ns)))

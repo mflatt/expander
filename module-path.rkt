@@ -180,6 +180,7 @@
     (cond
      [(path? mod-path) #f]
      [(and (pair? mod-path) (eq? 'quote (car mod-path))) #f]
+     [(symbol? mod-path) #f]
      [else base]))
   (module-path-index mod-path keep-base #f (make-shift-cache)))
 
