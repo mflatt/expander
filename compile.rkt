@@ -148,7 +148,9 @@
          (define binding (and id (resolve+shift id phase)))
          (define in-mod? (compile-context-self cctx))
          `(variable-reference 
-           ',(compile-context-self cctx)
+           ,(if in-mod?
+                self-id
+                `',(compile-context-self cctx))
            ,(if in-mod?
                 ns-id
                 (compile-context-namespace cctx))

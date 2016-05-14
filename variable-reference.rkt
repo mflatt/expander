@@ -1,6 +1,7 @@
 #lang racket/base
 (require "namespace.rkt"
-         "contract.rkt")
+         "contract.rkt"
+         "module-path.rkt")
 
 (provide variable-reference
          
@@ -35,7 +36,8 @@
 
 (define (variable-reference->module-source vr)
   (check 'variable-reference->module-source variable-reference? vr)
-  (variable-reference->resolved-module-path vr))
+  (define r (variable-reference->resolved-module-path vr))
+  (and r (resolved-module-path-root-name r)))
 
 (define (variable-reference->phase vr)
  (check 'variable-reference->phase variable-reference? vr)
