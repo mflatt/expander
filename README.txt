@@ -6,14 +6,11 @@ TODO:
  extra free-identifier=? equivalences via rename transformers
  Racket-style local definition contexts
  top level
- cross-phase persistent modules
  lazy module instantiation
  lazy scope propagation
- use-site scope "optimization"
  origin tracking
  taints
  expander observer
- lift syntax objects with shifts
  compile to serializable form
 
 ----------------------------------------
