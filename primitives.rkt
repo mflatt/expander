@@ -119,6 +119,7 @@
                       rename-transformer?
                       prop:rename-transformer
                       make-rename-transformer
+                      rename-transformer-target
 
                       prop:liberal-define-context
                       liberal-define-context?
