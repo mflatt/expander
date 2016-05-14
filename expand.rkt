@@ -292,7 +292,9 @@
                         (add-local-binding! id phase #:frame-id frame-id)))
          (define vals (eval-for-syntaxes-binding (m 'rhs) ids ctx))
          (define extended-env (for/fold ([env (expand-context-env body-ctx)]) ([key (in-list keys)]
-                                                                               [val (in-list vals)])
+                                                                               [val (in-list vals)]
+                                                                               [id (in-list ids)])
+                                (maybe-install-free=id! val id phase)
                                 (env-extend env key val)))
          (loop (struct-copy expand-context body-ctx
                             [env extended-env])

@@ -442,7 +442,14 @@
    (letrec-syntaxes+values
     ([(g) (make-rename-transformer (quote-syntax f))])
     ()
-    (list (let-values ([(h) g]) (h 0))
+    (list (letrec-syntaxes+values
+           ([(m) (lambda (stx)
+                   (datum->syntax (quote-syntax here)
+                                  (free-identifier=? (quote-syntax f)
+                                                     (quote-syntax g))))])
+           ()
+           (m))
+          (let-values ([(h) g]) (h 0))
           (g 1)
           (begin
             (set! g 3)
@@ -457,7 +464,7 @@
              ([(m) (lambda (stx) (syntax-local-value (quote-syntax g-id)))])
              ()
              (+ 1 (m))))))))
- #:check (list 1 2 3 4))
+ #:check (list #t 1 2 3 4))
 
 "lifts in transformer; same number twice"
 (eval-expression '(letrec-syntaxes+values
@@ -855,6 +862,33 @@
 (check-print
  (namespace-require ''use-submodule-provide demo-ns)
  'e)
+
+;; ----------------------------------------
+;; rename-transformer provide redirection
+
+(eval-module-declaration '(module provides-original-binding '#%core
+                           (#%provide x)
+                           (define-values (x) 'x)))
+
+(eval-module-declaration '(module provides-rename-transformer '#%core
+                           (#%require (for-syntax '#%core)
+                                      'provides-original-binding)
+                           (#%provide y)
+                           (define-syntaxes (y) (make-rename-transformer
+                                                 (quote-syntax x)))))
+
+(eval-module-declaration '(module checks-free=id '#%core
+                           (#%require (for-syntax '#%core)
+                                      'provides-original-binding
+                                      'provides-rename-transformer)
+                           (println (if (free-identifier=? (quote-syntax x)
+                                                           (quote-syntax y))
+                                        'free=id
+                                        'not-free=id))))
+
+(check-print
+ (namespace-require ''checks-free=id demo-ns)
+ 'free=id)
 
 ;; ----------------------------------------
 ;; syntax-local-value of module binding

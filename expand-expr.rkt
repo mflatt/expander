@@ -130,9 +130,12 @@
                                                   [key (in-list keys)])
        (env-extend env key variable)))
    (define rec-env (for/fold ([env rec-val-env]) ([keys (in-list trans-keyss)]
-                                                  [vals (in-list trans-valss)])
+                                                  [vals (in-list trans-valss)]
+                                                  [ids (in-list trans-idss)])
                      (for/fold ([env env]) ([key (in-list keys)]
-                                            [val (in-list vals)])
+                                            [val (in-list vals)]
+                                            [id (in-list ids)])
+                       (maybe-install-free=id! val id phase)
                        (env-extend env key val))))
    ;; Expand right-hand sides and body
    (define expr-ctx (as-expression-context ctx))

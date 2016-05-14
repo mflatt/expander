@@ -465,7 +465,9 @@
                                               #:compile-time-for-self self))
           ;; Install transformers in the namespace for expansion:
           (for ([sym (in-list syms)]
-                [val (in-list vals)])
+                [val (in-list vals)]
+                [id (in-list ids)])
+            (maybe-install-free=id! val id phase)
             (namespace-set-transformer! m-ns phase sym val))
           (cons (rebuild exp-body
                          `(,(m 'define-syntaxes) ,ids ,exp-rhs))
@@ -739,10 +741,7 @@
                 (loop (add1 pos))
                 s))))
     (hash-set! defined-syms-at-phase defined-sym id)
-    (define b (module-binding frame-id
-                              self phase defined-sym
-                              self phase defined-sym
-                              0))
+    (define b (make-module-binding self phase defined-sym #:frame-id frame-id))
     (remove-required-id! requires+provides id phase)
     (add-binding! id b phase)
     (add-defined-or-required-id! requires+provides id phase b)

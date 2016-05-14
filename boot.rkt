@@ -37,10 +37,7 @@
                 #hasheqv()
                 (hasheqv 0 (for/hash ([sym (in-list syms)])
                              (values sym
-                                     (module-binding #f
-                                                     to-mpi 0 sym
-                                                     to-mpi 0 sym
-                                                     0))))
+                                     (make-module-binding to-mpi 0 sym))))
                 0 0
                 (lambda (ns phase-shift phase-level self)
                   (when (= 0 phase-level)

@@ -205,10 +205,9 @@
      [(and (not normal-b)
            (compile-context-compile-time-for-self cctx))
       ;; Assume a forward reference
-      (module-binding #f
-                      (compile-context-compile-time-for-self cctx) phase (syntax-e s)
-                      (compile-context-compile-time-for-self cctx) phase (syntax-e s)
-                      0)]
+      (make-module-binding (compile-context-compile-time-for-self cctx)
+                           phase
+                           (syntax-e s))]
      [else normal-b]))
   (cond
    [(local-binding? b)
@@ -506,7 +505,7 @@
  
 (define (def-ids-to-syms ids phase self)
   (for/list ([id (in-list ids)])
-    (define b (resolve+shift id phase))
+    (define b (resolve+shift id phase #:immediate? #t))
     (unless (and (module-binding? b)
                  (eq? self (module-binding-module b))
                  (eqv? phase (module-binding-phase b)))

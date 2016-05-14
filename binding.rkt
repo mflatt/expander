@@ -11,6 +11,7 @@
 (provide
  (struct-out binding)
  (struct-out module-binding)
+ make-module-binding
  (struct-out local-binding)
 
  free-identifier=?
@@ -19,6 +20,9 @@
  identifier-binding-symbol
  
  add-local-binding!
+ 
+ maybe-install-free=id!
+ binding-set-free=id
 
  empty-env
  env-extend
@@ -37,13 +41,26 @@
 
 ;; ----------------------------------------
 
-(struct binding (frame-id)) ; used to trigger use-site scopes
+(struct binding (frame-id   ; used to trigger use-site scopes
+                 free=id))  ; `free-identifier=?` equivalence via a rename-transformer binding
 
 ;; See `identifier-binding` docs for information about these fields:
 (struct module-binding binding (module phase sym
                                  nominal-module nominal-phase nominal-sym
                                  nominal-require-phase)
         #:transparent)
+
+(define (make-module-binding module phase sym
+                             #:nominal-module [nominal-module module]
+                             #:nominal-phase [nominal-phase phase]
+                             #:nominal-sym [nominal-sym sym]
+                             #:nominal-require-phase [nominal-require-phase 0]
+                             #:frame-id [frame-id #f])
+  (module-binding frame-id
+                  #f
+                  module phase sym
+                  nominal-module nominal-phase nominal-sym
+                  nominal-require-phase))
 
 ;; Represent a local binding with a key, where the value of
 ;; the key is kept in a separate environment. That indirection
@@ -107,8 +124,27 @@
 ;; Helper for registering a local binding in a set of scopes:
 (define (add-local-binding! id phase #:frame-id [frame-id #f])
   (define key (gensym (syntax-e id)))
-  (add-binding! id (local-binding frame-id key) phase)
+  (add-binding! id (local-binding frame-id #f key) phase)
   key)
+
+
+;; ----------------------------------------
+
+(define (maybe-install-free=id! val id phase)
+  (when (rename-transformer? val)
+    (define free=id (rename-transformer-target val))
+    (unless (syntax-property free=id 'not-free-identifier=?)
+      (define b (resolve+shift id phase #:exactly? #t #:immediate? #t))
+      (add-binding! id (binding-set-free=id b free=id) phase))))
+
+;; Helper to add a `free-identifier=?` equivance to a binding
+(define (binding-set-free=id b free=id)
+  (cond
+   [(module-binding? b) (struct-copy module-binding b
+                                     [free=id #:parent binding free=id])]
+   [(local-binding? b) (struct-copy local-binding b
+                                    [free=id #:parent binding free=id])]
+   [else (error "bad binding for free=id:" b)]))
 
 ;; ----------------------------------------
 
@@ -194,11 +230,21 @@
                                    [mpi-shifts
                                     (cons shift (syntax-mpi-shifts s))]))))))
 
-;; Use `resolve` instead of `resolve+shift` when the module of a module
-;; binding is relevant; module path index shifts attached to `s` are
-;; taken into account in the result
-(define (resolve+shift s phase #:exactly? [exactly? #f])
-  (define b (resolve s phase #:exactly? exactly?))
+;; Use `resolve` instead of `resolve+shift` when the module of a
+;; module binding is relevant or when `free-identifier=?` equivalences
+;; (as installed by a binding to a rename transfomer) are relevant;
+;; module path index shifts attached to `s` are taken into account in
+;; the result
+(define (resolve+shift s phase
+                       #:exactly? [exactly? #f]
+                       #:immediate? [immediate? exactly?])
+  (define immediate-b (resolve s phase #:exactly? exactly?))
+  (define b (if (and immediate-b
+                     (not immediate?)
+                     (binding-free=id immediate-b))
+                (resolve+shift (binding-free=id immediate-b) phase
+                               #:exactly? exactly?)
+                immediate-b))
   (cond
    [(module-binding? b)
     (define mpi-shifts (syntax-mpi-shifts s))

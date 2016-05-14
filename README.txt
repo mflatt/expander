@@ -3,7 +3,6 @@ This is a work-in-progress reimplementation of Racket's macro expander.
 See "demo.rkt" for examples.
 
 TODO:
- extra free-identifier=? equivalences via rename transformers
  Racket-style local definition contexts
  top level
  lazy module instantiation

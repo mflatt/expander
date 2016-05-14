@@ -46,10 +46,7 @@
 
 (define (add-core-binding! sym)
   (add-binding! (datum->syntax core-stx sym)
-                (module-binding #f
-                                core-mpi 0 sym
-                                core-mpi 0 sym
-                                0)
+                (make-module-binding core-mpi 0 sym)
                 0))
 
 ;; Used only after filling in all core forms and primitives:
@@ -62,10 +59,7 @@
                 (hasheqv 0 (for/hasheq ([sym (in-sequences
                                               (in-hash-keys core-primitives)
                                               (in-hash-keys core-forms))])
-                             (values sym (module-binding #f
-                                                         core-mpi 0 sym
-                                                         core-mpi 0 sym
-                                                         0))))
+                             (values sym (make-module-binding core-mpi 0 sym))))
                 0 1
                 (lambda (ns phase phase-level self)
                   (case phase-level

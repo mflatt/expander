@@ -180,11 +180,26 @@
     (for/hasheqv ([(phase mods) (in-hash mht)])
       (values phase (set->list mods))))
   (define (extract-provides)
-    (shift-provides-module-path-index (requires+provides-provides r+p) old-self new-self))
+    (shift-provides-module-path-index (provides-forward-free=id
+                                       (requires+provides-provides r+p))
+                                      old-self
+                                      new-self))
   (let* ([s (syntax-property s 'module-requires (extract-requires))]
          [s (syntax-property s 'module-provides (extract-provides))])
     s))
 
+;; For each binding, flatten `free-identifier=?` equivalences
+;; installed by rename transformers
+(define (provides-forward-free=id provides)
+  (for/hasheqv ([(phase at-phase) (in-hash provides)])
+    (values phase
+            (for/hasheq ([(sym binding) (in-hash at-phase)])
+              (values sym
+                      (let loop ([binding binding])
+                        (cond
+                         [(binding-free=id binding)
+                          (loop (binding-free=id binding))]
+                         [else binding])))))))
 
 ;; ----------------------------------------
 
