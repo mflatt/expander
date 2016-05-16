@@ -24,7 +24,7 @@
   (and a b (+ a b)))
 
 (define (phase- a b)
-  (and a (- a b)))
+  (and a b (- a b)))
 
 ;; For contract errors:
 (define phase?-string "(or/c exact-integer? #f)")

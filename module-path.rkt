@@ -6,6 +6,7 @@
          make-resolved-module-path
          resolved-module-path-name
          resolved-module-path-root-name
+         format-resolved-module-path-name
          
          module-path-index?
          module-path-index-resolve

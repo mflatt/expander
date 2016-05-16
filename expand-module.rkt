@@ -435,7 +435,8 @@
          [(begin-for-syntax)
           (define m (match-syntax exp-body '(begin-for-syntax e ...)))
           (define nested-bodys (phase-1-and-2-loop (m 'e) (add1 phase)))
-          (eval-nested-bodys nested-bodys (add1 phase) m-ns self)
+          (define ct-m-ns (namespace->namespace-at-phase m-ns (add1 phase)))
+          (eval-nested-bodys nested-bodys (add1 phase) ct-m-ns self)
           (cons
            (rebuild
             s
@@ -794,8 +795,7 @@
                    (struct-copy expand-context ctx
                                 [context 'module]
                                 [only-immediate? #f]
-                                [post-expansion-scope #f]
-                                [phase 0])
+                                [post-expansion-scope #f])
                    self
                    #:keep-enclosing-scope-at-phase keep-enclosing-scope-at-phase
                    #:enclosing-is-cross-phase-persistent? enclosing-is-cross-phase-persistent?))

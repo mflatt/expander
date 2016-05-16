@@ -421,6 +421,9 @@
                                  [context 'expression]
                                  [scopes null]
                                  [phase phase]
+                                 [namespace (namespace->namespace-at-phase
+                                             (expand-context-namespace ctx)
+                                             phase)]
                                  [env empty-env]
                                  [only-immediate? #f]
                                  [post-expansion-scope #f]

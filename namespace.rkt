@@ -48,8 +48,14 @@
                    done-phases)        ; for module instances: phase -> phase (=> done for phase and higher)
         #:property prop:custom-write
         (lambda (ns port mode)
-          (write-string "#<namespace:" port)
-          (fprintf port " ~.s" (namespace-module-name ns))
+          (write-string "#<namespace" port)
+          (define n (namespace-module-name ns))
+          (when n
+            (fprintf port ":~.s" (format-resolved-module-path-name
+                                  (resolved-module-path-name n))))
+          (define phase (namespace-phase ns))
+          (unless (zero? phase)
+            (fprintf port ":~s" phase))
           (write-string ">" port)))
 
 ;; Wrapper to make the registry opqaue
@@ -69,7 +75,8 @@
                 primitive?      ; inline variable values in compiled code?
                 cross-phase-persistent?))
 
-(define (make-empty-namespace [share-from-ns #f])
+(define (make-empty-namespace [share-from-ns #f]
+                              #:register? [register? #t])
   (define phase (if share-from-ns
                     (namespace-phase share-from-ns)
                     0))
@@ -82,13 +89,16 @@
                (if share-from-ns
                    (namespace-module-registry share-from-ns)
                    (module-registry (make-hasheq)))
-               (make-hasheq)
-               (make-hash)
+               (make-hasheq)     ; submodule-declarations
+               (if share-from-ns
+                   (namespace-module-instances share-from-ns)
+                   (make-hash))
                (and share-from-ns
                     (or (namespace-cross-phase-persistent-namespace share-from-ns)
                         share-from-ns))
                #f))
-  (hash-set! (namespace-phase-to-namespace ns) phase ns)
+  (when register?
+    (hash-set! (namespace-phase-to-namespace ns) phase ns))
   ns)
 
 (define current-namespace (make-parameter (make-empty-namespace)))
@@ -100,15 +110,17 @@
   (define phase 0) ; always start at 0 when compiling a module
   (define m-ns
     ;; Keeps all module declarations, but makes a fresh space of instances
-    (struct-copy namespace (make-empty-namespace ns)
+    (struct-copy namespace (make-empty-namespace ns #:register? #f)
                  [module-name name]
+                 [phase 0]
                  [submodule-declarations (if for-submodule?
                                              ;; Same set of submodules:
                                              (namespace-submodule-declarations ns)
                                              ;; Fresh set of submodules:
                                              (make-hash))]
+                 [module-instances (make-hash)]
                  [done-phases (make-hasheqv)]))
-  (hash-set! (namespace-phase-to-namespace m-ns) phase m-ns) ; replace initial copy
+  (hash-set! (namespace-phase-to-namespace m-ns) phase m-ns)
   (hash-set! (namespace-module-instances m-ns) (cons name phase) m-ns)
   m-ns)
 
@@ -188,7 +200,7 @@
           (define defs (namespace->definitions m-ns phase-level))
           (unless (definitions-instantiated? defs)
             (set-definitions-instantiated?! defs #t)
-            (define p-ns (namespace->namespace-at-phase m-ns phase))
+            (define p-ns (namespace->namespace-at-phase m-ns phase))<
             ((module-instantiate m) p-ns phase-shift phase-level (module-self m)))))
       (hash-set! (namespace-done-phases m-ns) phase min-phase))]))
 
