@@ -71,9 +71,9 @@
 ;; trigger use-site scopes as needed
 (serializable-struct local-binding binding (key))
 
-(define (free-identifier=? a b phase)
-  (define ab (resolve+shift a phase))
-  (define bb (resolve+shift b phase))
+(define (free-identifier=? a b a-phase b-phase)
+  (define ab (resolve+shift a a-phase))
+  (define bb (resolve+shift b b-phase))
   (cond
    [(or (not ab) (not bb))
     (and (not ab)

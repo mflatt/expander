@@ -21,4 +21,4 @@
   (for/or ([id (in-list (hash-ref fs
                                   (identifier-binding-symbol given-id phase)
                                   null))])
-    (free-identifier=? id given-id phase)))
+    (free-identifier=? id given-id phase phase)))

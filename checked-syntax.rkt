@@ -60,12 +60,16 @@
     (raise-argument-error 'bound-identifier=? phase?-string phase))
   (raw:bound-identifier=? a b phase))
 
-(define (free-identifier=? a b [phase (syntax-local-phase-level)])
+(define (free-identifier=? a b
+                           [a-phase (syntax-local-phase-level)]
+                           [b-phase a-phase])
   (check 'free-identifier=? identifier? a)
   (check 'free-identifier=? identifier? b)
-  (unless (phase? phase)
-    (raise-argument-error 'free-identifier=? phase?-string phase))
-  (raw:free-identifier=? a b phase))
+  (unless (phase? a-phase)
+    (raise-argument-error 'free-identifier=? phase?-string a-phase))
+  (unless (phase? b-phase)
+    (raise-argument-error 'free-identifier=? phase?-string b-phase))
+  (raw:free-identifier=? a b a-phase b-phase))
 
 (define (identifier-binding id [phase (syntax-local-phase-level)])
   (check 'identifier-binding identifier? id)

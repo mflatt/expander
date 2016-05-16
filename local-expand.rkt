@@ -83,6 +83,7 @@
                              [(and (= 1 (length stop-ids))
                                    (free-identifier=? (car stop-ids)
                                                       (datum->syntax p-core-stx 'module*)
+                                                      phase
                                                       phase))
                               stop-ids]
                              [else (append stop-ids

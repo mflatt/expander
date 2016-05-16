@@ -192,9 +192,10 @@
                      ;; For `(all-defined-out)`, binding context must match:
                      (not (free-identifier=? id
                                              (datum->syntax matching-stx (syntax-e id))
+                                             phase
                                              phase)))
                 (for/or ([except-id (in-list except-ids)])
-                  (and (free-identifier=? id except-id phase)
+                  (and (free-identifier=? id except-id phase phase)
                        (hash-set! found except-id #t))))
       (add-provide! rp (add-prefix (syntax-e id)) phase (resolve+shift id phase) id)))
   
@@ -205,7 +206,7 @@
                   (for/or ([i (in-list requireds)])
                     (define id (required-id i))
                     (define phase (required-phase i))
-                    (free-identifier=? id except-id phase)))
+                    (free-identifier=? id except-id phase phase)))
         (error (if matching-stx
                    "excluded identifier was not defined in the module:"
                    "excluded identifier was not required from the module:")
