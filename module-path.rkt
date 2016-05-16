@@ -1,6 +1,7 @@
 #lang racket/base
 (require racket/list
-         racket/serialize)
+         racket/serialize
+         "contract.rkt")
 
 (provide resolved-module-path?
          make-resolved-module-path
@@ -136,8 +137,7 @@
                              (or (current-load-relative-directory) (current-directory))))
 
 (define (module-path-index-resolve mpi [load? #f])
-  (unless (module-path-index? mpi)
-    (raise-argument-error 'module-path-index-resolve "module-path-index?" mpi))
+  (check 'module-path-index-resolve module-path-index? mpi)
   (or (module-path-index-resolved mpi)
       (let ([mod-name ((current-module-name-resolver)
                        (module-path-index-path mpi)
@@ -176,14 +176,18 @@
                            "cannot combine #f submodule list with non-#f module path"
                            "given module path" mod-path
                            "given submodule list" submod))
-  (when submod (error "not yet implemented"))
-  (define keep-base
-    (cond
-     [(path? mod-path) #f]
-     [(and (pair? mod-path) (eq? 'quote (car mod-path))) #f]
-     [(symbol? mod-path) #f]
-     [else base]))
-  (module-path-index mod-path keep-base #f (make-shift-cache)))
+  (cond
+   [submod
+    (make-self-module-path-index (make-resolved-module-path
+                                  (cons 'expanded submod)))]
+   [else
+    (define keep-base
+      (cond
+       [(path? mod-path) #f]
+       [(and (pair? mod-path) (eq? 'quote (car mod-path))) #f]
+       [(symbol? mod-path) #f]
+       [else base]))
+    (module-path-index mod-path keep-base #f (make-shift-cache))]))
 
 (define (module-path-index-resolve/maybe base load?)
   (if (module-path-index? base)
@@ -191,13 +195,18 @@
       base))
 
 (define (module-path-index-split mpi)
-  (unless (module-path-index? mpi)
-    (raise-argument-error 'module-path-index-split "module-path-index?" mpi))
+  (check module-path-index-split module-path-index? mpi)
   (values (module-path-index-path mpi)
           (module-path-index-base mpi)))
 
 (define (module-path-index-submodule mpi)
-  (error "not yet implemented"))
+  (check module-path-index-submodule module-path-index? mpi)
+  (and (not (module-path-index-path mpi))
+       (let ([r (module-path-index-resolved mpi)])
+         (and r
+              (let ([p (resolved-module-path-name r)])
+                (and (pair? p)
+                     (cdr p)))))))
 
 (define make-self-module-path-index
   (case-lambda
