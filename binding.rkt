@@ -40,7 +40,8 @@
  syntax-module-path-index-shift
  binding-module-path-index-shift
  
- syntax-source-module)
+ syntax-source-module
+ identifier-prune-to-source-module)
 
 ;; ----------------------------------------
 
@@ -296,3 +297,9 @@
     (and (not path)
          (module-path-index-resolved from-mpi)
          (apply-shifts from-mpi (syntax-mpi-shifts s)))))
+
+(define (identifier-prune-to-source-module id)
+  (unless (identifier? id)
+    (raise-argument-error 'identifier-prune-to-source-module "identifier?" id))
+  (struct-copy syntax (datum->syntax #f (syntax-e id) id id)
+               [mpi-shifts (syntax-mpi-shifts id)]))

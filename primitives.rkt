@@ -50,6 +50,7 @@
                       syntax-track-origin
                       syntax-shift-phase-level
                       syntax-source-module
+                      identifier-prune-to-source-module
                       
                       syntax-source
                       syntax-line
