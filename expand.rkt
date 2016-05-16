@@ -186,13 +186,15 @@
    [else s]))
 
 ;; Helper to lookup a binding in an expansion context
-(define (lookup b ctx id)
+(define (lookup b ctx id
+                #:out-of-context-as-variable? [out-of-context-as-variable? #f])
   (binding-lookup b
                   (expand-context-env ctx)
                   (expand-context-lift-envs ctx)
                   (expand-context-namespace ctx)
                   (expand-context-phase ctx)
-                  id))
+                  id
+                  #:out-of-context-as-variable? out-of-context-as-variable?))
 
 (define-syntax-rule (guard-stop id ctx s otherwise ...)
   (cond

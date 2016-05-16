@@ -161,7 +161,7 @@
           (failure-thunk)
           (error 'syntax-local-value "unbound identifier: ~v" id))]
      [else
-      (define v (lookup b ctx id))
+      (define v (lookup b ctx id #:out-of-context-as-variable? #t))
       (cond
        [(or (variable? v) (core-form? v))
         (if failure-thunk

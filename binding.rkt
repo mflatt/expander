@@ -190,7 +190,8 @@
 (struct core-form (expander) #:transparent)
 
 ;; Returns `variable` or a compile-time value
-(define (binding-lookup b env lift-envs ns phase id)
+(define (binding-lookup b env lift-envs ns phase id
+                        #:out-of-context-as-variable? [out-of-context-as-variable? #f])
   (cond
    [(module-binding? b)
     (define at-phase (- phase (module-binding-phase b)))
@@ -212,7 +213,9 @@
        ;; check in lift envs, if any
        (for/or ([lift-env (in-list lift-envs)])
          (hash-ref (unbox lift-env) (local-binding-key b) #f))
-       (error "identifier used out of context:" id))]
+       (if out-of-context-as-variable?
+           variable
+           (error "identifier used out of context:" id)))]
      [else t])]
    [else (error "internal error: unknown binding for lookup:" b)]))
 
