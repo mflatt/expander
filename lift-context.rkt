@@ -18,6 +18,7 @@
          add-lifted-module!
          
          make-lift-to-module-context
+         make-shared-module-ends
          lift-to-module-context-end-as-expressions?
          get-and-clear-ends!
          get-and-clear-requires-and-provides!
@@ -116,10 +117,14 @@
                                 end-as-expressions? ends))
 
 (define (make-lift-to-module-context do-require
+                                     #:shared-module-ends ends
                                      #:end-as-expressions? end-as-expressions?)
   (lift-to-module-context do-require (box null)
                           (box null) 
-                          end-as-expressions? (box null)))
+                          end-as-expressions? ends))
+
+(define (make-shared-module-ends)
+  (box null))
 
 (define (get-and-clear-ends! lifts-to-module)
   (box-clear! (lift-to-module-context-ends lifts-to-module)))

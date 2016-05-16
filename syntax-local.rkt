@@ -12,7 +12,8 @@
          "require+provide.rkt"
          "module-path.rkt"
          "namespace.rkt"
-         "contract.rkt")
+         "contract.rkt"
+         "debug.rkt")
 
 (provide get-current-expand-context
          flip-introduction-scopes
@@ -149,7 +150,7 @@
     (raise-argument-error who
                           "(or #f (procedure-arity-includes/c 0))" 
                           failure-thunk))
-  (define ctx (get-current-expand-context 'syntax-local-value))
+  (define ctx (get-current-expand-context who))
   (define phase (expand-context-phase ctx))
   (let loop ([id id])
     (define b (resolve+shift id phase #:immediate? immediate?))
@@ -269,7 +270,7 @@
                                            (wrap-form '#%expression orig-s phase)
                                            orig-s))
                              (for/fold ([s s]) ([phase (in-range phase 0 -1)])
-                               (wrap-form '#%begin-for-syntax
+                               (wrap-form 'begin-for-syntax
                                           s
                                           (sub1 phase))))))
 

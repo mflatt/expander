@@ -90,6 +90,10 @@
 
    ;; For variable repeferences before corresponding binding (phase >= 1)
    (define need-eventually-defined (make-hasheqv)) ; phase -> list of id
+   
+   ;; For `syntax-local-lift-module-end-declaration`, which is accumulated
+   ;; across phases:
+   (define module-ends (make-shared-module-ends))
 
    ;; Initial require
    (define initial-require-s (apply-module-scopes (m 'initial-require)))
@@ -167,6 +171,7 @@
                                                [lifts-to-module
                                                 (make-lift-to-module-context
                                                  (make-parse-lifted-require m-ns self requires+provides)
+                                                 #:shared-module-ends module-ends
                                                  #:end-as-expressions? #f)]))
 
          (define partially-expanded-bodys
@@ -194,6 +199,7 @@
                                        [lifts-to-module
                                         (make-lift-to-module-context
                                          (make-parse-lifted-require m-ns self requires+provides)
+                                         #:shared-module-ends module-ends
                                          #:end-as-expressions? #t)]))
          
          (finish-expanding-body-expressons partially-expanded-bodys
@@ -212,10 +218,10 @@
        (resolve-provides expression-expanded-bodys
                          #:original s
                          #:requires-and-provides requires+provides
+                         #:namespace m-ns
                          #:phase phase
                          #:self self
-                         #:ctx (struct-copy expand-context ctx
-                                            [requires+provides requires+provides])))
+                         #:ctx ctx))
 
      ;; Validate any cross-phase persistence request
      (define is-cross-phase-persistent? (hash-ref declared-keywords '#:cross-phase-persistent #f))
@@ -610,6 +616,7 @@
 (define (resolve-provides expression-expanded-bodys
                           #:original s
                           #:requires-and-provides requires+provides
+                          #:namespace m-ns
                           #:phase phase
                           #:self self
                           #:ctx ctx)
@@ -623,7 +630,11 @@
          (define specs
            (parse-and-expand-provides! (m 'spec)
                                        requires+provides self
-                                       phase ctx
+                                       phase (struct-copy expand-context ctx
+                                                          [context 'top-level]
+                                                          [phase phase]
+                                                          [namespace (namespace->namespace-at-phase m-ns phase)]
+                                                          [requires+provides requires+provides])
                                        expand rebuild))
          (cons (rebuild (car bodys)
                         `(,(m '#%provide) ,@specs))

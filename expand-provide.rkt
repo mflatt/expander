@@ -117,7 +117,6 @@
           (void (match-syntax spec '(expand (id . datum))))
           (define m (match-syntax spec '(expand form)))
           (define exp-spec (expand (m 'form) (struct-copy expand-context ctx
-                                                          [phase phase]
                                                           [only-immediate? #t])))
           (unless (and (pair? (syntax-e exp-spec))
                        (identifier? (car (syntax-e exp-spec)))
