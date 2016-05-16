@@ -48,6 +48,7 @@
          syntax-local-module-defined-identifiers
          syntax-local-module-required-identifiers
          syntax-local-module-exports
+         syntax-local-submodules
          
          syntax-local-get-shadower)
 
@@ -329,7 +330,14 @@
     (cons phase
           (for/list ([sym (in-hash-keys syms)])
             sym))))
-  
+
+(define (syntax-local-submodules)
+  (define ctx (get-current-expand-context 'syntax-local-submodules))
+  (define submods (expand-context-declared-submodule-names ctx))
+  (for/list ([(name kind) (in-hash (unbox submods))]
+             #:when (eq? kind 'module))
+    name))
+
 ;; ----------------------------------------
 
 (define (syntax-local-get-shadower id [only-generated? #f])

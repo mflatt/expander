@@ -27,6 +27,7 @@
                         need-eventually-defined ; phase(>=1) -> variables expanded before binding
                         stops      ; free-id-set
                         current-introduction-scopes ; scope for current macro expansion
+                        declared-submodule-names ; hash table (mutable if non-empty): symbol -> 'module or 'module*
                         lifts      ; #f or lift-context, which contains a list of lifteds
                         lift-envs  ; list of box of env for lifts to locals
                         module-lifts ; lifted modules
@@ -51,6 +52,7 @@
                   #f   ; need-eventually-defined
                   empty-free-id-set
                   null ; current-introduction-scopes
+                  #hasheq() ; declared-submodule-names
                   #f   ; lifts
                   '()  ; lift-envs
                   #f   ; module-lifts

@@ -85,15 +85,8 @@
    ;; To keep track of all requires and provides
    (define requires+provides (make-requires+provides self))
 
-   ;; Table of symbol picked for each binding in this module:
+   ;; Table of symbols picked for each binding in this module:
    (define defined-syms (make-hasheqv)) ; phase -> sym ->id
-
-   ;; For variable repeferences before corresponding binding (phase >= 1)
-   (define need-eventually-defined (make-hasheqv)) ; phase -> list of id
-   
-   ;; For `syntax-local-lift-module-end-declaration`, which is accumulated
-   ;; across phases:
-   (define module-ends (make-shared-module-ends))
 
    ;; Initial require
    (define initial-require-s (apply-module-scopes (m 'initial-require)))
@@ -134,8 +127,18 @@
        (for/list ([body (in-list (mb-m 'body))])
          (add-scope body inside-scope)))
      
+     ;; For variable repeferences before corresponding binding (phase >= 1)
+     (define need-eventually-defined (make-hasheqv)) ; phase -> list of id
+     
+     ;; For `syntax-local-lift-module-end-declaration`, which is accumulated
+     ;; across phases:
+     (define module-ends (make-shared-module-ends))
+     
      ;; Accumulate `#%declare` content
      (define declared-keywords (make-hasheq))
+     
+     ;; Accumulated declared submodule names for `syntax-local-submodules`
+     (define declared-submodule-names (make-hasheq))
      
      ;; The expansion of the module body happens in 4 passes:
      ;;  Pass 1: Partial expansion to determine imports and definitions
@@ -163,6 +166,7 @@
                                                [frame-id frame-id]
                                                [need-eventually-defined (and (phase . >= . 1)
                                                                              need-eventually-defined)]
+                                               [declared-submodule-names declared-submodule-names]
                                                [lifts (make-lift-context ; FIXME: share single instance for same phase?
                                                        (make-wrap-as-definition self frame-id
                                                                                 inside-scope new-module-scopes
@@ -170,7 +174,8 @@
                                                [module-lifts (make-module-lift-context #t)]
                                                [lifts-to-module
                                                 (make-lift-to-module-context
-                                                 (make-parse-lifted-require m-ns self requires+provides)
+                                                 (make-parse-lifted-require m-ns self requires+provides
+                                                                            #:declared-submodule-names declared-submodule-names)
                                                  #:shared-module-ends module-ends
                                                  #:end-as-expressions? #f)]))
 
@@ -188,6 +193,7 @@
                                    #:module-scopes new-module-scopes
                                    #:defined-syms defined-syms
                                    #:declared-keywords declared-keywords
+                                   #:declared-submodule-names declared-submodule-names
                                    #:loop phase-1-and-2-loop))
 
          ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -198,7 +204,8 @@
                                        [post-expansion-scope #f]
                                        [lifts-to-module
                                         (make-lift-to-module-context
-                                         (make-parse-lifted-require m-ns self requires+provides)
+                                         (make-parse-lifted-require m-ns self requires+provides
+                                                                    #:declared-submodule-names declared-submodule-names)
                                          #:shared-module-ends module-ends
                                          #:end-as-expressions? #t)]))
          
@@ -206,7 +213,8 @@
                                            #:tail? (zero? phase)
                                            #:phase phase
                                            #:ctx body-ctx
-                                           #:self self)))
+                                           #:self self
+                                           #:declared-submodule-names declared-submodule-names)))
 
      ;; Check that any tentatively allowed reference at phase >= 1 is ok
      (check-defined-by-now need-eventually-defined self)
@@ -218,6 +226,7 @@
        (resolve-provides expression-expanded-bodys
                          #:original s
                          #:requires-and-provides requires+provides
+                         #:declared-submodule-names declared-submodule-names
                          #:namespace m-ns
                          #:phase phase
                          #:self self
@@ -255,6 +264,7 @@
                                #:phase phase
                                #:self self
                                #:enclosing-is-cross-phase-persistent? is-cross-phase-persistent?
+                               #:declared-submodule-names declared-submodule-names
                                #:ctx submod-ctx))
      
      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -296,6 +306,10 @@
    ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    ;; Assemble the `module` result
    
+   ;; Shift the "self" reference that we have been using for expansion
+   ;; to a generic and constant (for a particualr submodule path)
+   ;; "self", so that we can reocognize it for compilation or to shift
+   ;; back on any future re-expansion:
    (define generic-self (make-generic-self-module-path-index self))
 
    (attach-require-provide-properties
@@ -383,16 +397,23 @@
       (add-scope (add-scope s-without-enclosing
                             outside-scope)
                  inside-scope))
-    (cond
-     [keep-enclosing-scope-at-phase
-      ;; Shift any references to the enclosing module to be relative to the
-      ;; submodule
-      (syntax-module-path-index-shift
-       s-with-edges
-       enclosing-self
-       (module-path-index-join '(submod "..") self))]
-     [else s-with-edges])))
-
+    (define s-with-suitable-enclosing
+      (cond
+       [keep-enclosing-scope-at-phase
+        ;; Shift any references to the enclosing module to be relative to the
+        ;; submodule
+        (syntax-module-path-index-shift
+         s-with-edges
+         enclosing-self
+         (module-path-index-join '(submod "..") self))]
+       [else s-with-edges]))
+    ;; In case we're expanding syntax that was previously expanded,
+    ;; shift the generic "self" to the "self" for the current expansion:
+    (syntax-module-path-index-shift
+     s-with-suitable-enclosing
+     (make-generic-self-module-path-index self)
+     self)))
+  
 ;; ----------------------------------------
 
 ;; Pass 1 of `module` expansion, which uncovers definitions,
@@ -410,6 +431,7 @@
                                 #:module-scopes module-scopes
                                 #:defined-syms defined-syms
                                 #:declared-keywords declared-keywords
+                                #:declared-submodule-names declared-submodule-names
                                 #:loop phase-1-and-2-loop)
   (let loop ([tail? tail?] [bodys bodys])
     (cond
@@ -484,7 +506,8 @@
           (define m (match-syntax ready-body '(#%require req ...)))
           (parse-and-perform-requires! (m 'req) self
                                        m-ns phase
-                                       requires+provides)
+                                       requires+provides
+                                       #:declared-submodule-names declared-submodule-names)
           (cons exp-body
                 (loop tail? (cdr bodys)))]
          [(#%provide)
@@ -495,7 +518,8 @@
           ;; Submodule to parse immediately
           (define ready-body (remove-use-site-scopes exp-body partial-body-ctx))
           (define submod
-            (expand-submodule ready-body self partial-body-ctx))
+            (expand-submodule ready-body self partial-body-ctx
+                              #:declared-submodule-names declared-submodule-names))
           (cons submod
                 (loop tail? (cdr bodys)))]
          [(module*)
@@ -550,7 +574,8 @@
                                           #:tail? tail?
                                           #:phase phase
                                           #:ctx body-ctx
-                                          #:self self)
+                                          #:self self
+                                          #:declared-submodule-names declared-submodule-names)
   (let loop ([tail? tail?] [bodys partially-expanded-bodys])
     (cond
      [(null? bodys)
@@ -590,7 +615,8 @@
                                         (expand-context-module-lifts body-ctx))
                                        phase
                                        self
-                                       body-ctx))
+                                       body-ctx
+                                       #:declared-submodule-names declared-submodule-names))
       (append
        lifts
        lifted-requires-and-provides
@@ -616,6 +642,7 @@
 (define (resolve-provides expression-expanded-bodys
                           #:original s
                           #:requires-and-provides requires+provides
+                          #:declared-submodule-names declared-submodule-names
                           #:namespace m-ns
                           #:phase phase
                           #:self self
@@ -634,7 +661,8 @@
                                                           [context 'top-level]
                                                           [phase phase]
                                                           [namespace (namespace->namespace-at-phase m-ns phase)]
-                                                          [requires+provides requires+provides])
+                                                          [requires+provides requires+provides]
+                                                          [declared-submodule-names declared-submodule-names])
                                        expand rebuild))
          (cons (rebuild (car bodys)
                         `(,(m '#%provide) ,@specs))
@@ -692,6 +720,7 @@
                                 #:phase phase
                                 #:self self
                                 #:enclosing-is-cross-phase-persistent? enclosing-is-cross-phase-persistent?
+                                #:declared-submodule-names declared-submodule-names
                                 #:ctx submod-ctx)
   (let loop ([bodys fully-expanded-bodys-except-post-submodules] [phase phase])
     (cond
@@ -710,10 +739,12 @@
              (define submod
                (expand-submodule shifted-s self submod-ctx
                                  #:keep-enclosing-scope-at-phase neg-phase
-                                 #:enclosing-is-cross-phase-persistent? enclosing-is-cross-phase-persistent?))
+                                 #:enclosing-is-cross-phase-persistent? enclosing-is-cross-phase-persistent?
+                                 #:declared-submodule-names declared-submodule-names))
              (syntax-shift-phase-level submod phase)]
             [else
-             (expand-submodule (car bodys) self submod-ctx)]))
+             (expand-submodule (car bodys) self submod-ctx
+                               #:declared-submodule-names declared-submodule-names)]))
          (cons submod
                (loop (cdr bodys) phase))]
         [(begin-for-syntax)
@@ -800,7 +831,15 @@
 
 (define (expand-submodule s self ctx
                           #:keep-enclosing-scope-at-phase [keep-enclosing-scope-at-phase #f]
-                          #:enclosing-is-cross-phase-persistent? [enclosing-is-cross-phase-persistent? #f])
+                          #:enclosing-is-cross-phase-persistent? [enclosing-is-cross-phase-persistent? #f]
+                          #:declared-submodule-names declared-submodule-names)
+  ;; Register name and check for duplicates
+  (define m (match-syntax s '(module name . _)))
+  (define name (syntax-e (m 'name)))
+  (when (hash-ref declared-submodule-names name #f)
+    (error "submodule already declared with the same name:" name m))
+  (hash-set! declared-submodule-names name (syntax-e (m 'module)))
+
   (define submod
     (expand-module s
                    (struct-copy expand-context ctx
@@ -828,18 +867,22 @@
   submod)
 
 ;; Expand `module` forms, leave `module*` forms alone:
-(define (expand-non-module*-submodules bodys phase self ctx)
+(define (expand-non-module*-submodules bodys phase self ctx
+                                       #:declared-submodule-names declared-submodule-names)
   (for/list ([body (in-list bodys)])
     (case (core-form-sym body phase)
       [(module)
-       (expand-submodule body self ctx)]
+       (expand-submodule body self ctx
+                         #:declared-submodule-names declared-submodule-names)]
       [else body])))
 
 ;; ----------------------------------------
 
-(define (make-parse-lifted-require m-ns self requires+provides)
+(define (make-parse-lifted-require m-ns self requires+provides
+                                   #:declared-submodule-names declared-submodule-names)
   (lambda (s phase)
     (define m (match-syntax s '(#%require req)))
     (parse-and-perform-requires! (list (m 'req)) self
                                  m-ns phase
-                                 requires+provides)))
+                                 requires+provides
+                                 #:declared-submodule-names declared-submodule-names)))

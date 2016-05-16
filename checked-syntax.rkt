@@ -109,4 +109,3 @@
   (check 'syntax-track-origin identifier? id)
   ;; No-op for now
   new-stx)
-

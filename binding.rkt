@@ -38,7 +38,9 @@
  
  resolve+shift
  syntax-module-path-index-shift
- binding-module-path-index-shift)
+ binding-module-path-index-shift
+ 
+ syntax-source-module)
 
 ;; ----------------------------------------
 
@@ -278,3 +280,19 @@
                                                           from-mpi
                                                           to-mpi)])]
    [else b]))
+
+;; ----------------------------------------
+
+(define (syntax-source-module s [source? #f])
+  (unless (syntax? s)
+    (raise-argument-error 'syntax-track-origin "syntax?" s))
+  ;; The concept of a source module is a hack. We try to infer
+  ;; a module from the module-path-index shifts that are attached
+  ;; to the syntax object by starting with the initial shift and
+  ;; working our way back.
+  (for/or ([shift (in-list (reverse (syntax-mpi-shifts s)))])
+    (define from-mpi (car shift))
+    (define-values (path base) (module-path-index-split from-mpi))
+    (and (not path)
+         (module-path-index-resolved from-mpi)
+         (apply-shifts from-mpi (syntax-mpi-shifts s)))))

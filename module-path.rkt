@@ -17,6 +17,7 @@
          make-self-module-path-index
          make-generic-self-module-path-index
          module-path-index-shift
+         module-path-index-resolved ; returns #f if not yet resolved
          
          resolve-module-path
          current-module-name-resolver

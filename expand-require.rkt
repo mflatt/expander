@@ -21,7 +21,8 @@
 
 (define (parse-and-perform-requires! reqs self m-ns phase-shift
                                      requires+provides
-                                     #:run? [run? #f])
+                                     #:run? [run? #f]
+                                     #:declared-submodule-names [declared-submodule-names #hasheq()])
   (let loop ([reqs reqs]
              [top-req #f]
              [phase-shift phase-shift]
@@ -139,7 +140,8 @@
          (perform-require! mp self
                            (or req top-req) m-ns phase-shift just-meta adjust
                            requires+provides
-                           #:run? run?)]))))
+                           #:run? run?
+                           #:declared-submodule-names declared-submodule-names)]))))
 
 (define (ids->sym-set ids)
   (for/set ([id (in-list ids)])
@@ -161,8 +163,15 @@
                           in-stx m-ns phase-shift just-meta adjust
                           requires+provides
                           #:run? [run? #f]
-                          #:can-shadow? [can-shadow? #f])
-  (define mpi (module-path-index-join mod-path self))
+                          #:can-shadow? [can-shadow? #f]
+                          #:declared-submodule-names [declared-submodule-names #hasheq()])
+  (define mpi (if (and (list? mod-path)
+                       (= 2 (length mod-path))
+                       (eq? 'quote (car mod-path))
+                       (symbol? (cadr mod-path))
+                       (hash-ref declared-submodule-names (cadr mod-path) #f))
+                  (module-path-index-join `(submod "." ,(cadr mod-path)) self)
+                  (module-path-index-join mod-path self)))
   (define module-name (module-path-index-resolve mpi #t))
   (define bind-in-stx (if (adjust-rename? adjust)
                           (adjust-rename-to-id adjust)

@@ -49,6 +49,7 @@
                       syntax-debug-info
                       syntax-track-origin
                       syntax-shift-phase-level
+                      syntax-source-module
                       
                       syntax-source
                       syntax-line
@@ -94,6 +95,7 @@
                       syntax-local-module-defined-identifiers
                       syntax-local-module-required-identifiers
                       syntax-local-module-exports
+                      syntax-local-submodules
                       
                       syntax-local-get-shadower
                       
