@@ -35,7 +35,6 @@
 (serializable-struct scope (id          ; internal scope identity; used for sorting
                             kind        ; debug info
                             bindings)   ; sym -> scope-set -> binding
-                     #:mutable ; for deserialization of cycles
                      ;; Custom printer:
                      #:property prop:custom-write
                      (lambda (sc port mode)
@@ -56,12 +55,10 @@
 ;; a module, the number of multi-scopes in a syntax is expected to
 ;; be small.
 (serializable-struct multi-scope (id        ; identity
-                                  scopes) ; phase -> representative-scope
-                     #:mutable) ; for deserialization of cycles
+                                  scopes)) ; phase -> representative-scope
 
 (serializable-struct representative-scope scope (owner   ; a multi-scope for which this one is a phase-specific identity
                                     phase)  ; phase of this scope
-                     #:mutable ; for deserialization of cycles
                      #:property prop:custom-write
                      (lambda (sc port mode)
                        (write-string "#<scope:" port)
@@ -75,7 +72,6 @@
 
 (serializable-struct shifted-multi-scope (phase        ; phase shift applies to all scopes in multi-scope
                                           multi-scope) ; a multi-scope
-                     #:mutable ; for deserialization of cycles
                      #:transparent
                      #:property prop:custom-write
                      (lambda (sc port mode)
