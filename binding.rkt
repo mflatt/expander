@@ -1,6 +1,7 @@
 #lang racket/base
 (require racket/set
          racket/serialize
+         "memo.rkt"
          "syntax.rkt"
          "scope.rkt"
          "phase.rkt"
@@ -229,13 +230,14 @@
   (if (eq? from-mpi to-mpi)
       s
       (let ([shift (cons from-mpi to-mpi)])
+        (define-memo-lite (add-shift shifts)
+          (cons shift shifts))
         (syntax-map s
                     (lambda (tail? d) d)
                     (lambda (s d)
                       (struct-copy syntax s
                                    [e d]
-                                   [mpi-shifts
-                                    (cons shift (syntax-mpi-shifts s))]))))))
+                                   [mpi-shifts (add-shift (syntax-mpi-shifts s))]))))))
 
 ;; Use `resolve` instead of `resolve+shift` when the module of a
 ;; module binding is relevant or when `free-identifier=?` equivalences

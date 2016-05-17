@@ -1,6 +1,7 @@
 #lang racket/base
 (require racket/set
          racket/serialize
+         "memo.rkt"
          "syntax.rkt"
          "phase.rkt")
 
@@ -110,6 +111,8 @@
 ;; FIXME: Adding, removing, or flipping a scope currently recurs
 ;; through a syntax object eagerly, but it should be lazy
 (define (apply-scope s sc op)
+  (define-memo-lite (do-op scs)
+    (op scs sc))
   (syntax-map s
               (lambda (tail? x) x)
               (lambda (s d)
@@ -118,10 +121,10 @@
                              [scopes
                               (if (shifted-multi-scope? sc)
                                   (syntax-scopes s)
-                                  (op (syntax-scopes s) sc))]
+                                  (do-op (syntax-scopes s)))]
                              [shifted-multi-scopes
                               (if (shifted-multi-scope? sc)
-                                  (op (syntax-shifted-multi-scopes s) sc)
+                                  (do-op (syntax-shifted-multi-scopes s))
                                   (syntax-shifted-multi-scopes s))]))))
 
 ;; When a representative-scope is manipulated, we want to
@@ -174,14 +177,17 @@
 (define (syntax-shift-phase-level s phase)
   (if (eqv? phase 0)
       s
-      (syntax-map s
-                  (lambda (tail? d) d)
-                  (lambda (s d)
-                    (struct-copy syntax s
-                                 [e d]
-                                 [shifted-multi-scopes
-                                  (for/set ([sms (in-set (syntax-shifted-multi-scopes s))])
-                                    (shift-multi-scope sms phase))])))))
+      (let ()
+        (define-memo-lite (shift-all smss)
+          (for/set ([sms (in-set smss)])
+            (shift-multi-scope sms phase)))
+        (syntax-map s
+                    (lambda (tail? d) d)
+                    (lambda (s d)
+                      (struct-copy syntax s
+                                   [e d]
+                                   [shifted-multi-scopes
+                                    (shift-all (syntax-shifted-multi-scopes s))]))))))
 
 ;; ----------------------------------------
 

@@ -267,7 +267,7 @@
     (error "not a reference to a module or local binding:" s)]))
 
 ;; ----------------------------------------
-                       
+
 (define (compile-module s cctx
                         #:self [given-self #f]
                         #:as-submodule? [as-submodule? #f])
