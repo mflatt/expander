@@ -30,7 +30,22 @@
 (struct top-init (variable-uses      ; variable-use -> sym
                   syntax-literals))  ; box of list syntax-literal
 
-(struct variable-use (module phase sym) #:transparent)
+(struct variable-use (module phase sym)
+        #:property prop:equal+hash
+        ;; Hach/compare with `eq?` on module part:
+        (list (lambda (a b eql?)
+                (and (eq? (variable-use-module a)
+                          (variable-use-module b))
+                     (eqv? (variable-use-phase a)
+                           (variable-use-phase b))
+                     (eq? (variable-use-sym a)
+                          (variable-use-sym b))))
+              (lambda (a hash-code)
+                (and (+ (eq-hash-code (variable-use-module a))
+                        (eqv-hash-code (variable-use-phase a))
+                        (eq-hash-code (variable-use-sym a)))))
+              (lambda (a hash-code)
+                (and (eq-hash-code (variable-use-sym a))))))
 (struct syntax-literal (stx sym))
 
 (define (make-compile-context #:namespace [namespace (current-namespace)]

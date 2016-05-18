@@ -17,10 +17,13 @@
          "cache-for-boot.rkt")
 
 (define cache-dir #f)
+(define cache-read-only? #f)
 (command-line
  #:once-each
  [("-c" "--cache") dir "Save and load fomr <dir>"
-  (set! cache-dir (path->complete-path dir))])
+  (set! cache-dir (path->complete-path dir))]
+ [("-r" "--read-only") "Use cache in read-only mode"
+  (set! cache-read-only? #t)])
 
 (when cache-dir
   (cache-prime! cache-dir))
@@ -126,9 +129,8 @@
                                (check-module-form
                                 (read-syntax (object-name i) i)))))))
                     (define c (compile (expand s)))
-                    (when cache-dir
+                    (when (and cache-dir (not cache-read-only?))
                       (cache-compiled! cache-dir path c))
                     (eval c))])))
 
 (namespace-require 'racket)
-
