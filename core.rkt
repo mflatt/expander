@@ -4,6 +4,7 @@
          "syntax.rkt"
          "scope.rkt"
          "binding.rkt"
+         "env.rkt"
          "match.rkt"
          "namespace.rkt"
          "module-path.rkt")
@@ -61,7 +62,7 @@
                                               (in-hash-keys core-forms))])
                              (values sym (make-module-binding core-mpi 0 sym))))
                 0 1
-                (lambda (ns phase phase-level self)
+                (lambda (ns phase phase-level self bulk-binding-registry)
                   (case phase-level
                     [(0)
                      (for ([(sym val) (in-hash core-primitives)])

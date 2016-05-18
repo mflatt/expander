@@ -2,6 +2,7 @@
 (require "syntax.rkt"
          "namespace.rkt"
          "binding.rkt"
+         "env.rkt"
          "free-id-set.rkt")
 
 (provide (struct-out expand-context)

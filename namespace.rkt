@@ -1,6 +1,7 @@
 #lang racket/base
 (require "phase.rkt"
          "scope.rkt"
+         "bulk-binding.rkt"
          "module-path.rkt")
 
 (provide make-empty-namespace
@@ -42,6 +43,7 @@
                    phase-to-namespace  ; phase -> namespace for same module  [shared for the same module instance]
                    phase-level-to-definitions ; phase-level -> definitions [shared for the same module instance]
                    module-registry     ; module-registry of (resolved-module-path -> module) [shared among modules]
+                   bulk-binding-registry ; (resolved-module-path -> bulk-provide) for resolving bulk bindings on unmarshal
                    submodule-declarations ; resolved-module-path -> module [shared during a module compilation]
                    module-instances    ; (cons resolved-module-path phase) -> namespace [shared among modules]
                    cross-phase-persistent-namespace ; #f or namespace for persistent instances [shared among modules]
@@ -89,6 +91,9 @@
                (if share-from-ns
                    (namespace-module-registry share-from-ns)
                    (module-registry (make-hasheq)))
+               (if share-from-ns
+                   (namespace-bulk-binding-registry share-from-ns)
+                   (make-bulk-binding-registry))
                (make-hasheq)     ; submodule-declarations
                (if share-from-ns
                    (namespace-module-instances share-from-ns)
@@ -152,6 +157,14 @@
                  (module-registry-declarations (namespace-module-registry ns)))
              mod-name
              m)
+  (unless as-submodule?
+    ;; Register this module's exports for use in resolving bulk
+    ;; bindings, so that bulk bindings can be shared among other
+    ;; modules when unmarshaling:
+    (register-bulk-provide! (namespace-bulk-binding-registry ns)
+                            mod-name
+                            (module-self m)
+                            (module-provides m)))
   ;; Tell resolver that the module is declared
   ((current-module-name-resolver) mod-name #f))
 
@@ -193,6 +206,7 @@
                                          (phase+ phase req-phase)
                                          min-phase)))
       (define phase-shift phase) ; base phase = phase shift for instantiation
+      (define bulk-binding-registry (namespace-bulk-binding-registry m-ns))
       (for ([phase-level (in-range (module-min-phase-level m)
                                    (add1 (module-max-phase-level m)))])
         (define phase (phase+ phase-level phase-shift))
@@ -201,7 +215,7 @@
           (unless (definitions-instantiated? defs)
             (set-definitions-instantiated?! defs #t)
             (define p-ns (namespace->namespace-at-phase m-ns phase))<
-            ((module-instantiate m) p-ns phase-shift phase-level (module-self m)))))
+            ((module-instantiate m) p-ns phase-shift phase-level (module-self m) bulk-binding-registry))))
       (hash-set! (namespace-done-phases m-ns) phase min-phase))]))
 
 (define (namespace-module-visit! ns name phase)

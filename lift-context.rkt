@@ -2,6 +2,7 @@
 (require "syntax.rkt"
          "scope.rkt"
          "binding.rkt"
+         "env.rkt"
          "core.rkt")
 
 (provide make-lift-context

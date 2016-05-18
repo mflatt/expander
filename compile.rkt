@@ -51,6 +51,7 @@
 (define phase-shift-id (gensym 'phase))
 (define ns-id (gensym 'namespace))
 (define self-id (gensym 'namespace))
+(define bulk-binding-registry-id (gensym 'bulk-binding-registry))
 
 ;; ----------------------------------------
 
@@ -407,7 +408,7 @@
        ,provides
        ,min-phase
        ,max-phase
-       (lambda (,ns-id ,phase-shift-id ,phase-level-id ,self-id)
+       (lambda (,ns-id ,phase-shift-id ,phase-level-id ,self-id ,bulk-binding-registry-id)
          (case ,phase-level-id
            ,@(for/list ([(phase bodys) (in-hash phase-to-body)])
                `[(,phase)
@@ -500,7 +501,8 @@
       (syntax-module-path-index-shift
        (syntax-shift-phase-level ,q ,phase-shift-id)
        ',(compile-context-self cctx)
-       ,self-id))))
+       ,self-id
+       ,bulk-binding-registry-id))))
 
 ;; ----------------------------------------
          

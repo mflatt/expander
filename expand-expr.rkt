@@ -5,6 +5,7 @@
          "match.rkt"
          "namespace.rkt"
          "binding.rkt"
+         "env.rkt"
          "dup-check.rkt"
          "core.rkt"
          "expand-context.rkt"

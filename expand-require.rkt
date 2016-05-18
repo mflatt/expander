@@ -8,7 +8,8 @@
          "namespace.rkt"
          "match.rkt"
          "require+provide.rkt"
-         "module-path.rkt")
+         "module-path.rkt"
+         "bulk-binding.rkt")
 
 (provide parse-and-perform-requires!
          perform-initial-require!)
@@ -258,38 +259,10 @@
       (let-values ([(sym) (filter b)])
         (when (and sym
                    (not can-bulk?)) ;; bulk binding added later
+          ;; Add a non-bulk binding, since `filter` has checked/adjusted it
           (add-binding! (datum->syntax in-stx sym) b phase))))
     ;; Add bulk binding after all filtering
     (when can-bulk?
       (add-bulk-binding! in-stx
                          (bulk-binding provides self mpi provide-phase-level phase-shift)
                          phase))))
-
-(define (provide-binding-to-require-binding out-binding sym
-                                            #:self self
-                                            #:mpi mpi
-                                            #:provide-phase-level provide-phase-level
-                                            #:phase-shift phase-shift)
-  (define from-mod (module-binding-module out-binding))
-  (struct-copy module-binding out-binding
-               [module (module-path-index-shift from-mod self mpi)]
-               [nominal-module mpi]
-               [nominal-phase provide-phase-level]
-               [nominal-sym sym]
-               [nominal-require-phase phase-shift]
-               [frame-id #:parent binding #f]))
-
-;; ----------------------------------------
-;; Bulk binding
-
-(serializable-struct bulk-binding (provides self mpi provide-phase-level phase-shift)
-                     #:property prop:bulk-binding
-                     (bulk-binding-class
-                      (lambda (b) (bulk-binding-provides b))
-                      (lambda (b binding sym)
-                        (provide-binding-to-require-binding
-                         binding sym
-                         #:self (bulk-binding-self b)
-                         #:mpi (bulk-binding-mpi b)
-                         #:provide-phase-level (bulk-binding-provide-phase-level b)
-                         #:phase-shift (bulk-binding-phase-shift b)))))

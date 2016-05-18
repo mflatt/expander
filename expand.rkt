@@ -6,6 +6,7 @@
          "match.rkt"
          "namespace.rkt"
          "binding.rkt"
+         "env.rkt"
          "free-id-set.rkt"
          "dup-check.rkt"
          "compile.rkt"

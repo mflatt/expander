@@ -19,6 +19,7 @@
                              scopes ; scopes that apply at all phases
                              shifted-multi-scopes ; scopes with a distinct identity at each phase
                              mpi-shifts ; chain of module-path-index substitutions
+                             bulk-binding-registry ; for resolving bulk bindings on unmarshal
                              srcloc ; source location
                              props) ; properties
                      ;; Custom printer:
@@ -39,7 +40,7 @@
 (define empty-props #hash())
 
 (define empty-syntax
-  (syntax #f empty-scopes empty-shifted-multi-scopes empty-mpi-shifts #f empty-props))
+  (syntax #f empty-scopes empty-shifted-multi-scopes empty-mpi-shifts #f #f empty-props))
 
 (define (identifier? s)
   (and (syntax? s) (symbol? (syntax-e s))))
@@ -59,6 +60,8 @@
             (if stx-c
                 (syntax-mpi-shifts stx-c)
                 empty-mpi-shifts)
+            (and stx-c
+                 (syntax-bulk-binding-registry stx-c))
             (and stx-l (syntax-srcloc stx-l))
             (if stx-p (syntax-props stx-p) empty-props)))
   (syntax-map s

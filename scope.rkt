@@ -98,10 +98,13 @@
   (make-struct-type-property 'bulk-binding))
 
 ;; Value of `prop:bulk-binding`
-(struct bulk-binding-class (get-symbols ; bulk-binding -> sym -> binding-info
+(struct bulk-binding-class (get-symbols ; bulk-binding syntax -> sym -> binding-info
                             create))    ; bul-binding -> binding-info sym -> binding
-(define (bulk-binding-symbols b)
-  ((bulk-binding-class-get-symbols (bulk-binding-ref b)) b))
+(define (bulk-binding-symbols b s)
+  ;; Providing the identifier `s` supports access to the bulk-binding
+  ;; registry and module path index shifts for unmarshaling, but `s`
+  ;; can be #f if the bulk binding was just created
+  ((bulk-binding-class-get-symbols (bulk-binding-ref b)) b s))
 (define (bulk-binding-create b)
   (bulk-binding-class-create (bulk-binding-ref b)))
 
@@ -275,7 +278,8 @@
                                         ;; synthesize a non-bulk binding table
                                         (for/or ([bulk-at (in-list (scope-bulk-bindings sc))])
                                           (define bulk (bulk-binding-at-bulk bulk-at))
-                                          (define b-info (hash-ref (bulk-binding-symbols bulk) sym #f))
+                                          (define syms (bulk-binding-symbols bulk s))
+                                          (define b-info (hash-ref syms sym #f))
                                           (and b-info
                                                (hasheq (bulk-binding-at-scopes bulk-at)
                                                        ((bulk-binding-create bulk) bulk b-info sym))))))]
@@ -305,7 +309,7 @@
 ;; The bindings of `bulk at `scopes` should shadow any existing
 ;; mappings in `sym-bindings`
 (define (remove-matching-bindings! bindings scopes bulk)
-  (define bulk-symbols (bulk-binding-symbols bulk))
+  (define bulk-symbols (bulk-binding-symbols bulk #f))
   (cond
    [(not bindings) (void)]
    [((hash-count bindings) . < . (hash-count bulk-symbols))

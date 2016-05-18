@@ -4,6 +4,7 @@
          "phase.rkt"
          "scope.rkt"
          "binding.rkt"
+         "env.rkt"
          "expand-context.rkt"
          "expand.rkt"
          "core.rkt"

@@ -52,7 +52,7 @@
                              (values sym
                                      (make-module-binding to-mpi 0 sym))))
                 0 0
-                (lambda (ns phase-shift phase-level self)
+                (lambda (ns phase-shift phase-level self bulk-binding-registry)
                   (when (= 0 phase-level)
                     (for ([sym (in-list syms)])
                       (namespace-set-variable! ns 0 sym
