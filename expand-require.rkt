@@ -1,5 +1,6 @@
 #lang racket/base
 (require racket/set
+         racket/serialize
          "syntax.rkt"
          "phase.rkt"
          "scope.rkt"
@@ -184,6 +185,7 @@
   (bind-all-provides!
    m
    bind-in-stx phase-shift m-ns module-name mpi
+   #:can-bulk? (not adjust)
    #:filter (lambda (binding)
               (define sym (module-binding-nominal-sym binding))
               (define provide-phase (module-binding-nominal-phase binding))
@@ -242,23 +244,52 @@
 ;; ----------------------------------------
 
 (define (bind-all-provides! m in-stx phase-shift ns module-name mpi
+                            #:can-bulk? can-bulk?
                             #:filter filter)
   (define self (module-self m))
   (for ([(provide-phase-level provides) (in-hash (module-provides m))])
     (define phase (phase+ phase-shift provide-phase-level))
     (for ([(sym out-binding) (in-hash provides)])
-      (define from-mod (module-binding-module out-binding))
-      (define b (struct-copy module-binding out-binding
-                             [module (if (eq? from-mod self)
-                                         mpi
-                                         (module-path-index-shift from-mod
-                                                                  self
-                                                                  mpi))]
-                             [nominal-module mpi]
-                             [nominal-phase provide-phase-level]
-                             [nominal-sym sym]
-                             [nominal-require-phase phase-shift]
-                             [frame-id #:parent binding #f]))
+      (define b (provide-binding-to-require-binding out-binding sym
+                                                    #:self self
+                                                    #:mpi mpi
+                                                    #:provide-phase-level provide-phase-level
+                                                    #:phase-shift phase-shift))
       (let-values ([(sym) (filter b)])
-        (when sym
-          (add-binding! (datum->syntax in-stx sym) b phase))))))
+        (when (and sym
+                   (not can-bulk?)) ;; bulk binding added later
+          (add-binding! (datum->syntax in-stx sym) b phase))))
+    ;; Add bulk binding after all filtering
+    (when can-bulk?
+      (add-bulk-binding! in-stx
+                         (bulk-binding provides self mpi provide-phase-level phase-shift)
+                         phase))))
+
+(define (provide-binding-to-require-binding out-binding sym
+                                            #:self self
+                                            #:mpi mpi
+                                            #:provide-phase-level provide-phase-level
+                                            #:phase-shift phase-shift)
+  (define from-mod (module-binding-module out-binding))
+  (struct-copy module-binding out-binding
+               [module (module-path-index-shift from-mod self mpi)]
+               [nominal-module mpi]
+               [nominal-phase provide-phase-level]
+               [nominal-sym sym]
+               [nominal-require-phase phase-shift]
+               [frame-id #:parent binding #f]))
+
+;; ----------------------------------------
+;; Bulk binding
+
+(serializable-struct bulk-binding (provides self mpi provide-phase-level phase-shift)
+                     #:property prop:bulk-binding
+                     (bulk-binding-class
+                      (lambda (b) (bulk-binding-provides b))
+                      (lambda (b binding sym)
+                        (provide-binding-to-require-binding
+                         binding sym
+                         #:self (bulk-binding-self b)
+                         #:mpi (bulk-binding-mpi b)
+                         #:provide-phase-level (bulk-binding-provide-phase-level b)
+                         #:phase-shift (bulk-binding-phase-shift b)))))

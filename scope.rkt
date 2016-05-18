@@ -18,10 +18,14 @@
          
          syntax-shift-phase-level
 
-         add-binding-in-scopes!
          add-binding!
-         resolve
+         add-bulk-binding!
          
+         prop:bulk-binding
+         (struct-out bulk-binding-class)
+
+         resolve
+
          bound-identifier=?)
 
 (module+ for-debug
@@ -35,7 +39,9 @@
 
 (serializable-struct scope (id          ; internal scope identity; used for sorting
                             kind        ; debug info
-                            bindings)   ; sym -> scope-set -> binding
+                            bindings    ; [mutable] #f or sym -> scope-set -> binding [shadows any bulk binding]
+                            bulk-bindings) ; [mutable] list of bulk-binding-at [earlier shadows layer]
+                     #:mutable ; for serialization, since some fields are mutable
                      ;; Custom printer:
                      #:property prop:custom-write
                      (lambda (sc port mode)
@@ -59,7 +65,8 @@
                                   scopes)) ; phase -> representative-scope
 
 (serializable-struct representative-scope scope (owner   ; a multi-scope for which this one is a phase-specific identity
-                                    phase)  ; phase of this scope
+                                                 phase)  ; phase of this scope
+                     #:mutable ; for serialization, since parent has mutable fields
                      #:property prop:custom-write
                      (lambda (sc port mode)
                        (write-string "#<scope:" port)
@@ -82,6 +89,22 @@
                        (display (shifted-multi-scope-phase sc) port)
                        (write-string ">" port)))
 
+(serializable-struct bulk-binding-at (scopes ; scope set
+                                      bulk)) ; bulk-binding
+
+;; Bulk bindings are represented by a property, so that the implemenation
+;; can be separate and manage serialiation:
+(define-values (prop:bulk-binding bulk-binding? bulk-binding-ref)
+  (make-struct-type-property 'bulk-binding))
+
+;; Value of `prop:bulk-binding`
+(struct bulk-binding-class (get-symbols ; bulk-binding -> sym -> binding-info
+                            create))    ; bul-binding -> binding-info sym -> binding
+(define (bulk-binding-symbols b)
+  ((bulk-binding-class-get-symbols (bulk-binding-ref b)) b))
+(define (bulk-binding-create b)
+  (bulk-binding-class-create (bulk-binding-ref b)))
+
 ;; Each new scope increments the counter, so we can check whether one
 ;; scope is newer than another.
 (define id-counter 0)
@@ -90,10 +113,13 @@
   id-counter)
   
 (define (make-bindings)
-  (make-hasheq))
+  #f)
+
+(define (make-bulk-bindings)
+  null)
 
 (define (new-scope kind)
-  (scope (new-scope-id!) kind (make-bindings)))
+  (scope (new-scope-id!) kind (make-bindings) (make-bulk-bindings)))
 
 (define (new-multi-scope [name (gensym)])
   (shifted-multi-scope 0 (multi-scope (new-scope-id!) (make-hasheqv))))
@@ -101,7 +127,9 @@
 (define (multi-scope-to-scope-at-phase ms phase)
   ;; Get the identity of `ms` at phase`
   (or (hash-ref (multi-scope-scopes ms) phase #f)
-      (let ([s (representative-scope (new-scope-id!) 'module (make-bindings) ms phase)])
+      (let ([s (representative-scope (new-scope-id!) 'module
+                                     (make-bindings) (make-bulk-bindings)
+                                     ms phase)])
         (hash-set! (multi-scope-scopes ms) phase s)
         s)))
 
@@ -199,14 +227,20 @@
                                                    (phase- (shifted-multi-scope-phase sms)
                                                            phase)))))
 
-(define (add-binding-in-scopes! scopes sym binding)
+(define (find-max-scope scopes)
   (when (set-empty? scopes)
     (error "cannot bind in empty scope set"))
-  (define max-sc (for/fold ([max-sc (set-first scopes)]) ([sc (in-set scopes)])
-                   (if (scope>? sc max-sc)
-                       sc
-                       max-sc)))
-  (define bindings (scope-bindings max-sc))
+  (for/fold ([max-sc (set-first scopes)]) ([sc (in-set scopes)])
+    (if (scope>? sc max-sc)
+        sc
+        max-sc)))
+
+(define (add-binding-in-scopes! scopes sym binding)
+  (define max-sc (find-max-scope scopes))
+  (define bindings (or (scope-bindings max-sc)
+                       (let ([h (make-hasheq)])
+                         (set-scope-bindings! max-sc h)
+                         h)))
   (define sym-bindings (or (hash-ref bindings sym #f)
                            (let ([h (make-hash)])
                              (hash-set! bindings sym h)
@@ -215,6 +249,17 @@
 
 (define (add-binding! id binding phase)
   (add-binding-in-scopes! (syntax-scope-set id phase) (syntax-e id) binding))
+
+(define (add-bulk-binding! s binding phase)
+  (define scopes (syntax-scope-set s phase))
+  (define max-sc (find-max-scope scopes))
+  (set-scope-bulk-bindings! max-sc
+                            (cons (bulk-binding-at scopes binding)
+                                  (scope-bulk-bindings max-sc)))
+  (remove-matching-bindings! (scope-bindings max-sc) scopes binding))
+
+
+;; ----------------------------------------
 
 (define (resolve s phase #:exactly? [exactly? #f])
   (unless (identifier? s)
@@ -225,7 +270,15 @@
   (define sym (syntax-e s))
   (define candidates
     (for*/list ([sc (in-set scopes)]
-                [bindings (in-value (hash-ref (scope-bindings sc) sym #f))]
+                [bindings (in-value (or (hash-ref (or (scope-bindings sc) #hasheq()) sym #f)
+                                        ;; Check bulk bindings; if a symbol match is found,
+                                        ;; synthesize a non-bulk binding table
+                                        (for/or ([bulk-at (in-list (scope-bulk-bindings sc))])
+                                          (define bulk (bulk-binding-at-bulk bulk-at))
+                                          (define b-info (hash-ref (bulk-binding-symbols bulk) sym #f))
+                                          (and b-info
+                                               (hasheq (bulk-binding-at-scopes bulk-at)
+                                                       ((bulk-binding-create bulk) bulk b-info sym))))))]
                 #:when bindings
                 [(b-scopes binding) (in-hash bindings)]
                 #:when (subset? b-scopes scopes))
@@ -246,7 +299,27 @@
                      (set-count (car max-candidate))))
          (cdr max-candidate))]
    [else #f]))
- 
+
+;; ----------------------------------------
+
+;; The bindings of `bulk at `scopes` should shadow any existing
+;; mappings in `sym-bindings`
+(define (remove-matching-bindings! bindings scopes bulk)
+  (define bulk-symbols (bulk-binding-symbols bulk))
+  (cond
+   [(not bindings) (void)]
+   [((hash-count bindings) . < . (hash-count bulk-symbols))
+    ;; Faster to consider each sym in `sym-binding`
+    (for ([(sym sym-bindings) (in-hash bindings)])
+      (when (hash-ref bulk-symbols sym #f)
+        (hash-remove! sym-bindings scopes)))]
+   [else
+    ;; Faster to consider each sym in `bulk-symbols`
+    (for ([sym (in-hash-keys bulk-symbols)])
+      (define sym-bindings (hash-ref bindings sym #f))
+      (when sym-bindings
+        (hash-remove! sym-bindings scopes)))]))
+
 ;; ----------------------------------------
 
 (define (bound-identifier=? a b phase)
