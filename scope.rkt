@@ -1,6 +1,6 @@
 #lang racket/base
-(require racket/set
-         racket/serialize
+(require racket/serialize
+         "set.rkt"
          "memo.rkt"
          "syntax.rkt"
          "phase.rkt")

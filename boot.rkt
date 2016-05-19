@@ -1,12 +1,12 @@
 #lang racket/base
 (require racket/cmdline
+         "set.rkt"
          "main.rkt"
          "namespace.rkt"
          "binding.rkt"
          "primitives.rkt"
          "read-syntax.rkt"
          "module-path.rkt"
-         racket/set
          racket/runtime-path
          (only-in syntax/modread
                   with-module-reading-parameterization)

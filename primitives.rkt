@@ -1,5 +1,5 @@
 #lang racket/base
-(require racket/set
+(require "set.rkt"
          (except-in "syntax.rkt"
                     syntax->datum
                     datum->syntax)
