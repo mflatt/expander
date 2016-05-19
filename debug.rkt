@@ -14,12 +14,23 @@
   (define s-scs (syntax-scope-set s phase))
   (define context (scope-set->context s-scs))
   (define context-ht (hash-set init-ht 'context context))
+  (define sym (syntax-e s))
   (define bindings (cond
                     [(identifier? s)
                      (for*/list ([sc (in-set (syntax-scope-set s phase))]
-                                 [(scs b) (in-hash (hash-ref (scope-bindings sc)
-                                                             (syntax-e s)
-                                                             #hash()))]
+                                 [(scs b) (in-hash 
+                                           (or
+                                            (hash-ref (or (scope-bindings sc) #hasheq()) sym #f)
+                                            ;; Check bulk bindings; if a symbol match is found,
+                                            ;; synthesize a non-bulk binding table
+                                            (for/or ([bulk-at (in-list (scope-bulk-bindings sc))])
+                                              (define bulk (bulk-binding-at-bulk bulk-at))
+                                              (define syms (bulk-binding-symbols bulk s))
+                                              (define b-info (hash-ref syms sym #f))
+                                              (and b-info
+                                                   (hasheq (bulk-binding-at-scopes bulk-at)
+                                                           ((bulk-binding-create bulk) bulk b-info sym))))
+                                            #hash()))]
                                  #:when (or all-bindings?
                                             (subset? scs s-scs)))
                        (hash 'name (syntax-e s)

@@ -18,12 +18,15 @@
 
 (define cache-dir #f)
 (define cache-read-only? #f)
+(define cache-save-only #f)
 (command-line
  #:once-each
  [("-c" "--cache") dir "Save and load fomr <dir>"
   (set! cache-dir (path->complete-path dir))]
  [("-r" "--read-only") "Use cache in read-only mode"
-  (set! cache-read-only? #t)])
+  (set! cache-read-only? #t)]
+ [("-x" "--cache-only") file "Cache only for sources listed in <file>"
+  (set! cache-save-only (call-with-input-file* file read))])
 
 (when cache-dir
   (cache-prime! cache-dir))
@@ -129,7 +132,10 @@
                                (check-module-form
                                 (read-syntax (object-name i) i)))))))
                     (define c (compile (expand s)))
-                    (when (and cache-dir (not cache-read-only?))
+                    (when (and cache-dir
+                               (not cache-read-only?)
+                               (or (not cache-save-only)
+                                   (hash-ref cache-save-only (path->string path) #f)))
                       (cache-compiled! cache-dir path c))
                     (eval c))])))
 

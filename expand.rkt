@@ -116,7 +116,7 @@
                       [(1) " in the transformer phase"]
                       [else (format " at phase ~a" phase)]))
             s
-            (syntax-debug-info s (expand-context-phase ctx) #t))])))
+            (syntax-debug-info id (expand-context-phase ctx) #t))])))
 
 ;; Expand `s` given that the value `t` of the relevant binding,
 ;; where `t` is either a core form, a macro transformer, some

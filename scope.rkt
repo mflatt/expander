@@ -29,7 +29,10 @@
          bound-identifier=?)
 
 (module+ for-debug
-  (provide (struct-out scope)))
+  (provide (struct-out scope)
+           (struct-out bulk-binding-at)
+           bulk-binding-symbols
+           bulk-binding-create))
 
 ;; A scope represents a distinct "dimension" of binding. We can attach
 ;; the bindings for a set of scopes to an arbitrary scope in the set;
