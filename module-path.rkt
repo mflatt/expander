@@ -52,8 +52,7 @@
       (car name)
       name))
 
-;; FIXME: make weak
-(define resolved-module-paths (make-hash))
+(define resolved-module-paths (make-weak-hash))
 
 (define (make-resolved-module-path p)
   (unless (or (symbol? p)
@@ -74,9 +73,10 @@
                            "              (non-empty-listof symbol?)))")
                           p))
   ;; FIXME: make atomic
-  (or (hash-ref resolved-module-paths p #f)
+  (or (let ([e (hash-ref resolved-module-paths p #f)])
+        (and e (ephemeron-value e)))
       (let ([r (resolved-module-path p)])
-        (hash-set! resolved-module-paths p r)
+        (hash-set! resolved-module-paths p (make-ephemeron p r))
         r)))
 
 (define deserialize-resolved-module-path
@@ -217,8 +217,7 @@
                                                      (and enclosing
                                                           (module-path-index-resolve enclosing))))]))
 
-;; FIXME: make weak
-(define generic-self-mpis (make-hasheq))
+(define generic-self-mpis (make-weak-hash))
 
 ;; Return a module path index that is the same for a given
 ;; submodule path in the given self module path index
@@ -228,9 +227,10 @@
                   (if (symbol? name)
                       'expanded
                       (cons 'expanded (cdr name)))))
-  (or (hash-ref generic-self-mpis submod #f)
+  (or (let ([e (hash-ref generic-self-mpis submod #f)])
+        (and e (ephemeron-value e)))
       (let ([mpi (module-path-index #f #f submod (make-shift-cache))])
-        (hash-set! generic-self-mpis submod mpi)
+        (hash-set! generic-self-mpis submod (make-ephemeron submod mpi))
         mpi)))
 
 (define (module-path-index-shift mpi from-mpi to-mpi)

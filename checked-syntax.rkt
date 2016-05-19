@@ -98,9 +98,9 @@
   (raw:syntax-debug-info s phase all-bindings?))
 
 (define (syntax-shift-phase-level s phase)
-  (check syntax-shift-phase-level syntax? s)
+  (check 'syntax-shift-phase-level syntax? s)
   (unless (phase? phase)
-    (raise-argument-error 'syntax-debug-info phase?-string phase))
+    (raise-argument-error 'syntax-shift-phase-level phase?-string phase))
   (raw:syntax-shift-phase-level s phase))
 
 (define (syntax-track-origin new-stx old-stx id)

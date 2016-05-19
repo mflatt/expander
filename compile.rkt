@@ -28,7 +28,8 @@
                          def-syms))  ; selects names that don't collide with primitives: sym -> sym 
 
 (struct top-init (variable-uses      ; variable-use -> sym
-                  syntax-literals))  ; box of list syntax-literal
+                  syntax-literals    ; box of list syntax-literal
+                  [num-syntax-literals #:mutable]))
 
 (struct variable-use (module phase sym)
         #:property prop:equal+hash
@@ -46,7 +47,6 @@
                         (eq-hash-code (variable-use-sym a)))))
               (lambda (a hash-code)
                 (and (eq-hash-code (variable-use-sym a))))))
-(struct syntax-literal (stx sym))
 
 (define (make-compile-context #:namespace [namespace (current-namespace)]
                               #:phase [phase (namespace-phase namespace)]
@@ -66,6 +66,8 @@
 (define phase-shift-id (gensym 'phase))
 (define ns-id (gensym 'namespace))
 (define self-id (gensym 'namespace))
+(define syntax-literals-id (gensym 'syntax-literals))
+(define get-syntax-literal!-id (gensym 'get-syntax-literal!))
 (define bulk-binding-registry-id (gensym 'bulk-binding-registry))
 
 ;; ----------------------------------------
@@ -148,13 +150,14 @@
          `(quote ,(syntax->datum (m 'datum)))]
         [(quote-syntax)
          (define m (match-syntax s '(quote datum)))
-         (define q `(quote ,(m 'datum)))
+         (define q (m 'datum))
          (if (compile-context-self cctx)
-             (let ([sym (gensym 'stx)])
-               (define b (top-init-syntax-literals (compile-context-top-init cctx)))
-               (set-box! b (cons (syntax-literal q sym) (unbox b)))
-               sym)
-             q)]
+             (let ([pos (add-syntax-literal! (compile-context-top-init cctx) q)])
+               `(let ([stx (vector-ref ,syntax-literals-id ,pos)])
+                 (if stx
+                     (,get-syntax-literal!-id ,pos)
+                     stx)))
+             `(quote ,q))]
         [(#%variable-reference)
          (define id-m (try-match-syntax s '(#%variable-reference id)))
          (define top-m (and (not id-m)
@@ -440,15 +443,26 @@
   
 (define (make-top-init)
   (top-init (make-variable-uses)
-            (box null)))
+            (box null)
+            0))
 
 (define (make-variable-uses)
   (make-hash))
 
+(define (add-syntax-literal! top-init q)
+  (define pos (top-init-num-syntax-literals top-init))
+  (set-top-init-num-syntax-literals! top-init (add1 pos))
+  (define b (top-init-syntax-literals top-init))
+  (set-box! b (cons q (unbox b)))
+  pos)
+
 (define (generate-top-init top-init phase cctx)
   (append
    (generate-variable-uses (top-init-variable-uses top-init) phase cctx)
-   (generate-syntax-literals (unbox (top-init-syntax-literals top-init)) phase cctx)))
+   (generate-syntax-literals (unbox (top-init-syntax-literals top-init))
+                             (top-init-num-syntax-literals top-init)
+                             phase
+                             cctx)))
 
 (define (generate-variable-uses variable-uses phase cctx)
   (define in-mod? (compile-context-self cctx))
@@ -508,16 +522,18 @@
                                                    ,(variable-use-phase ref)
                                                    ,m-ns-sym)))))))))
 
-(define (generate-syntax-literals syntax-literals phase cctx)
-  (for/list ([sl (in-list syntax-literals)])
-    (define q (syntax-literal-stx sl))
-    (define sym (syntax-literal-sym sl))
-    `(define ,sym
-      (syntax-module-path-index-shift
-       (syntax-shift-phase-level ,q ,phase-shift-id)
-       ',(compile-context-self cctx)
-       ,self-id
-       ,bulk-binding-registry-id))))
+(define (generate-syntax-literals syntax-literals num-syntax-literals phase cctx)
+  `((define ,syntax-literals-id (make-vector ,num-syntax-literals))
+    (define (,get-syntax-literal!-id pos)
+      (define unshifted ',(list->vector (reverse syntax-literals)))
+      (define stx
+        (syntax-module-path-index-shift
+         (syntax-shift-phase-level (vector-ref unshifted pos) ,phase-shift-id)
+         ',(compile-context-self cctx)
+         ,self-id
+         ,bulk-binding-registry-id))
+      (vector-set! ,syntax-literals-id pos stx)
+      stx)))
 
 ;; ----------------------------------------
          
