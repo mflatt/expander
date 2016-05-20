@@ -27,6 +27,7 @@
  resolve+shift
  syntax-module-path-index-shift
 
+ apply-syntax-shifts
  syntax-apply-shifts
  binding-module-path-index-shift
  
@@ -147,7 +148,8 @@
 ;;  report `form-mpi`, the same operation on the result will
 ;;  report `to-mpi`
 (define (syntax-module-path-index-shift s from-mpi to-mpi [bulk-binding-registry #f])
-  (if (eq? from-mpi to-mpi)
+  (if (and (eq? from-mpi to-mpi)
+           (not bulk-binding-registry))
       s
       (let ([shift (cons from-mpi to-mpi)])
         (define-memo-lite (add-shift shifts)
@@ -168,12 +170,21 @@
 ;; the result
 (define (resolve+shift s phase
                        #:exactly? [exactly? #f]
-                       #:immediate? [immediate? exactly?])
-  (define immediate-b (resolve s phase #:exactly? exactly?))
+                       #:immediate? [immediate? exactly?]
+                       ;; For resolving bulk bindings in `free-identifier=?` chains:
+                       #:bulk-binding-registry [bulk-binding-registry #f]
+                       #:extra-shifts [extra-shifts null])
+  (define immediate-b (resolve s phase
+                               #:exactly? exactly?
+                               #:bulk-binding-registry bulk-binding-registry
+                               #:extra-shifts extra-shifts))
   (define b (if (and immediate-b
                      (not immediate?)
                      (binding-free=id immediate-b))
                 (resolve+shift (binding-free=id immediate-b) phase
+                               #:bulk-binding-registry (or bulk-binding-registry
+                                                           (syntax-bulk-binding-registry s))
+                               #:extra-shifts (append extra-shifts (syntax-mpi-shifts s))
                                #:exactly? exactly?)
                 immediate-b))
   (cond
@@ -184,21 +195,21 @@
       b]
      [else
       (struct-copy module-binding b
-                   [module (apply-shifts (module-binding-module b) mpi-shifts)]
-                   [nominal-module (apply-shifts (module-binding-nominal-module b) mpi-shifts)])])]
+                   [module (apply-syntax-shifts (module-binding-module b) mpi-shifts)]
+                   [nominal-module (apply-syntax-shifts (module-binding-nominal-module b) mpi-shifts)])])]
    [else b]))
 
 ;; Apply accumulated module path index shifts
-(define (apply-shifts mpi shifts)
+(define (apply-syntax-shifts mpi shifts)
   (cond
    [(null? shifts) mpi]
    [else
-    (define shifted-mpi (apply-shifts mpi (cdr shifts)))
+    (define shifted-mpi (apply-syntax-shifts mpi (cdr shifts)))
     (module-path-index-shift shifted-mpi (caar shifts) (cdar shifts))]))
 
 ;; Apply a syntax object's shifts to a given module path index
 (define (syntax-apply-shifts s mpi)
-  (apply-shifts mpi (syntax-mpi-shifts s)))
+  (apply-syntax-shifts mpi (syntax-mpi-shifts s)))
 
 ;; Apply a single shift to a single binding
 (define (binding-module-path-index-shift b from-mpi to-mpi)
@@ -227,7 +238,7 @@
     (define-values (path base) (module-path-index-split from-mpi))
     (and (not path)
          (module-path-index-resolved from-mpi)
-         (apply-shifts from-mpi (syntax-mpi-shifts s)))))
+         (apply-syntax-shifts from-mpi (syntax-mpi-shifts s)))))
 
 (define (identifier-prune-to-source-module id)
   (unless (identifier? id)

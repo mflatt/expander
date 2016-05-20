@@ -25,7 +25,7 @@
                                             ;; synthesize a non-bulk binding table
                                             (for/or ([bulk-at (in-list (scope-bulk-bindings sc))])
                                               (define bulk (bulk-binding-at-bulk bulk-at))
-                                              (define syms (bulk-binding-symbols bulk s))
+                                              (define syms (bulk-binding-symbols bulk s #f null))
                                               (define b-info (hash-ref syms sym #f))
                                               (and b-info
                                                    (hasheq (bulk-binding-at-scopes bulk-at)

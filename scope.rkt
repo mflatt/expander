@@ -103,11 +103,14 @@
 ;; Value of `prop:bulk-binding`
 (struct bulk-binding-class (get-symbols ; bulk-binding syntax -> sym -> binding-info
                             create))    ; bul-binding -> binding-info sym -> binding
-(define (bulk-binding-symbols b s)
+(define (bulk-binding-symbols b s bulk-binding-registry extra-shifts)
   ;; Providing the identifier `s` supports access to the bulk-binding
   ;; registry and module path index shifts for unmarshaling, but `s`
   ;; can be #f if the bulk binding was just created
-  ((bulk-binding-class-get-symbols (bulk-binding-ref b)) b s))
+  ((bulk-binding-class-get-symbols (bulk-binding-ref b))
+   b 
+   (or bulk-binding-registry (and s (syntax-bulk-binding-registry s)))
+   (append extra-shifts (if s (syntax-mpi-shifts s) null))))
 (define (bulk-binding-create b)
   (bulk-binding-class-create (bulk-binding-ref b)))
 
@@ -267,7 +270,11 @@
 
 ;; ----------------------------------------
 
-(define (resolve s phase #:exactly? [exactly? #f])
+(define (resolve s phase
+                 #:exactly? [exactly? #f]
+                 ;; For resolving bulk bindings in `free-identifier=?` chains:
+                 #:bulk-binding-registry [bulk-binding-registry #f]
+                 #:extra-shifts [extra-shifts null])
   (unless (identifier? s)
     (raise-argument-error 'resolve "identifier?" s))
   (unless (phase? phase)
@@ -281,7 +288,9 @@
                                         ;; synthesize a non-bulk binding table
                                         (for/or ([bulk-at (in-list (scope-bulk-bindings sc))])
                                           (define bulk (bulk-binding-at-bulk bulk-at))
-                                          (define syms (bulk-binding-symbols bulk s))
+                                          (define syms (bulk-binding-symbols bulk s
+                                                                             bulk-binding-registry
+                                                                             extra-shifts))
                                           (define b-info (hash-ref syms sym #f))
                                           (and b-info
                                                (hasheq (bulk-binding-at-scopes bulk-at)
@@ -312,7 +321,7 @@
 ;; The bindings of `bulk at `scopes` should shadow any existing
 ;; mappings in `sym-bindings`
 (define (remove-matching-bindings! bindings scopes bulk)
-  (define bulk-symbols (bulk-binding-symbols bulk #f))
+  (define bulk-symbols (bulk-binding-symbols bulk #f #f null))
   (cond
    [(not bindings) (void)]
    [((hash-count bindings) . < . (hash-count bulk-symbols))

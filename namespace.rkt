@@ -13,6 +13,7 @@
          make-module-namespace
          namespace->module
          namespace-module-name
+         namespace-bulk-binding-registry
          raise-unknown-module-error
          
          namespace-syntax-introduce

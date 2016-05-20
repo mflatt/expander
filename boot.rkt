@@ -111,32 +111,35 @@
                     (eval-syntax s)
                     (eval-s-expr s))))
 (current-load (lambda (path expected-module)
-                (cond
-                 [(and cache-dir
-                       (get-cached-compiled cache-dir path
-                                            (lambda ()
-                                              (log-error "cached ~s" path))))
-                  => eval]
-                 [else
-                  (log-error "compile ~s" path)
-                  (with-handlers ([exn:fail? (lambda (exn)
-                                               (log-error "...during ~s..." path)
-                                               (raise exn))])
-                    (define s
-                      (call-with-input-file*
-                       path
-                       (lambda (i)
-                         (port-count-lines! i)
-                         (with-module-reading-parameterization
-                             (lambda ()
-                               (check-module-form
-                                (read-syntax (object-name i) i)))))))
-                    (define c (compile (expand s)))
-                    (when (and cache-dir
-                               (not cache-read-only?)
-                               (or (not cache-save-only)
-                                   (hash-ref cache-save-only (path->string path) #f)))
-                      (cache-compiled! cache-dir path c))
-                    (eval c))])))
+                (let loop ()
+                  (cond
+                   [(and cache-dir
+                         (get-cached-compiled cache-dir path
+                                              (lambda ()
+                                                (log-error "cached ~s" path))))
+                    => eval]
+                   [else
+                    (log-error "compile ~s" path)
+                    (with-handlers ([exn:fail? (lambda (exn)
+                                                 (log-error "...during ~s..." path)
+                                                 (raise exn))])
+                      (define s
+                        (call-with-input-file*
+                         path
+                         (lambda (i)
+                           (port-count-lines! i)
+                           (with-module-reading-parameterization
+                               (lambda ()
+                                 (check-module-form
+                                  (read-syntax (object-name i) i)))))))
+                      (define c (compile (expand s)))
+                      (cond
+                       [(and cache-dir
+                             (not cache-read-only?)
+                             (or (not cache-save-only)
+                                 (hash-ref cache-save-only (path->string path) #f)))
+                        (cache-compiled! cache-dir path c)
+                        (loop)]
+                       [else (eval c)]))]))))
 
 (namespace-require 'racket)

@@ -11,7 +11,8 @@
          (rename-in "expand.rkt" [expand expand-in-context])
          "expand-require.rkt"
          "compile.rkt"
-         "module-path.rkt")
+         "module-path.rkt"
+         "bulk-binding.rkt")
 
 ;; Register core forms:
 (require "expand-expr.rkt"
@@ -73,7 +74,9 @@
                               (eval sym tmp-ns)]))))
 
 (define (expand s [ns (current-namespace)])
-  (expand-in-context s (make-expand-context ns)))
+  (parameterize ([current-bulk-binding-fallback-registry
+                  (namespace-bulk-binding-registry ns)])
+    (expand-in-context s (make-expand-context ns))))
 
 (serializable-struct compiled-expression (s-expr)
         #:property prop:custom-write
@@ -85,15 +88,17 @@
   (compiled-expression (compile-top s (make-compile-context #:namespace ns))))
 
 (define (eval s [ns (current-namespace)])
-  (if (compiled-expression? s)
-      (run-time-eval (compiled-expression-s-expr s))
-      (run-time-eval (compile-top
-                      (expand-in-context
-                       (namespace-syntax-introduce
-                        (datum->syntax #f s)
-                        ns)
-                       (make-expand-context ns))
-                      (make-compile-context #:namespace ns)))))
+  (parameterize ([current-bulk-binding-fallback-registry
+                  (namespace-bulk-binding-registry ns)])
+    (if (compiled-expression? s)
+        (run-time-eval (compiled-expression-s-expr s))
+        (run-time-eval (compile-top
+                        (expand-in-context
+                         (namespace-syntax-introduce
+                          (datum->syntax #f s)
+                          ns)
+                         (make-expand-context ns))
+                        (make-compile-context #:namespace ns))))))
 
 (define (namespace-module-identifier [where (current-namespace)])
   (unless (or (namespace? where)

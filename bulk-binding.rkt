@@ -9,6 +9,7 @@
 
          make-bulk-binding-registry
          register-bulk-provide!
+         current-bulk-binding-fallback-registry
 
          bulk-binding)
 
@@ -61,18 +62,21 @@
                       phase-shift)         ; providing module's instantiation phase
         #:property prop:bulk-binding
         (bulk-binding-class
-         (lambda (b s)
+         (lambda (b reg mpi-shifts)
            (or (bulk-binding-provides b)
                ;; Here's where we find provided bindings for unmarshaled syntax
-               (let ([modname (module-path-index-resolve
-                               (syntax-apply-shifts
-                                s
-                                (bulk-binding-mpi b)))])
-                 (define table (bulk-binding-registry-table (syntax-bulk-binding-registry s)))
-                 (define bulk-provide (hash-ref table modname #f))
+               (let ([mod-name (module-path-index-resolve
+                               (apply-syntax-shifts
+                                (bulk-binding-mpi b)
+                                mpi-shifts))])
+                 (unless reg
+                   (error "namespace mismatch: no bulk-binding registry available:"
+                          mod-name))
+                 (define table (bulk-binding-registry-table reg))
+                 (define bulk-provide (hash-ref table mod-name #f))
                  (unless bulk-provide
                    (error "namespace mismatch: bulk bindings not found in registry for module:"
-                          modname))
+                          mod-name))
                  ;; Reset `provide` and `self` to the discovered information
                  (set-bulk-binding-self! b (bulk-provide-self bulk-provide))
                  (define provides (hash-ref (bulk-provide-provides bulk-provide)
@@ -104,6 +108,13 @@
 
 (module+ deserialize-info
   (provide deserialize-bulk-binding))
+
+;; Although a bulkbinding registry is associated to a syntax object
+;; when a module is run, it's possible for a scope that contains a
+;; bulk binding to get added to another syntax object that doesn't
+;; have the binding. So, have the expander set a fallback.
+(define current-bulk-binding-fallback-registry
+  (make-parameter #f))
 
 ;; ----------------------------------------
 
