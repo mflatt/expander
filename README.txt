@@ -6,10 +6,10 @@ TODO:
  Racket-style local definition contexts
  top level
  lazy module instantiation
- lazy scope propagation
  origin tracking
  taints
  expander observer
+ expand local references to binding
 
 ----------------------------------------
 

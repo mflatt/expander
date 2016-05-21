@@ -2,6 +2,7 @@
 (require racket/serialize
          "set.rkt"
          "syntax.rkt"
+         "scope.rkt"
          "phase.rkt"
          "scope.rkt"
          "binding.rkt"

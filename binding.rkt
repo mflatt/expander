@@ -143,7 +143,6 @@
 
 ; ----------------------------------------
 
-
 ;; Adjust `s` (recursively) so that if `resolve+shift` would
 ;;  report `form-mpi`, the same operation on the result will
 ;;  report `to-mpi`
@@ -158,10 +157,11 @@
                     (lambda (tail? d) d)
                     (lambda (s d)
                       (struct-copy syntax s
-                                   [e d]
+                                   [content d]
                                    [mpi-shifts (add-shift (syntax-mpi-shifts s))]
                                    [bulk-binding-registry (or bulk-binding-registry
-                                                              (syntax-bulk-binding-registry s))]))))))
+                                                              (syntax-bulk-binding-registry s))]))
+                    syntax-e))))
 
 ;; Use `resolve` instead of `resolve+shift` when the module of a
 ;; module binding is relevant or when `free-identifier=?` equivalences

@@ -3,7 +3,8 @@
          "set.rkt"
          "memo.rkt"
          "syntax.rkt"
-         "phase.rkt")
+         "phase.rkt"
+         "datum-map.rkt")
 
 (provide new-scope
          new-multi-scope
@@ -13,6 +14,8 @@
          remove-scopes
          flip-scope
          flip-scopes
+         
+         syntax-e ; handles lazy scope propagation
          
          syntax-scope-set
          
@@ -145,24 +148,54 @@
 (define (scope>? sc1 sc2)
   ((scope-id sc1) . > . (scope-id sc2)))
 
-;; FIXME: Adding, removing, or flipping a scope currently recurs
-;; through a syntax object eagerly, but it should be lazy
-(define (apply-scope s sc op)
+;; Adding, removing, or flipping a scope is propagated
+;; lazily to subforms
+(define (apply-scope s sc op prop-op)
+  (if (shifted-multi-scope? sc)
+      (apply-shifted-multi-scope s sc op)
+      (struct-copy syntax s
+                   [scopes (op (syntax-scopes s) sc)]
+                   [scope-propagations (and (datum-has-elements? (syntax-content s))
+                                            (prop-op (syntax-scope-propagations s)
+                                                     sc
+                                                     (syntax-scopes s)))])))
+
+;; Non-lazy application of a shifted multi scope;
+;; since this kind of scope is only added for modules,
+;; it's not work making it lazy
+(define (apply-shifted-multi-scope s sc op)
   (define-memo-lite (do-op scs)
     (op scs sc))
   (syntax-map s
               (lambda (tail? x) x)
               (lambda (s d)
                 (struct-copy syntax s
-                             [e d]
-                             [scopes
-                              (if (shifted-multi-scope? sc)
-                                  (syntax-scopes s)
-                                  (do-op (syntax-scopes s)))]
+                             [content d]
                              [shifted-multi-scopes
-                              (if (shifted-multi-scope? sc)
-                                  (do-op (syntax-shifted-multi-scopes s))
-                                  (syntax-shifted-multi-scopes s))]))))
+                              (do-op (syntax-shifted-multi-scopes s))]))
+              syntax-e))
+
+(define (syntax-e s)
+  (define prop (syntax-scope-propagations s))
+  (if prop
+      (let ([new-content
+             (syntax-map (syntax-content s)
+                         (lambda (tail? x) x)
+                         (lambda (sub-s d)
+                           (struct-copy syntax sub-s
+                                        [scopes (propagation-apply
+                                                 prop
+                                                 (syntax-scopes sub-s)
+                                                 s)]
+                                        [scope-propagations (propagation-merge
+                                                             prop
+                                                             (syntax-scope-propagations sub-s)
+                                                             (syntax-scopes sub-s))]))
+                         #f)])
+        (set-syntax-content! s new-content)
+        (set-syntax-scope-propagations! s #f)
+        new-content)
+      (syntax-content s)))
 
 ;; When a representative-scope is manipulated, we want to
 ;; manipulate the multi scope, instead (at a particular
@@ -174,14 +207,14 @@
       sc))
 
 (define (add-scope s sc)
-  (apply-scope s (generalize-scope sc) set-add))
+  (apply-scope s (generalize-scope sc) set-add propagation-add))
 
 (define (add-scopes s scs)
   (for/fold ([s s]) ([sc (in-list scs)])
     (add-scope s sc)))
 
 (define (remove-scope s sc)
-  (apply-scope s (generalize-scope sc) set-remove))
+  (apply-scope s (generalize-scope sc) set-remove propagation-remove))
 
 (define (remove-scopes s scs)
   (for/fold ([s s]) ([sc (in-list scs)])
@@ -193,11 +226,88 @@
       (set-add s e)))
 
 (define (flip-scope s sc)
-  (apply-scope s (generalize-scope sc) set-flip))
+  (apply-scope s (generalize-scope sc) set-flip propagation-flip))
 
 (define (flip-scopes s scs)
   (for/fold ([s s]) ([sc (in-list scs)])
     (flip-scope s sc)))
+
+;; ----------------------------------------
+
+(struct propagation (prev-scs scope-ops)
+        #:property prop:propagation syntax-e)
+
+(define (propagation-add prop sc prev-scs)
+  (if prop
+      (struct-copy propagation prop
+                   [scope-ops (hash-set (propagation-scope-ops prop)
+                                        sc
+                                        'add)])
+      (propagation prev-scs (hasheq sc 'add))))
+
+(define (propagation-remove prop sc prev-scs)
+  (if prop
+      (struct-copy propagation prop
+                   [scope-ops (hash-set (propagation-scope-ops prop)
+                                        sc
+                                        'remove)])
+      (propagation prev-scs (hasheq sc 'remove))))
+
+(define (propagation-flip prop sc prev-scs)
+  (if prop
+      (let* ([ops (propagation-scope-ops prop)]
+             [current-op (hash-ref ops sc #f)])
+        (cond
+         [(and (eq? current-op 'flip)
+               (= 1 (hash-count ops)))
+          ;; Nothing left to propagate
+          #f]
+         [else
+          (struct-copy propagation prop
+                       [scope-ops
+                        (if (eq? current-op 'flip)
+                            (hash-remove ops sc)
+                            (hash-set ops sc (case current-op
+                                               [(add) 'remove]
+                                               [(remove) 'add]
+                                               [else 'flip])))])]))
+      (propagation prev-scs (hasheq sc 'flip))))
+
+(define (propagation-apply prop scs parent-s)
+  (cond
+   [(not prop) scs]
+   [(eq? (propagation-prev-scs prop) scs)
+    (syntax-scopes parent-s)]
+   [else
+    (for/fold ([scs scs]) ([(sc op) (in-hash (propagation-scope-ops prop))])
+      (case op
+       [(add) (set-add scs sc)]
+       [(remove) (set-remove scs sc)]
+       [else (set-flip scs sc)]))]))
+
+(define (propagation-merge prop base-prop prev-scs)
+  (cond
+   [(not prop) base-prop]
+   [(not base-prop) (propagation prev-scs
+                                 (propagation-scope-ops prop))]
+   [else
+    (define new-ops
+      (for/fold ([ops (propagation-scope-ops base-prop)]) ([(sc op) (in-hash (propagation-scope-ops prop))])
+        (case op
+          [(add) (hash-set ops sc 'add)]
+          [(remove) (hash-set ops sc 'remove)]
+          [else ; flip
+           (define current-op (hash-ref ops sc #f))
+           (case current-op
+             [(add) (hash-set ops sc 'remove)]
+             [(remove) (hash-set ops sc 'add)]
+             [(flip) (hash-remove ops sc)]
+             [else (hash-set ops sc 'flip)])])))
+    (if (zero? (hash-count new-ops))
+        #f
+        (propagation (propagation-prev-scs base-prop) new-ops))]))
+
+;; ----------------------------------------
 
 ;; To shift a syntax's phase, we only have to shift the phase
 ;; of any phase-specific scopes. The bindings attached to a
@@ -210,7 +320,8 @@
       (shifted-multi-scope (phase+ delta (shifted-multi-scope-phase sms))
                            (shifted-multi-scope-multi-scope sms))))
 
-;; FIXME: this should be lazy, too?
+;; Since we tend to shift rarely and only for whole modules, it's
+;; probably less useful to make this lazy:
 (define (syntax-shift-phase-level s phase)
   (if (eqv? phase 0)
       s
@@ -222,9 +333,10 @@
                     (lambda (tail? d) d)
                     (lambda (s d)
                       (struct-copy syntax s
-                                   [e d]
+                                   [content d]
                                    [shifted-multi-scopes
-                                    (shift-all (syntax-shifted-multi-scopes s))]))))))
+                                    (shift-all (syntax-shifted-multi-scopes s))]))
+                    syntax-e))))
 
 ;; ----------------------------------------
 

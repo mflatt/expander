@@ -1,6 +1,5 @@
 #lang racket/base
 (require racket/serialize
-         (only-in "syntax.rkt" syntax-e)
          "checked-syntax.rkt"
          (only-in "scope.rkt" add-scope)
          "namespace.rkt"

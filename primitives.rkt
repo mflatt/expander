@@ -6,6 +6,7 @@
          "srcloc.rkt"
          "phase.rkt"
          (except-in "scope.rkt"
+                    syntax-e
                     bound-identifier=?
                     syntax-shift-phase-level)
          "namespace.rkt"

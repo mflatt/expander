@@ -4,6 +4,7 @@
                     [syntax->datum raw:syntax->datum]
                     [datum->syntax raw:datum->syntax])
          (rename-in "scope.rkt"
+                    [syntax-e raw:syntax-e]
                     [bound-identifier=? raw:bound-identifier=?]
                     [syntax-shift-phase-level raw:syntax-shift-phase-level])
          (rename-in "binding.rkt"
@@ -16,7 +17,8 @@
          (rename-in "debug.rkt"
                     [syntax-debug-info raw:syntax-debug-info]))
 
-(provide syntax->datum
+(provide syntax-e
+         syntax->datum
          datum->syntax
          syntax->list
          bound-identifier=?
@@ -26,6 +28,10 @@
          identifier-prune-lexical-context
          syntax-shift-phase-level
          syntax-track-origin)
+
+(define (syntax-e s)
+  (check 'syntax-e syntax? s)
+  (raw:syntax-e s))
 
 (define (syntax->datum s)
   (check 'syntax->datum syntax? s)

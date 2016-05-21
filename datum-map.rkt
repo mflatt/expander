@@ -1,7 +1,8 @@
 #lang racket/base
 (require "prefab.rkt")
 
-(provide datum-map)
+(provide datum-map
+         datum-has-elements?)
 
 ;; `(datum-map f v)` walks over `v`, traversing objects that
 ;; `datum->syntax` traverses to convert context to syntax objects.
@@ -43,3 +44,9 @@
      [(null? s) (f tail? s)]
      [else (f #f s)])))
 
+(define (datum-has-elements? d)
+  (or (pair? d)
+      (vector? d)
+      (box? d)
+      (immutable-prefab-struct-key d)
+      (and (hash? d) (immutable? d) (positive? (hash-count d)))))
