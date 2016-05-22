@@ -1,5 +1,5 @@
 #lang racket/base
-(require racket/serialize
+(require "serialize-property.rkt"
          "set.rkt"
          "datum-map.rkt")
 
@@ -15,7 +15,9 @@
  
  syntax-property
  
- prop:propagation)
+ prop:propagation
+ 
+ deserialize-syntax)
 
 (struct syntax ([content #:mutable] ; datum and nested syntax objects; mutated for lazy propagation
                 scopes  ; scopes that apply at all phases
@@ -36,20 +38,27 @@
               (fprintf port ":~a" srcloc-str)))
           (fprintf port " ~.s" (syntax->datum s))
           (write-string ">" port))
-        #:property prop:serializable
-        (make-serialize-info (lambda (s)
-                               (define prop (syntax-scope-propagations s))
-                               (vector (if prop
-                                           ((propagation-ref prop) s)
-                                           (syntax-content s))
-                                       (syntax-scopes s)
-                                       (syntax-shifted-multi-scopes s)
-                                       (syntax-mpi-shifts s)
-                                       (syntax-srcloc s)
-                                       (syntax-props s)))
-                             (quote-syntax deserialize-syntax)
-                             #f
-                             (or (current-load-relative-directory) (current-directory))))
+        #:property prop:serialize
+        (lambda (s ser)
+          (define prop (syntax-scope-propagations s))
+          `(deserialize-syntax
+            ,(ser (if prop
+                      ((propagation-ref prop) s)
+                      (syntax-content s)))
+            ,(ser (syntax-scopes s))
+            ,(ser (syntax-shifted-multi-scopes s))
+            ,(ser (syntax-mpi-shifts s))
+            ,(ser (syntax-srcloc s))
+            ,(ser (syntax-props s)))))
+
+;; Property to abstract over handling of propagation for
+;; serialization; property value takes a syntax object and
+;; returns its content
+(define-values (prop:propagation propagation? propagation-ref)
+  (make-struct-type-property 'propagation))
+
+(define (deserialize-syntax content scopes shifted-multi-scopes mpi-shifts srcloc props)
+  (syntax content scopes #f shifted-multi-scopes mpi-shifts #f srcloc props))
 
 (define empty-scopes (seteq))
 (define empty-shifted-multi-scopes (set))
@@ -131,20 +140,3 @@
        (raise-argument-error 'syntax-property "syntax" s))
      (struct-copy syntax s
                   [props (hash-set (syntax-props s) key val)])]))
-
-;; ----------------------------------------
-
-;; Property to abstract over handling of propagation for
-;; serialization; property value takes a syntax object and
-;; returns its content
-(define-values (prop:propagation propagation? propagation-ref)
-  (make-struct-type-property 'propagation))
-
-(define deserialize-syntax
-  (make-deserialize-info
-   (lambda (content scopes shifted-multi-scopes mpi-shifts srcloc props)
-     (syntax content scopes #f shifted-multi-scopes mpi-shifts #f srcloc props))
-   (lambda (x) (error "cannot make cycles"))))
-
-(module+ deserialize-info
-  (provide deserialize-syntax))

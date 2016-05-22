@@ -1,6 +1,6 @@
 #lang racket/base
-(require racket/serialize
-         "set.rkt"
+(require "set.rkt"
+         "serialize-property.rkt"
          "memo.rkt"
          "syntax.rkt"
          "scope.rkt"
@@ -32,30 +32,58 @@
  binding-module-path-index-shift
  
  syntax-source-module
- identifier-prune-to-source-module)
+ identifier-prune-to-source-module
+ 
+ deserialize-module-binding
+ deserialize-local-binding)
 
 ;; ----------------------------------------
 
-(serializable-struct binding (frame-id   ; used to trigger use-site scopes
-                              free=id))  ; `free-identifier=?` equivalence via a rename-transformer binding
+(struct binding (frame-id   ; used to trigger use-site scopes
+                 free=id))  ; `free-identifier=?` equivalence via a rename-transformer binding
 
 ;; See `identifier-binding` docs for information about these fields:
-(serializable-struct module-binding binding (module phase sym
-                                              nominal-module nominal-phase nominal-sym
-                                              nominal-require-phase)
-                     #:transparent)
+(struct module-binding binding (module phase sym
+                                 nominal-module nominal-phase nominal-sym
+                                 nominal-require-phase)
+        #:transparent
+        #:property prop:serialize
+        (lambda (b ser)
+          `(deserialize-module-binding
+            ,(ser (binding-free=id b))
+            ,(ser (module-binding-module b))
+            ,(ser (module-binding-phase b))
+            ,(ser (module-binding-sym b))
+            ,(ser (module-binding-nominal-module b))
+            ,(ser (module-binding-nominal-phase b))
+            ,(ser (module-binding-nominal-sym b))
+            ,(ser (module-binding-nominal-require-phase b)))))
 
 (define (make-module-binding module phase sym
                              #:nominal-module [nominal-module module]
                              #:nominal-phase [nominal-phase phase]
                              #:nominal-sym [nominal-sym sym]
                              #:nominal-require-phase [nominal-require-phase 0]
-                             #:frame-id [frame-id #f])
+                             #:frame-id [frame-id #f]
+                             #:free=id [free=id #f])
   (module-binding frame-id
-                  #f
+                  free=id
                   module phase sym
                   nominal-module nominal-phase nominal-sym
                   nominal-require-phase))
+
+(define (deserialize-module-binding free=id
+                                    module phase sym
+                                    nominal-module
+                                    nominal-phase
+                                    nominal-sym
+                                    nominal-require-phase)
+  (make-module-binding module phase sym
+                       #:nominal-module nominal-module
+                       #:nominal-phase nominal-phase
+                       #:nominal-sym nominal-sym
+                       #:nominal-require-phase nominal-require-phase
+                       #:free=id free=id))
 
 ;; Represent a local binding with a key, where the value of
 ;; the key is kept in a separate environment. That indirection
@@ -63,7 +91,16 @@
 ;; compile-time values from local bindings, but it records that
 ;; the binding was local. The `frame-id` field is used to
 ;; trigger use-site scopes as needed
-(serializable-struct local-binding binding (key))
+(struct local-binding binding (key)
+        #:property prop:serialize
+        (lambda (b ser)
+          `(deserialize-local-binding
+            ,(ser (local-binding-key b)))))
+
+(define (deserialize-local-binding key)
+  (local-binding #f #f key))
+
+;; ----------------------------------------
 
 (define (free-identifier=? a b a-phase b-phase)
   (define ab (resolve+shift a a-phase))

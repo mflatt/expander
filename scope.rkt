@@ -1,6 +1,6 @@
 #lang racket/base
-(require racket/serialize
-         "set.rkt"
+(require "set.rkt"
+         "serialize-property.rkt"
          "memo.rkt"
          "syntax.rkt"
          "phase.rkt"
@@ -29,7 +29,15 @@
 
          resolve
 
-         bound-identifier=?)
+         bound-identifier=?
+         
+         deserialize-scope
+         deserialize-scope-fill!
+         deserialize-representative-scope
+         deserialize-representative-scope-fill!
+         deserialize-multi-scope
+         deserialize-shifted-multi-scope
+         deserialize-bulk-binding-at)
 
 (module+ for-debug
   (provide (struct-out scope)
@@ -43,17 +51,37 @@
 ;; faster and to improve GC, since non-nested binding contexts will
 ;; generally not share a most-recent scope.
 
-(serializable-struct scope (id          ; internal scope identity; used for sorting
-                            kind        ; debug info
-                            bindings    ; [mutable] #f or sym -> scope-set -> binding [shadows any bulk binding]
-                            bulk-bindings) ; [mutable] list of bulk-binding-at [earlier shadows layer]
-                     #:mutable ; for serialization, since some fields are mutable
-                     ;; Custom printer:
-                     #:property prop:custom-write
-                     (lambda (sc port mode)
-                       (write-string "#<scope:" port)
-                       (display (scope-id sc) port)
-                       (write-string ">" port)))
+(struct scope (id             ; internal scope identity; used for sorting
+               kind           ; debug info
+               [bindings #:mutable]       ; #f or sym -> scope-set -> binding [shadows any bulk binding]
+               [bulk-bindings #:mutable]) ; list of bulk-binding-at [earlier shadows layer]
+        ;; Custom printer:
+        #:property prop:custom-write
+        (lambda (sc port mode)
+          (write-string "#<scope:" port)
+          (display (scope-id sc) port)
+          (write-string ">" port))
+        #:property prop:serialize
+        (lambda (s ser)
+          `(deserialize-scope
+            ,(ser (scope-id s))
+            ,(ser (scope-kind s))))
+        #:property prop:serialize-fill!
+        (lambda (id s ser)
+          (if (or (scope-bindings s)
+                  (scope-bulk-bindings s))
+              `(deserialize-scope-fill!
+                ,id
+                ,(ser (scope-bindings s))
+                ,(ser (scope-bulk-bindings s)))
+              `(void))))
+
+(define (deserialize-scope id kind)
+  (scope id kind #f #f))
+
+(define (deserialize-scope-fill! s bindings bulk-bindings)
+  (set-scope-bindings! s bindings)
+  (set-scope-bulk-bindings! s bulk-bindings))
 
 ;; A "multi-scope" represents a group of scopes, each of which exists
 ;; only at a specific phase, and each in a distinct phase. This
@@ -67,38 +95,82 @@
 ;; the phase-independent scopes. Since a multi-scope corresponds to
 ;; a module, the number of multi-scopes in a syntax is expected to
 ;; be small.
-(serializable-struct multi-scope (id        ; identity
-                                  scopes)) ; phase -> representative-scope
+(struct multi-scope (id       ; identity
+                     scopes)  ; phase -> representative-scope
+        #:property prop:serialize
+        (lambda (ms ser)
+          `(deserialize-multi-scope
+            ,(ser (multi-scope-id ms))
+            ,(ser (multi-scope-scopes ms)))))
 
-(serializable-struct representative-scope scope (owner   ; a multi-scope for which this one is a phase-specific identity
-                                                 phase)  ; phase of this scope
-                     #:mutable ; for serialization, since parent has mutable fields
-                     #:property prop:custom-write
-                     (lambda (sc port mode)
-                       (write-string "#<scope:" port)
-                       (display (scope-id sc) port)
-                       (when (representative-scope-owner sc)
-                         (write-string "=" port)
-                         (display (multi-scope-id (representative-scope-owner sc)) port))
-                       (write-string "@" port)
-                       (display (representative-scope-phase sc) port)
-                       (write-string ">" port)))
+(define (deserialize-multi-scope id scopes)
+  (multi-scope id scopes))
 
-(serializable-struct shifted-multi-scope (phase        ; phase shift applies to all scopes in multi-scope
-                                          multi-scope) ; a multi-scope
-                     #:transparent
-                     #:property prop:custom-write
-                     (lambda (sc port mode)
-                       (write-string "#<scope:" port)
-                       (display (multi-scope-id (shifted-multi-scope-multi-scope sc)) port)
-                       (write-string "@" port)
-                       (display (shifted-multi-scope-phase sc) port)
-                       (write-string ">" port)))
+(struct representative-scope scope (owner   ; a multi-scope for which this one is a phase-specific identity
+                                    phase)  ; phase of this scope
+        #:mutable ; to support serialization
+        #:property prop:custom-write
+        (lambda (sc port mode)
+          (write-string "#<scope:" port)
+          (display (scope-id sc) port)
+          (when (representative-scope-owner sc)
+            (write-string "=" port)
+            (display (multi-scope-id (representative-scope-owner sc)) port))
+          (write-string "@" port)
+          (display (representative-scope-phase sc) port)
+          (write-string ">" port))
+        #:property prop:serialize
+        (lambda (s ser)
+          `(deserialize-representative-scope
+            ,(ser (scope-id s))
+            ,(ser (scope-kind s))
+            ,(ser (representative-scope-phase s))))
+        #:property prop:serialize-fill!
+        (lambda (id s ser)
+          `(deserialize-representative-scope-fill!
+            ,id
+            ,(ser (scope-bindings s))
+            ,(ser (scope-bulk-bindings s))
+            ,(ser (representative-scope-owner s)))))
 
-(serializable-struct bulk-binding-at (scopes ; scope set
-                                      bulk)) ; bulk-binding
+(define (deserialize-representative-scope id kind phase)
+  (representative-scope id kind #f #f #f phase))
 
-;; Bulk bindings are represented by a property, so that the implemenation
+(define (deserialize-representative-scope-fill! s bindings bulk-bindings owner)
+  (deserialize-scope-fill! s bindings bulk-bindings)
+  (set-representative-scope-owner! s owner))
+
+(struct shifted-multi-scope (phase        ; phase shift applies to all scopes in multi-scope
+                             multi-scope) ; a multi-scope
+        #:transparent
+        #:property prop:custom-write
+        (lambda (sc port mode)
+          (write-string "#<scope:" port)
+          (display (multi-scope-id (shifted-multi-scope-multi-scope sc)) port)
+          (write-string "@" port)
+          (display (shifted-multi-scope-phase sc) port)
+          (write-string ">" port))
+        #:property prop:serialize
+        (lambda (sms ser)
+          `(deserialize-shifted-multi-scope
+            ,(ser (shifted-multi-scope-phase sms))
+            ,(ser (shifted-multi-scope-multi-scope sms)))))
+
+(define (deserialize-shifted-multi-scope phase multi-scope)
+  (shifted-multi-scope phase multi-scope))
+
+(struct bulk-binding-at (scopes ; scope set
+                         bulk)  ; bulk-binding
+        #:property prop:serialize
+        (lambda (bba ser)
+          `(deserialize-bulk-binding-at
+            ,(ser (bulk-binding-at-scopes bba))
+            ,(ser (bulk-binding-at-bulk bba)))))
+
+(define (deserialize-bulk-binding-at scopes bulk)
+  (bulk-binding-at scopes bulk))
+
+;; Bulk bindings are represented by a property, so that the implementation
 ;; can be separate and manage serialiation:
 (define-values (prop:bulk-binding bulk-binding? bulk-binding-ref)
   (make-struct-type-property 'bulk-binding))

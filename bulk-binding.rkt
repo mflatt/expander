@@ -1,5 +1,5 @@
 #lang racket/base
-(require racket/serialize
+(require "serialize-property.rkt"
          "syntax.rkt"
          "scope.rkt" ; defines `prop:bulk-binding`
          "binding.rkt"
@@ -11,7 +11,9 @@
          register-bulk-provide!
          current-bulk-binding-fallback-registry
 
-         bulk-binding)
+         bulk-binding
+         
+         deserialize-bulk-binding)
 
 ;; When a require is something like `(require racket/base)`, then
 ;; we'd like to import the many bindings from `racket/base` in one
@@ -92,24 +94,18 @@
             #:mpi (bulk-binding-mpi b)
             #:provide-phase-level (bulk-binding-provide-phase-level b)
             #:phase-shift (bulk-binding-phase-shift b))))
+        #:property prop:serialize
         ;; Serialization drops the `provides` table and the providing module's `self`
-        #:property prop:serializable
-        (make-serialize-info (lambda (b) (vector (bulk-binding-mpi b)
-                                            (bulk-binding-provide-phase-level b)
-                                            (bulk-binding-phase-shift b)))
-                             (quote-syntax deserialize-bulk-binding)
-                             #f
-                             (or (current-load-relative-directory) (current-directory))))
+        (lambda (b ser)
+          `(deserialize-bulk-binding
+            ,(ser (bulk-binding-mpi b))
+            ,(ser (bulk-binding-provide-phase-level b))
+            ,(ser (bulk-binding-phase-shift b)))))
 
-(define deserialize-bulk-binding
-  (make-deserialize-info
-   (lambda (mpi provide-phase-level phase-shift) (bulk-binding #f #f mpi provide-phase-level phase-shift))
-   (lambda (x) (error "cannot make cycles"))))
+(define (deserialize-bulk-binding mpi provide-phase-level phase-shift)
+  (bulk-binding #f #f mpi provide-phase-level phase-shift))
 
-(module+ deserialize-info
-  (provide deserialize-bulk-binding))
-
-;; Although a bulkbinding registry is associated to a syntax object
+;; Although a bulk binding registry is associated to a syntax object
 ;; when a module is run, it's possible for a scope that contains a
 ;; bulk binding to get added to another syntax object that doesn't
 ;; have the binding. So, have the expander set a fallback.
@@ -126,13 +122,7 @@
 ;; in an instantiated module, so that binding resolution on the
 ;; module's syntax literals can find tables of provided variables
 ;; based on module names
-(struct bulk-binding-registry (table) ; resolve-module-name -> bulk-provide
-        #:property prop:serializable
-        ;; Serialize to #f to drop the table from a marshaled syntax object
-        (make-serialize-info (lambda (b) (vector))
-                             (quote-syntax deserialize-to-false)
-                             #f
-                             (or (current-load-relative-directory) (current-directory))))
+(struct bulk-binding-registry (table)) ; resolve-module-name -> bulk-provide
 
 (define (make-bulk-binding-registry)
   (bulk-binding-registry (make-hasheq)))
@@ -142,11 +132,3 @@
   (hash-set! (bulk-binding-registry-table bulk-binding-registry)
              mod-name
              (bulk-provide self provides)))
-
-(define deserialize-to-false
-  (make-deserialize-info
-   (lambda () #f)
-   (lambda (x) (error "cannot make cycles"))))
-
-(module+ deserialize-info
-  (provide deserialize-to-false))

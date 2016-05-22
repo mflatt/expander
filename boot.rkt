@@ -28,9 +28,6 @@
  [("-x" "--cache-only") file "Cache only for sources listed in <file>"
   (set! cache-save-only (call-with-input-file* file read))])
 
-(when cache-dir
-  (cache-prime! cache-dir))
-
 ;; The `#lang` reader doesn't use the reimplemented module system,
 ;; so make sure the reader is loaded for `racket/base`:
 (base:dynamic-require 'racket/base/lang/reader #f)

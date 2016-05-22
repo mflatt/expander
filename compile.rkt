@@ -10,7 +10,10 @@
          "module-path.rkt"
          "expand-require.rkt"
          "variable-reference.rkt"
-         (only-in racket/base [current-namespace base:current-namespace]))
+         "serialize.rkt"
+         (only-in racket/base
+                  [current-namespace base:current-namespace]
+                  [compile base:compile]))
 
 (provide make-compile-context
          compile-top
@@ -27,7 +30,8 @@
                          top-init    ; accumulates top-level initialization
                          def-syms))  ; selects names that don't collide with primitives: sym -> sym 
 
-(struct top-init (variable-uses      ; variable-use -> sym
+(struct top-init (module-path-indexes ; module-path-index -> pos
+                  variable-uses      ; variable-use -> sym
                   syntax-literals    ; box of list syntax-literal
                   [num-syntax-literals #:mutable]))
 
@@ -67,22 +71,26 @@
 (define ns-id (gensym 'namespace))
 (define self-id (gensym 'namespace))
 (define syntax-literals-id (gensym 'syntax-literals))
+(define unshifted-syntax-literals-id (gensym 'unshifted-syntax-literals))
 (define get-syntax-literal!-id (gensym 'get-syntax-literal!))
 (define bulk-binding-registry-id (gensym 'bulk-binding-registry))
 
 ;; ----------------------------------------
 
 (define (compile-top s cctx)
-  (define top-init (make-top-init))
+  (define top-init (make-top-init #f))
   (define compiled
     (compile s (struct-copy compile-context cctx
                             [top-init top-init])))
-  `(begin
-    ,@(generate-top-init top-init
-                         (compile-context-phase cctx)
-                         cctx)
-    ,compiled))
-          
+  (define s-expr
+    `(begin
+      ,@(generate-top-init top-init
+                           (compile-context-phase cctx)
+                           cctx)
+      ,compiled))
+  (parameterize ([base:current-namespace run-time-namespace])
+    (base:compile s-expr)))
+   
 ;; Convert an expanded syntax object to an expression that is represented
 ;; by a plain S-expression. The expression is compiled for a particular
 ;; phase, but if the expression is in a module, its phase can be shifted
@@ -310,10 +318,12 @@
   (define (add-body! phase body)
     (hash-update! phase-to-body phase (lambda (l) (cons body l)) null))
   
+  (define mpis (make-module-path-index-table))
+  
   (define phase-to-top-init (make-hasheqv)) ; phase -> top-init
   (define (find-or-create-top-init! phase)
     (or (hash-ref phase-to-top-init phase #f)
-        (let ([top-init (make-top-init)])
+        (let ([top-init (make-top-init mpis)])
           (hash-set! phase-to-top-init phase top-init)
           top-init)))
   
@@ -412,6 +422,24 @@
     (for/fold ([min-phase 0] [max-phase 0]) ([phase (in-hash-keys phase-to-body)])
       (values (min min-phase phase)
               (max max-phase phase))))
+  
+  (define module-declaration
+    `(make-module
+      #:cross-phase-persistent? ,cross-phase-persistent?
+      ,(add-module-path-index! mpis self)
+      ,(generate-deserialize requires mpis)
+      ,(generate-deserialize provides mpis)
+      ,min-phase
+      ,max-phase
+      (lambda (,ns-id ,phase-shift-id ,phase-level-id ,self-id ,bulk-binding-registry-id)
+        (case ,phase-level-id
+          ,@(for/list ([(phase bodys) (in-hash phase-to-body)])
+              `[(,phase)
+                ,@(generate-top-init (hash-ref phase-to-top-init phase) 
+                                     phase
+                                     body-cctx)
+                ,@(reverse bodys)]))
+        (void))))
 
   `(begin
     ,@pre-submodules
@@ -419,30 +447,18 @@
      #:as-submodule? ,as-submodule?
      (current-namespace)
      (module-shift-for-declare
-      (make-module
-       #:cross-phase-persistent? ,cross-phase-persistent?
-       ',self
-       ,requires
-       ,provides
-       ,min-phase
-       ,max-phase
-       (lambda (,ns-id ,phase-shift-id ,phase-level-id ,self-id ,bulk-binding-registry-id)
-         (case ,phase-level-id
-           ,@(for/list ([(phase bodys) (in-hash phase-to-body)])
-               `[(,phase)
-                 ,@(generate-top-init (hash-ref phase-to-top-init phase) 
-                                      phase
-                                      body-cctx)
-                 ,@(reverse bodys)]))
-         (void)))
+      (let ([,mpi-vector-id ,(generate-module-path-index-deserialize mpis)])
+        ,module-declaration)
       (substitute-module-declare-name ',root-module-name
-                                      ',(module-path-index-resolve self))))
+                                      ',(resolved-module-path-name
+                                         (module-path-index-resolve self)))))
     ,@post-submodules))
 
 ;; ----------------------------------------
   
-(define (make-top-init)
-  (top-init (make-variable-uses)
+(define (make-top-init mpis)
+  (top-init mpis
+            (make-variable-uses)
             (box null)
             0))
 
@@ -458,14 +474,16 @@
 
 (define (generate-top-init top-init phase cctx)
   (append
-   (generate-variable-uses (top-init-variable-uses top-init) phase cctx)
-   (generate-syntax-literals (unbox (top-init-syntax-literals top-init))
-                             (top-init-num-syntax-literals top-init)
-                             phase
-                             cctx)))
+   (generate-variable-uses! top-init (top-init-variable-uses top-init) phase cctx)
+   (generate-syntax-literals! top-init
+                              (unbox (top-init-syntax-literals top-init))
+                              (top-init-num-syntax-literals top-init)
+                              phase
+                              cctx)))
 
-(define (generate-variable-uses variable-uses phase cctx)
+(define (generate-variable-uses! top-init variable-uses phase cctx)
   (define in-mod? (compile-context-self cctx))
+  (define mpis (top-init-module-path-indexes top-init))
   (define (ref->key ref)
     (cons (module-path-index-resolve (variable-use-module ref))
           (variable-use-phase ref)))
@@ -487,8 +505,8 @@
                                     ,(if in-mod?
                                          `(module-path-index-resolve
                                            (module-path-index-shift
-                                            ',binding-module
-                                            ',(compile-context-self cctx)
+                                            ,(add-module-path-index! mpis binding-module)
+                                            ,(add-module-path-index! mpis (compile-context-self cctx))
                                             ,self-id))
                                          `',(module-path-index-resolve
                                              binding-module))
@@ -522,18 +540,27 @@
                                                    ,(variable-use-phase ref)
                                                    ,m-ns-sym)))))))))
 
-(define (generate-syntax-literals syntax-literals num-syntax-literals phase cctx)
-  `((define ,syntax-literals-id (make-vector ,num-syntax-literals))
-    (define (,get-syntax-literal!-id pos)
-      (define unshifted ',(list->vector (reverse syntax-literals)))
-      (define stx
-        (syntax-module-path-index-shift
-         (syntax-shift-phase-level (vector-ref unshifted pos) ,phase-shift-id)
-         ',(compile-context-self cctx)
-         ,self-id
-         ,bulk-binding-registry-id))
-      (vector-set! ,syntax-literals-id pos stx)
-      stx)))
+(define (generate-syntax-literals! top-init syntax-literals num-syntax-literals phase cctx)
+  (cond
+   [(zero? num-syntax-literals)
+    null]
+   [else
+    `((define ,syntax-literals-id (make-vector ,num-syntax-literals))
+      (define ,unshifted-syntax-literals-id #f)
+      (define (,get-syntax-literal!-id pos)
+        (unless ,unshifted-syntax-literals-id
+          (set! ,unshifted-syntax-literals-id
+                ,(generate-deserialize (vector->immutable-vector
+                                        (list->vector (reverse syntax-literals)))
+                                       (top-init-module-path-indexes top-init))))
+        (define stx
+          (syntax-module-path-index-shift
+           (syntax-shift-phase-level (vector-ref ,unshifted-syntax-literals-id pos) ,phase-shift-id)
+           ,(add-module-path-index! (top-init-module-path-indexes top-init) (compile-context-self cctx))
+           ,self-id
+           ,bulk-binding-registry-id))
+        (vector-set! ,syntax-literals-id pos stx)
+        stx))]))
 
 ;; ----------------------------------------
          
@@ -582,12 +609,14 @@
 (define (add-expand-time! sym val)
   (namespace-set-variable-value! sym val #t expand-time-namespace))
 
+(add-deserialize-variables! expand-time-namespace)
 (add-expand-time! 'current-namespace current-namespace)
 (add-expand-time! 'namespace->module-namespace namespace->module-namespace)
 (add-expand-time! 'namespace-get-variable namespace-get-variable)
 (add-expand-time! 'namespace-get-variable-box namespace-get-variable-box)
 (add-expand-time! 'namespace-set-variable! namespace-set-variable!)
 (add-expand-time! 'syntax-shift-phase-level syntax-shift-phase-level)
+(add-expand-time! 'module-path-index-join module-path-index-join)
 (add-expand-time! 'module-path-index-shift module-path-index-shift)
 (add-expand-time! 'module-path-index-resolve module-path-index-resolve)
 (add-expand-time! 'check-defined check-defined)
@@ -597,6 +626,7 @@
 (define (add-run-time! sym val)
   (namespace-set-variable-value! sym val #t run-time-namespace))
 
+(add-deserialize-variables! run-time-namespace)
 (add-run-time! 'make-module make-module)
 (add-run-time! 'declare-module! declare-module!)
 (add-run-time! 'current-namespace current-namespace)
@@ -606,6 +636,7 @@
 (add-run-time! 'namespace-get-variable-box namespace-get-variable-box)
 (add-run-time! 'namespace->module-namespace namespace->module-namespace)
 (add-run-time! 'syntax-shift-phase-level syntax-shift-phase-level)
+(add-run-time! 'module-path-index-join module-path-index-join)
 (add-run-time! 'module-path-index-shift module-path-index-shift)
 (add-run-time! 'module-path-index-resolve module-path-index-resolve)
 (add-run-time! 'module-shift-for-declare module-shift-for-declare)

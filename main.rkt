@@ -77,20 +77,14 @@
                   (namespace-bulk-binding-registry ns)])
     (expand-in-context s (make-expand-context ns))))
 
-(serializable-struct compiled-expression (s-expr)
-        #:property prop:custom-write
-        (lambda (c port mode)
-          (fprintf port "#<compiled-expression:~.s>" (compiled-expression-s-expr c))))
-
-(require racket/serialize)
 (define (compile s [ns (current-namespace)])
-  (compiled-expression (compile-top s (make-compile-context #:namespace ns))))
+  (compile-top s (make-compile-context #:namespace ns)))
 
 (define (eval s [ns (current-namespace)])
   (parameterize ([current-bulk-binding-fallback-registry
                   (namespace-bulk-binding-registry ns)])
     (if (compiled-expression? s)
-        (run-time-eval (compiled-expression-s-expr s))
+        (run-time-eval s)
         (run-time-eval (compile-top
                         (expand-in-context
                          (namespace-syntax-introduce
@@ -143,6 +137,4 @@
          
          expand
          compile
-         eval
-         
-         compiled-expression?)
+         eval)

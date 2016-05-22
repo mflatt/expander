@@ -1,6 +1,6 @@
 #lang racket/base
 (require racket/list
-         racket/serialize
+         "serialize-property.rkt"
          "contract.rkt")
 
 (provide resolved-module-path?
@@ -24,7 +24,9 @@
          build-module-name
          
          current-module-declare-name
-         substitute-module-declare-name)
+         substitute-module-declare-name
+         
+         deserialize-module-path-index)
 
 ;; ----------------------------------------
 
@@ -34,11 +36,13 @@
           (write-string "#<resolved-module-path:" port)
           (fprintf port "~.s" (format-resolved-module-path-name (resolved-module-path-name r)))
           (write-string ">" port))
-        #:property prop:serializable
-        (make-serialize-info (lambda (r) (vector (resolved-module-path-name r)))
-                             #'deserialize-resolved-module-path
-                             #f
-                             (or (current-load-relative-directory) (current-directory))))
+        #:property prop:serialize
+        (lambda (r ser)
+          `(deserialize-resolved-module-path
+            ,(ser (resolved-module-path-name r)))))
+
+(define (deserialize-resolved-module-path n)
+  (make-resolved-module-path n))
 
 (define (format-resolved-module-path-name p)
   (cond
@@ -79,14 +83,6 @@
         (hash-set! resolved-module-paths p (make-ephemeron p r))
         r)))
 
-(define deserialize-resolved-module-path
-  (make-deserialize-info
-   (lambda (n) (make-resolved-module-path n))
-   (lambda (x) (error "cannot make cycles"))))
-
-(module+ deserialize-info
-  (provide deserialize-resolved-module-path))
-
 ;; ----------------------------------------
 
 (struct module-path-index (path base [resolved #:mutable] shift-cache)
@@ -124,18 +120,14 @@
             (fprintf port "=~.s" (format-resolved-module-path-name
                                   (resolved-module-path-name
                                    (module-path-index-resolved r))))])
-          (write-string ">" port))
-        #:property prop:serializable
-        (make-serialize-info (lambda (mpi)
-                               (define path (module-path-index-path mpi))
-                               (cond
-                                [(not path)
-                                 (vector (or (module-path-index-resolved mpi) 'self))]
-                                [else
-                                 (vector path (module-path-index-base mpi))]))
-                             #'deserialize-module-path-index
-                             #f
-                             (or (current-load-relative-directory) (current-directory))))
+          (write-string ">" port)))
+
+;; Serialization of a module path index is handled specially, because they
+;; must be shared across phases of a module
+(define deserialize-module-path-index
+  (case-lambda 
+    [(path base) (module-path-index-join path base)]
+    [(name) (make-self-module-path-index (make-resolved-module-path name))]))
 
 (define (module-path-index-resolve mpi [load? #f])
   (check 'module-path-index-resolve module-path-index? mpi)
@@ -263,16 +255,6 @@
 (define (shift-cache-set! cache v r)
   (hash-set! cache v r))
 
-(define deserialize-module-path-index
-  (make-deserialize-info
-   (case-lambda 
-     [(path base) (module-path-index-join path base)]
-     [(name) (make-self-module-path-index name)])
-   (lambda () (error "cannot make cycles"))))
-
-(module+ deserialize-info
-  (provide deserialize-module-path-index))
-
 ;; ----------------------------------------
 
 (define (resolve-module-path mod-path base)
@@ -345,12 +327,11 @@
                                             r))
                     r)))
 
-(define (substitute-module-declare-name default-root-name default-r)
+(define (substitute-module-declare-name default-root-name default-name)
   (define current-name (current-module-declare-name))
   (define root-name (if current-name
                         (resolved-module-path-root-name current-name)
                         default-root-name))
-  (define default-name (resolved-module-path-name default-r))
   (make-resolved-module-path
    (if (pair? default-name)
        (cons root-name (cdr default-name))

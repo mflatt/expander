@@ -215,7 +215,7 @@
           (define defs (namespace->definitions m-ns phase-level))
           (unless (definitions-instantiated? defs)
             (set-definitions-instantiated?! defs #t)
-            (define p-ns (namespace->namespace-at-phase m-ns phase))<
+            (define p-ns (namespace->namespace-at-phase m-ns phase))
             ((module-instantiate m) p-ns phase-shift phase-level (module-self m) bulk-binding-registry))))
       (hash-set! (namespace-done-phases m-ns) phase min-phase))]))
 
