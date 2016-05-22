@@ -28,6 +28,8 @@
  [("-x" "--cache-only") file "Cache only for sources listed in <file>"
   (set! cache-save-only (call-with-input-file* file read))])
 
+(define cache (and cache-dir (make-cache cache-dir)))
+
 ;; The `#lang` reader doesn't use the reimplemented module system,
 ;; so make sure the reader is loaded for `racket/base`:
 (base:dynamic-require 'racket/base/lang/reader #f)
@@ -110,8 +112,8 @@
 (current-load (lambda (path expected-module)
                 (let loop ()
                   (cond
-                   [(and cache-dir
-                         (get-cached-compiled cache-dir path
+                   [(and cache
+                         (get-cached-compiled cache path
                                               (lambda ()
                                                 (log-error "cached ~s" path))))
                     => eval]
@@ -131,11 +133,11 @@
                                   (read-syntax (object-name i) i)))))))
                       (define c (compile (expand s)))
                       (cond
-                       [(and cache-dir
+                       [(and cache
                              (not cache-read-only?)
                              (or (not cache-save-only)
                                  (hash-ref cache-save-only (path->string path) #f)))
-                        (cache-compiled! cache-dir path c)
+                        (cache-compiled! cache path c)
                         (loop)]
                        [else (eval c)]))]))))
 
