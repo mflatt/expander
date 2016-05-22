@@ -44,7 +44,7 @@
    [else #f]))
 
 (define (set-subtract s1 s2)
-  (for/fold ([s1 s1]) ([k (in-hash-keys s1)])
+  (for/fold ([s1 s1]) ([k (in-hash-keys s2)])
     (hash-remove s1 k)))
 
 (define (set->list s)
