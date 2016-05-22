@@ -74,6 +74,7 @@
 (define unshifted-syntax-literals-id (gensym 'unshifted-syntax-literals))
 (define get-syntax-literal!-id (gensym 'get-syntax-literal!))
 (define bulk-binding-registry-id (gensym 'bulk-binding-registry))
+(define deserialized-syntax-id (gensym 'deserialized-syntax))
 
 ;; ----------------------------------------
 
@@ -440,14 +441,20 @@
                                      body-cctx)
                 ,@(reverse bodys)]))
         (void))))
-
+  
+  (define max-top-init-phase
+    (if (zero? (hash-count phase-to-top-init))
+        0
+        (apply max (hash-keys phase-to-top-init))))
+  
   `(begin
     ,@pre-submodules
     (declare-module!
      #:as-submodule? ,as-submodule?
      (current-namespace)
      (module-shift-for-declare
-      (let ([,mpi-vector-id ,(generate-module-path-index-deserialize mpis)])
+      (let ([,mpi-vector-id ,(generate-module-path-index-deserialize mpis)]
+            [,deserialized-syntax-id (make-vector ,(add1 max-top-init-phase) #f)])
         ,module-declaration)
       (substitute-module-declare-name ',root-module-name
                                       ',(resolved-module-path-name
@@ -546,16 +553,16 @@
     null]
    [else
     `((define ,syntax-literals-id (make-vector ,num-syntax-literals))
-      (define ,unshifted-syntax-literals-id #f)
       (define (,get-syntax-literal!-id pos)
-        (unless ,unshifted-syntax-literals-id
-          (set! ,unshifted-syntax-literals-id
-                ,(generate-deserialize (vector->immutable-vector
-                                        (list->vector (reverse syntax-literals)))
-                                       (top-init-module-path-indexes top-init))))
+        (unless (vector-ref ,deserialized-syntax-id ,phase)
+          (vector-set! ,deserialized-syntax-id
+                       ,phase
+                       ,(generate-deserialize (vector->immutable-vector
+                                               (list->vector (reverse syntax-literals)))
+                                              (top-init-module-path-indexes top-init))))
         (define stx
           (syntax-module-path-index-shift
-           (syntax-shift-phase-level (vector-ref ,unshifted-syntax-literals-id pos) ,phase-shift-id)
+           (syntax-shift-phase-level (vector-ref (vector-ref ,deserialized-syntax-id ,phase) pos) ,phase-shift-id)
            ,(add-module-path-index! (top-init-module-path-indexes top-init) (compile-context-self cctx))
            ,self-id
            ,bulk-binding-registry-id))
