@@ -37,7 +37,7 @@
           (fprintf port "~.s" (format-resolved-module-path-name (resolved-module-path-name r)))
           (write-string ">" port))
         #:property prop:serialize
-        (lambda (r ser)
+        (lambda (r ser state)
           `(deserialize-resolved-module-path
             ,(ser (resolved-module-path-name r)))))
 

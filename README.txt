@@ -10,7 +10,6 @@ TODO:
  taints
  expander observer
  expand local references to binding
- prune unreachable scopes on serialize
 
 ----------------------------------------
 

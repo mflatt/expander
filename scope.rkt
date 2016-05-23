@@ -1,6 +1,7 @@
 #lang racket/base
 (require "set.rkt"
          "serialize-property.rkt"
+         "serialize-state.rkt"
          "memo.rkt"
          "syntax.rkt"
          "phase.rkt"
@@ -54,7 +55,7 @@
 (struct scope (id             ; internal scope identity; used for sorting
                kind           ; debug info
                [bindings #:mutable]       ; #f or sym -> scope-set -> binding [shadows any bulk binding]
-               [bulk-bindings #:mutable]) ; list of bulk-binding-at [earlier shadows layer]
+               [bulk-bindings #:mutable]) ; list of bulk-binding-at [earlier shadows later]
         ;; Custom printer:
         #:property prop:custom-write
         (lambda (sc port mode)
@@ -62,22 +63,37 @@
           (display (scope-id sc) port)
           (write-string ">" port))
         #:property prop:serialize
-        (lambda (s ser)
+        (lambda (s ser state)
+          (unless (set-member? (serialize-state-reachable-scopes state) s)
+            (error "internal error: found supposedly unreachable scope"))
           `(deserialize-scope
             ,(ser (scope-id s))
             ,(ser (scope-kind s))))
         #:property prop:serialize-fill!
-        (lambda (id s ser)
+        (lambda (id s ser state)
           (if (or (scope-bindings s)
-                  (scope-bulk-bindings s))
+                  (pair? (scope-bulk-bindings s)))
               `(deserialize-scope-fill!
                 ,id
-                ,(ser (scope-bindings s))
-                ,(ser (scope-bulk-bindings s)))
-              `(void))))
+                ,(ser (prune-bindings-to-reachable (scope-bindings s)
+                                                   state))
+                ,(ser (prune-bulk-bindings-to-reachable (scope-bulk-bindings s)
+                                                        state)))
+              `(void)))
+        #:property prop:reach-scopes
+        (lambda (s reach)
+          ;; the `bindings` field is handled via `prop:scope-with-bindings`
+          (void))
+        #:property prop:scope-with-bindings
+        (lambda (s reachable-scopes reach register-trigger)
+          (when (scope-bindings s)
+            (register-bindings-reachable (scope-bindings s)
+                                         reachable-scopes
+                                         reach
+                                         register-trigger))))
 
 (define (deserialize-scope id kind)
-  (scope id kind #f #f))
+  (scope id kind (make-bindings) (make-bulk-bindings)))
 
 (define (deserialize-scope-fill! s bindings bulk-bindings)
   (set-scope-bindings! s bindings)
@@ -98,10 +114,13 @@
 (struct multi-scope (id       ; identity
                      scopes)  ; phase -> representative-scope
         #:property prop:serialize
-        (lambda (ms ser)
+        (lambda (ms ser state)
           `(deserialize-multi-scope
             ,(ser (multi-scope-id ms))
-            ,(ser (multi-scope-scopes ms)))))
+            ,(ser (multi-scope-scopes ms))))
+        #:property prop:reach-scopes
+        (lambda (ms reach)
+          (reach (multi-scope-scopes ms))))
 
 (define (deserialize-multi-scope id scopes)
   (multi-scope id scopes))
@@ -120,18 +139,24 @@
           (display (representative-scope-phase sc) port)
           (write-string ">" port))
         #:property prop:serialize
-        (lambda (s ser)
+        (lambda (s ser state)
           `(deserialize-representative-scope
             ,(ser (scope-id s))
             ,(ser (scope-kind s))
             ,(ser (representative-scope-phase s))))
         #:property prop:serialize-fill!
-        (lambda (id s ser)
+        (lambda (id s ser state)
           `(deserialize-representative-scope-fill!
             ,id
-            ,(ser (scope-bindings s))
-            ,(ser (scope-bulk-bindings s))
-            ,(ser (representative-scope-owner s)))))
+            ,(ser (prune-bindings-to-reachable (scope-bindings s)
+                                               state))
+            ,(ser (prune-bulk-bindings-to-reachable (scope-bulk-bindings s)
+                                                    state))
+            ,(ser (representative-scope-owner s))))
+        #:property prop:reach-scopes
+        (lambda (s reach)
+          ;; the inherited `bindings` field is handled via `prop:scope-with-bindings`
+          (reach (representative-scope-owner s))))
 
 (define (deserialize-representative-scope id kind phase)
   (representative-scope id kind #f #f #f phase))
@@ -144,17 +169,20 @@
                              multi-scope) ; a multi-scope
         #:transparent
         #:property prop:custom-write
-        (lambda (sc port mode)
+        (lambda (sms port mode)
           (write-string "#<scope:" port)
-          (display (multi-scope-id (shifted-multi-scope-multi-scope sc)) port)
+          (display (multi-scope-id (shifted-multi-scope-multi-scope sms)) port)
           (write-string "@" port)
-          (display (shifted-multi-scope-phase sc) port)
+          (display (shifted-multi-scope-phase sms) port)
           (write-string ">" port))
         #:property prop:serialize
-        (lambda (sms ser)
+        (lambda (sms ser state)
           `(deserialize-shifted-multi-scope
             ,(ser (shifted-multi-scope-phase sms))
-            ,(ser (shifted-multi-scope-multi-scope sms)))))
+            ,(ser (shifted-multi-scope-multi-scope sms))))
+        #:property prop:reach-scopes
+        (lambda (sms reach)
+          (reach (shifted-multi-scope-multi-scope sms))))
 
 (define (deserialize-shifted-multi-scope phase multi-scope)
   (shifted-multi-scope phase multi-scope))
@@ -162,10 +190,16 @@
 (struct bulk-binding-at (scopes ; scope set
                          bulk)  ; bulk-binding
         #:property prop:serialize
-        (lambda (bba ser)
+        (lambda (bba ser state)
           `(deserialize-bulk-binding-at
             ,(ser (bulk-binding-at-scopes bba))
-            ,(ser (bulk-binding-at-bulk bba)))))
+            ,(ser (bulk-binding-at-bulk bba))))
+        #:property prop:reach-scopes
+        (lambda (sms reach)
+          ;; bulk bindings are pruned dependong on whether all scopes
+          ;; in `scopes` are reachable, and we shouldn't get here
+          ;; when looking for scopes
+          (error "shouldn't get here")))
 
 (define (deserialize-bulk-binding-at scopes bulk)
   (bulk-binding-at scopes bulk))
@@ -527,3 +561,46 @@
             (syntax-e b))
        (equal? (syntax-scope-set a phase)
                (syntax-scope-set b phase))))
+
+;; ----------------------------------------
+
+(define (prune-bindings-to-reachable bindings state)
+  (and bindings
+       (or (hash-ref (serialize-state-bindings-intern state) bindings #f)
+           (let ([new-bindings (make-hasheq)]
+                 [reachable-scopes (serialize-state-reachable-scopes state)])
+             (for ([(sym bindings-for-sym) (in-hash bindings)])
+               (define new-bindings-for-sym (make-hash))
+               (for ([(scopes binding) (in-hash bindings-for-sym)]
+                     #:when (subset? scopes reachable-scopes))
+                 (hash-set! new-bindings-for-sym (intern-scopes scopes state) binding))
+               (when (hash-count new-bindings)
+                 (hash-set! new-bindings sym new-bindings-for-sym)))
+             (hash-set! (serialize-state-bindings-intern state) bindings new-bindings)
+             new-bindings))))
+
+(define (prune-bulk-bindings-to-reachable bulk-bindings state)
+  (and bulk-bindings
+       (or (hash-ref (serialize-state-bulk-bindings-intern state) bulk-bindings #f)
+           (let ([reachable-scopes (serialize-state-reachable-scopes state)])
+             (define new-bulk-bindings
+               (for/list ([bba (in-list bulk-bindings)]
+                          #:when (subset? (bulk-binding-at-scopes bba) reachable-scopes))
+                 (struct-copy bulk-binding-at bba
+                              [scopes (intern-scopes (bulk-binding-at-scopes bba) state)])))
+             (hash-set! (serialize-state-bulk-bindings-intern state) bulk-bindings new-bulk-bindings)
+             (and (pair? new-bulk-bindings)
+                  new-bulk-bindings)))))
+
+(define (register-bindings-reachable bindings reachable-scopes reach register-trigger)
+  (for* ([(sym bindings-for-sym) (in-hash bindings)]
+         [(scopes binding) (in-hash bindings-for-sym)])
+    (define v ((binding-reach-scopes-ref binding) binding))
+    (when v
+      (cond
+       [(subset? scopes reachable-scopes)
+        (reach v)]
+       [else
+        (for ([sc (in-set scopes)]
+              #:unless (set-member? reachable-scopes sc))
+          (register-trigger sc v))]))))

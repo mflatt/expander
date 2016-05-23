@@ -1,5 +1,6 @@
 #lang racket/base
 (require "serialize-property.rkt"
+         "serialize-state.rkt"
          "set.rkt"
          "datum-map.rkt")
 
@@ -39,17 +40,25 @@
           (fprintf port " ~.s" (syntax->datum s))
           (write-string ">" port))
         #:property prop:serialize
-        (lambda (s ser)
+        (lambda (s ser state)
           (define prop (syntax-scope-propagations s))
           `(deserialize-syntax
             ,(ser (if prop
                       ((propagation-ref prop) s)
                       (syntax-content s)))
-            ,(ser (syntax-scopes s))
-            ,(ser (syntax-shifted-multi-scopes s))
-            ,(ser (syntax-mpi-shifts s))
+            ,(ser (intern-scopes (syntax-scopes s) state))
+            ,(ser (intern-shifted-multi-scopes (syntax-shifted-multi-scopes s) state))
+            ,(ser (intern-mpi-shifts (syntax-mpi-shifts s) state))
             ,(ser (syntax-srcloc s))
-            ,(ser (syntax-props s)))))
+            ,(ser (syntax-props s))))
+        #:property prop:reach-scopes
+        (lambda (s reach)
+          (define prop (syntax-scope-propagations s))
+          (reach (if prop
+                     ((propagation-ref prop) s)
+                     (syntax-content s)))
+          (reach (syntax-scopes s))
+          (reach (syntax-shifted-multi-scopes s))))
 
 ;; Property to abstract over handling of propagation for
 ;; serialization; property value takes a syntax object and
@@ -140,3 +149,4 @@
        (raise-argument-error 'syntax-property "syntax" s))
      (struct-copy syntax s
                   [props (hash-set (syntax-props s) key val)])]))
+

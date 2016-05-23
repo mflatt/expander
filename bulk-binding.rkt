@@ -96,7 +96,7 @@
             #:phase-shift (bulk-binding-phase-shift b))))
         #:property prop:serialize
         ;; Serialization drops the `provides` table and the providing module's `self`
-        (lambda (b ser)
+        (lambda (b ser reachable-scopes)
           `(deserialize-bulk-binding
             ,(ser (bulk-binding-mpi b))
             ,(ser (bulk-binding-provide-phase-level b))

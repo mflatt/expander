@@ -1,5 +1,7 @@
 #lang racket/base
 (require "serialize-property.rkt"
+         "serialize-state.rkt"
+         "set.rkt"
          "syntax.rkt"
          "scope.rkt"
          "binding.rkt"
@@ -69,8 +71,81 @@
                 (mpi-id (hash-ref gen-order (hash-ref rev-mpis i)))))))
 
 ;; ----------------------------------------
+  
+(define (find-reachable-scopes v)
+  (define seen (make-hasheq))
+  (define reachable-scopes (seteq))
+  (define scope-triggers (make-hasheq))
+  
+  (let loop ([v v])
+    (cond
+     [(interned-literal? v) (void)]
+     [(hash-ref seen v #f) (void)]
+     [else
+      (hash-set! seen v #t)
+      (cond
+       [(scope-with-bindings? v)
+        (set! reachable-scopes (set-add reachable-scopes v))
+        
+        ((reach-scopes-ref v) v loop)
+        
+        (define l (hash-ref scope-triggers v null))
+        (for ([v (in-list l)])
+          (loop v))
+ 
+        ;; A binding may have a `free-id=?` equivalence;
+        ;; that equivalence is reachable if all the scopes in the
+        ;; binding set are reachable; for a so-far unreachable scope,
+        ;; record a trigger in case the scope bcomes reachable later
+        ((scope-with-bindings-ref v)
+         v
+         reachable-scopes
+         loop
+         (lambda (sc-unreachable b)
+           (hash-update! scope-triggers
+                         sc-unreachable
+                         (lambda (l) (cons b l))
+                         null)))]
+       [(reach-scopes? v)
+        ((reach-scopes-ref v) v loop)]
+       [(pair? v)
+        (loop (car v))
+        (loop (cdr v))]
+       [(vector? v)
+        (for ([e (in-vector v)])
+          (loop e))]
+       [(box? v)
+        (loop (unbox v))]
+       [(hash? v)
+        (for ([(k v) (in-hash v)])
+          (loop k)
+          (loop v))]
+       [(prefab-struct-key v)
+        (for ([e (in-vector (struct->vector v) 1)])
+          (loop e))]
+       [else
+        (void)])]))
+  
+  reachable-scopes)
+
+(define (interned-literal? v)
+  (or (null? v)
+      (boolean? v)
+      (and (fixnum? v)
+           (v . < . (sub1 (expt 2 30)))
+           (v . > . (- (expt 2 30))))
+      (and (symbol? v)
+           (symbol-interned? v))
+      (char? v)
+      (keyword? v)))
+
+;; ----------------------------------------
 
 (define (generate-deserialize v mpis)
+  (define reachable-scopes (find-reachable-scopes v))
+  
+  (define state (make-serialize-state reachable-scopes))
+  
   (define mutables (make-hasheq))
   (define objs (make-hasheq))
   (define obj-count 0)
@@ -80,17 +155,6 @@
     (string->symbol (format "shared~a" n)))
   (define (mutable-id n)
     (string->symbol (format "mutable~a" n)))
-  
-  (define (interned-literal? v)
-    (or (null? v)
-        (boolean? v)
-        (and (fixnum? v)
-             (v . < . (sub1 (expt 2 30)))
-             (v . > . (- (expt 2 30))))
-        (and (symbol? v)
-             (symbol-interned? v))
-        (char? v)
-        (keyword? v)))
   
   (define (quoted? v)
     (and (pair? v) (eq? 'quote (car v))))
@@ -113,9 +177,9 @@
          [(serialize-fill!? v)
           ;; Assume no sharing in non-mutable part
           (hash-set! mutables v (hash-count mutables))
-          ((serialize-fill!-ref v) #f v add-frontier!)]
+          ((serialize-fill!-ref v) #f v add-frontier! state)]
          [(serialize? v)
-          ((serialize-ref v) v loop)]
+          ((serialize-ref v) v loop state)]
          [(pair? v)
           (loop (car v))
           (loop (cdr v))]
@@ -178,7 +242,7 @@
      [(module-path-index? v)
       (add-module-path-index! mpis v)]
      [(serialize? v)
-      ((serialize-ref v) v ser)]
+      ((serialize-ref v) v ser state)]
      [(pair? v)
       (define a (ser (car v)))
       (define d (ser (cdr v)))
@@ -242,7 +306,7 @@
   ;; Generate the shell of a mutable value:
   (define (ser-shell v)
     (cond
-     [(serialize-fill!? v) ((serialize-ref v) v ser)]
+     [(serialize-fill!? v) ((serialize-ref v) v ser state)]
      [(box? v) `(box #f)]
      [(vector? v) `(make-vector ,(vector-length v) #f)]
      [(hash? v) (cond
@@ -255,7 +319,7 @@
   ;; Fill in the content of a mutable shell:
   (define (ser-shell-fill id v)
     (cond
-     [(serialize-fill!? v) ((serialize-fill!-ref v) id v ser)]
+     [(serialize-fill!? v) ((serialize-fill!-ref v) id v ser state)]
      [(box? v) `(set-box! ,id ,(ser (unbox v)))]
      [(vector? v) `(begin
                     ,@(for/list ([v (in-vector v)]

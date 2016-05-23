@@ -1,6 +1,7 @@
 #lang racket/base
 (require "set.rkt"
          "serialize-property.rkt"
+         "serialize-state.rkt"
          "memo.rkt"
          "syntax.rkt"
          "scope.rkt"
@@ -40,7 +41,10 @@
 ;; ----------------------------------------
 
 (struct binding (frame-id   ; used to trigger use-site scopes
-                 free=id))  ; `free-identifier=?` equivalence via a rename-transformer binding
+                 free=id)   ; `free-identifier=?` equivalence via a rename-transformer binding
+        #:property prop:binding-reach-scopes
+        (lambda (b)
+          (binding-free=id b)))
 
 ;; See `identifier-binding` docs for information about these fields:
 (struct module-binding binding (module phase sym
@@ -48,16 +52,31 @@
                                  nominal-require-phase)
         #:transparent
         #:property prop:serialize
-        (lambda (b ser)
+        (lambda (b ser state)
           `(deserialize-module-binding
-            ,(ser (binding-free=id b))
             ,(ser (module-binding-module b))
-            ,(ser (module-binding-phase b))
             ,(ser (module-binding-sym b))
-            ,(ser (module-binding-nominal-module b))
-            ,(ser (module-binding-nominal-phase b))
-            ,(ser (module-binding-nominal-sym b))
-            ,(ser (module-binding-nominal-require-phase b)))))
+            ;; For the remainder, only suppoy the values that don't match
+            ;; a default:
+            ,@(map ser
+                   (let loop ([vals (list
+                                     (module-binding-phase b)
+                                     (module-binding-nominal-module b)
+                                     (module-binding-nominal-phase b)
+                                     (module-binding-nominal-sym b)
+                                     (module-binding-nominal-require-phase b)
+                                     (binding-free=id b))]
+                              [defaults (list 0
+                                              (module-binding-module b)
+                                              (module-binding-phase b)
+                                              (module-binding-sym b)
+                                              0
+                                              #f)])
+                     (cond
+                      [(equal? vals defaults) null]
+                      [else (cons (car vals)
+                                  (loop (cdr vals)
+                                        (cdr defaults)))]))))))
 
 (define (make-module-binding module phase sym
                              #:nominal-module [nominal-module module]
@@ -72,12 +91,13 @@
                   nominal-module nominal-phase nominal-sym
                   nominal-require-phase))
 
-(define (deserialize-module-binding free=id
-                                    module phase sym
-                                    nominal-module
-                                    nominal-phase
-                                    nominal-sym
-                                    nominal-require-phase)
+(define (deserialize-module-binding module sym
+                                    [phase 0]
+                                    [nominal-module module]
+                                    [nominal-phase phase]
+                                    [nominal-sym sym]
+                                    [nominal-require-phase 0]
+                                    [free=id #f])
   (make-module-binding module phase sym
                        #:nominal-module nominal-module
                        #:nominal-phase nominal-phase
@@ -93,7 +113,7 @@
 ;; trigger use-site scopes as needed
 (struct local-binding binding (key)
         #:property prop:serialize
-        (lambda (b ser)
+        (lambda (b ser state)
           `(deserialize-local-binding
             ,(ser (local-binding-key b)))))
 
