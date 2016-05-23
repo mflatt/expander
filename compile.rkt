@@ -84,7 +84,7 @@
     (compile s (struct-copy compile-context cctx
                             [top-init top-init])))
   (define s-expr
-    `(begin
+    `(let ()
       ,@(generate-top-init top-init
                            (compile-context-phase cctx)
                            cctx)
