@@ -19,6 +19,9 @@
 (define cache-dir #f)
 (define cache-read-only? #f)
 (define cache-save-only #f)
+(define cache-skip-first? #f)
+(define time-expand? #f)
+(define boot-module 'racket)
 (command-line
  #:once-each
  [("-c" "--cache") dir "Save and load fomr <dir>"
@@ -26,7 +29,16 @@
  [("-r" "--read-only") "Use cache in read-only mode"
   (set! cache-read-only? #t)]
  [("-x" "--cache-only") file "Cache only for sources listed in <file>"
-  (set! cache-save-only (call-with-input-file* file read))])
+  (set! cache-save-only (call-with-input-file* file read))]
+ [("-s" "--source-initial") "Don't use cache for the initial load"
+  (set! cache-skip-first? #t)]
+ [("--time") "Time re-expansion"
+  (set! time-expand? #t)]
+ #:once-any
+ [("-t") file "Load specified file"
+  (set! boot-module `(file ,(path->complete-path file)))]
+ [("-l") lib "Load specified library"
+  (set! boot-module (string->symbol lib))])
 
 (define cache (and cache-dir (make-cache cache-dir)))
 
@@ -113,12 +125,14 @@
                 (let loop ()
                   (cond
                    [(and cache
+                         (not cache-skip-first?)
                          (get-cached-compiled cache path
                                               (lambda ()
                                                 (log-error "cached ~s" path))))
                     => eval]
                    [else
                     (log-error "compile ~s" path)
+                    (set! cache-skip-first? #f)
                     (with-handlers ([exn:fail? (lambda (exn)
                                                  (log-error "...during ~s..." path)
                                                  (raise exn))])
@@ -132,6 +146,8 @@
                                  (check-module-form
                                   (read-syntax (object-name i) i)))))))
                       (define c (compile (expand s)))
+                      (when time-expand?
+                        (time (expand s)))
                       (cond
                        [(and cache
                              (not cache-read-only?)
@@ -141,4 +157,4 @@
                         (loop)]
                        [else (eval c)]))]))))
 
-(namespace-require 'racket)
+(namespace-require boot-module)
