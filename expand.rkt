@@ -15,10 +15,12 @@
          "lift-context.rkt"
          "already-expanded.rkt"
          "liberal-def-ctx.rkt"
-         "debug.rkt")
+         "debug.rkt"
+         "reference-record.rkt")
 
 (provide expand
          expand-body
+         expand-and-split-bindings-by-reference
          lookup
          apply-transformer
          
@@ -132,7 +134,13 @@
     ;; Apply transformer and expand again
     (expand (apply-transformer (transformer->procedure t) s ctx binding) ctx)]
    [(variable? t)
-    ;; A reference to a variable expands to itself
+    ;; A reference to a variable expands to itself --- but if the
+    ;; binding's frame has a reference record, then register the
+    ;; use
+    (when (and (not (expand-context-only-immediate? ctx))
+               (local-binding? binding)
+               (reference-record? (binding-frame-id binding)))
+      (reference-record-used! (binding-frame-id binding) (local-binding-key binding)))
     s]
    [else
     ;; Some other compile-time value:
@@ -220,7 +228,7 @@
     (for/list ([body (in-list bodys)])
       (add-scope (add-scope (add-scope body sc) outside-sc) inside-sc)))
   (define phase (expand-context-phase ctx))
-  (define frame-id (gensym))
+  (define frame-id (make-reference-record)) ; accumulates info on referenced variables
   ;; Create an expansion context for expanding only immediate macros;
   ;; this partial-expansion phase uncovers macro- and variable
   ;; definitions in the definition context
@@ -241,13 +249,18 @@
   (let loop ([body-ctx body-ctx]
              [bodys init-bodys]
              [done-bodys null] ; accumulated expressions
-             [val-binds null]  ; accumulated bindings
+             [val-idss null]   ; accumulated binding identifiers
+             [val-keyss null]  ; accumulated binding keys
+             [val-rhss null]   ; accumulated binding right-hand sides
              [dups (make-check-no-duplicate-table)])
     (cond
      [(null? bodys)
       ;; Partial expansion is complete, so finish by rewriting to
       ;; `letrec-values`
-      (finish-expanding-body body-ctx (reverse done-bodys) val-binds s)]
+      (finish-expanding-body body-ctx frame-id
+                             (reverse val-idss) (reverse val-keyss) (reverse val-rhss)
+                             (reverse done-bodys)
+                             s)]
      [else
       (define exp-body (expand (car bodys) body-ctx))
       (case (core-form-sym exp-body phase)
@@ -257,7 +270,9 @@
          (loop body-ctx
                (append (m 'e) (cdr bodys))
                done-bodys
-               val-binds
+               val-idss
+               val-keyss
+               val-rhss
                dups)]
         [(define-values)
          ;; Found a variable definition; add bindings, extend the
@@ -273,16 +288,23 @@
                             [env extended-env])
                (cdr bodys)
                null
-               (cons (list ids (m 'rhs))
-                     ;; If we had accumulated some expressions, we
-                     ;; need to turn each into a
-                     ;;  (defined-values () (begin <expr> (values)))
-                     ;; form so it can be kept with definitions to
-                     ;; preserved order
-                     (append
-                      (for/list ([done-body (in-list done-bodys)])
-                        (no-binds done-body s phase))
-                      val-binds))
+               ;; If we had accumulated some expressions, we
+               ;; need to turn each into the equivalent of
+               ;;  (defined-values () (begin <expr> (values)))
+               ;; form so it can be kept with definitions to
+               ;; preserved order
+               (cons ids (append
+                          (for/list ([done-body (in-list done-bodys)])
+                            null)
+                          val-idss))
+               (cons keys (append
+                           (for/list ([done-body (in-list done-bodys)])
+                             null)
+                           val-keyss))
+               (cons (m 'rhs) (append
+                               (for/list ([done-body (in-list done-bodys)])
+                                 (no-binds done-body s phase))
+                               val-rhss))
                new-dups)]
         [(define-syntaxes)
          ;; Found a macro definition; add bindings, evaluate the
@@ -303,19 +325,26 @@
                             [env extended-env])
                (cdr bodys)
                done-bodys
-               val-binds
+               val-idss
+               val-keyss
+               val-rhss
                new-dups)]
         [else
          ;; Found an expression; accumulate it and continue
          (loop body-ctx
                (cdr bodys)
                (cons exp-body done-bodys)
-               val-binds
+               val-idss
+               val-keyss
+               val-rhss
                dups)])])))
 
 ;; Partial expansion is complete, so assumble the result as a
 ;; `letrec-values` form and continue expanding
-(define (finish-expanding-body body-ctx done-bodys val-binds s)
+(define (finish-expanding-body body-ctx frame-id
+                               val-idss val-keyss val-rhss
+                               done-bodys
+                               s)
   (when (null? done-bodys)
     (error "no body forms:" s))
   ;; To reference core forms at the current expansion phase:
@@ -343,30 +372,80 @@
              (expand body finish-ctx)))
        s)]))
   (cond
-   [(null? val-binds)
+   [(null? val-idss)
     ;; No definitions, so no `letrec-values` wrapper needed:
     (finish-bodys)]
    [else
     ;; Add `letrec-values` wrapper, finish expanding the right-hand
     ;; sides, and then finish the body expression:
-    (datum->syntax
-     #f
-     `(,(datum->syntax s-core-stx 'letrec-values)
-       ,(for/list ([bind (in-list (reverse val-binds))])
-          `(,(datum->syntax #f (car bind)) ,(expand (cadr bind) finish-ctx)))
-       ,(finish-bodys))
-     s)]))
+    (expand-and-split-bindings-by-reference
+     val-idss val-keyss val-rhss
+     #:frame-id frame-id #:ctx finish-ctx #:source s
+     #:get-body finish-bodys)]))
+
+;; Roughly, create a `letrec-values` for for the given ids, right-hand sides, and
+;; body. While expanding right-hand sides, though, keep track of whether any
+;; forward references appear, and if not, generate a `let-values` form, instead,
+;; at each binding clause. Similar, end a `letrec-values` form and start a new
+;; one if there were forward references up to the clause but not beyond.
+(define (expand-and-split-bindings-by-reference idss keyss rhss
+                                                #:frame-id frame-id #:ctx ctx #:source s
+                                                #:get-body get-body)
+  (define s-core-stx
+    (syntax-shift-phase-level core-stx (expand-context-phase ctx)))
+  (let loop ([idss idss] [keyss keyss] [rhss rhss] [accum-idss null] [accum-rhss null])
+    (cond
+     [(null? idss)
+      (cond
+       [(null? accum-idss) (get-body)]
+       [else
+        (datum->syntax
+         #f
+         `(,(datum->syntax s-core-stx 'letrec-values)
+           ,(map list (reverse accum-idss) (reverse accum-rhss))
+           ,(loop (cdr idss) (cdr keyss) (cdr rhss) null null))
+         s)])]
+     [else
+      (define ids (car idss))
+      (define expanded-rhs (expand (car rhss) (as-named-context ctx ids)))
+      
+      (define local-or-forward-references? (reference-record-forward-references? frame-id))
+      (reference-record-bound! frame-id (car keyss))
+      (define forward-references? (reference-record-forward-references? frame-id))
+      
+      (cond
+       [(not local-or-forward-references?)
+        (unless (null? accum-idss) (error "internal error: accumulated ids not empty"))
+        (datum->syntax
+         #f
+         `(,(datum->syntax s-core-stx 'let-values)
+           ([,ids ,expanded-rhs])
+           ,(loop (cdr idss) (cdr keyss) (cdr rhss) null null))
+         s)]
+       [(not forward-references?)
+        (datum->syntax
+         #f
+         `(,(datum->syntax s-core-stx 'letrec-values)
+           ,(map list
+                 (reverse (cons ids accum-idss))
+                 (reverse (cons expanded-rhs accum-rhss)))
+           ,(loop (cdr idss) (cdr keyss) (cdr rhss) null null))
+         s)]
+       [else
+        (loop (cdr idss) (cdr keyss) (cdr rhss)
+              (cons ids accum-idss)
+              (cons expanded-rhs accum-rhss))])])))
 
 ;; Helper to turn an expression into a binding clause with zero
 ;; bindings
 (define (no-binds expr s phase)
   (define s-core-stx (syntax-shift-phase-level core-stx phase))
-  (list null (datum->syntax #f
-                            `(,(datum->syntax s-core-stx 'begin)
-                              ,expr
-                              (,(datum->syntax s-core-stx '#%app)
-                               ,(datum->syntax s-core-stx 'values)))
-                            s)))
+  (datum->syntax #f
+                 `(,(datum->syntax s-core-stx 'begin)
+                   ,expr
+                   (,(datum->syntax s-core-stx '#%app)
+                    ,(datum->syntax s-core-stx 'values)))
+                 s))
 
 ;; Helper to remove any created use-site scopes from the left-hand
 ;; side of a definition that was revealed by partial expansion in a

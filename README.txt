@@ -3,7 +3,7 @@ This is a work-in-progress reimplementation of Racket's macro expander.
 See "demo.rkt" for examples.
 
 TODO:
- Racket-style local definition contexts
+ bug fix for local definition contexts (MB's example)
  top level
  lazy module instantiation
  origin tracking

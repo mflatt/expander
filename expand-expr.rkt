@@ -12,6 +12,7 @@
          "expand.rkt"
          "set-bang-trans.rkt"
          "rename-trans.rkt"
+         "reference-record.rkt"
          "debug.rkt")
 
 ;; ----------------------------------------
@@ -94,7 +95,9 @@
 ;; ----------------------------------------
 
 ;; Common expansion for `let[rec]-[syntaxes+]values`
-(define (make-let-values-form syntaxes? rec?)
+(define (make-let-values-form #:syntaxes? [syntaxes? #f]
+                              #:rec? [rec? #f]
+                              #:split-by-reference? [split-by-reference? #f])
   (lambda (s ctx)
     (define m (if syntaxes?
                   (match-syntax s '(letrec-syntaxes+values
@@ -105,6 +108,8 @@
                                     body ...+))))
    (define sc (new-scope 'local))
    (define phase (expand-context-phase ctx))
+   (define frame-id (and split-by-reference?
+                         (make-reference-record))) ; accumulates info on referenced variables
    ;; Add the new scope to each binding identifier:
    (define trans-idss (for/list ([ids (in-list (if syntaxes? (m 'trans-id) null))])
                         (for/list ([id (in-list ids)])
@@ -120,7 +125,7 @@
                            (add-local-binding! id phase))))
    (define val-keyss (for/list ([ids (in-list val-idss)])
                        (for/list ([id (in-list ids)])
-                         (add-local-binding! id phase))))
+                         (add-local-binding! id phase #:frame-id frame-id))))
    ;; Evaluate compile-time expressions (if any):
    (define trans-valss (for/list ([rhs (in-list (if syntaxes? (m 'trans-rhs) '()))]
                                   [ids (in-list trans-idss)])
@@ -149,28 +154,39 @@
      (if syntaxes?
          (datum->syntax (syntax-shift-phase-level core-stx phase) 'letrec-values)
          (m 'let-values)))
-   (rebuild
-    s
-    `(,letrec-values-id ,(for/list ([ids (in-list val-idss)]
-                                    [rhs (in-list (m 'val-rhs))])
-                           `[,ids ,(if rec?
-                                       (expand (add-scope rhs sc)
-                                               (as-named-context rec-ctx ids))
-                                       (expand rhs
-                                               (as-named-context expr-ctx ids)))])
-      ,(expand-body (m 'body) sc s (as-tail-context rec-ctx #:wrt ctx))))))
+   (define (get-body)
+     (expand-body (m 'body) sc s (as-tail-context rec-ctx #:wrt ctx)))
+   
+   (cond
+    [(not split-by-reference?)
+     (rebuild
+      s
+      `(,letrec-values-id ,(for/list ([ids (in-list val-idss)]
+                                      [rhs (in-list (m 'val-rhs))])
+                             `[,ids ,(if rec?
+                                         (expand (add-scope rhs sc)
+                                                 (as-named-context rec-ctx ids))
+                                         (expand rhs
+                                                 (as-named-context expr-ctx ids)))])
+        ,(get-body)))]
+    [else
+     (expand-and-split-bindings-by-reference
+      val-idss val-keyss (for/list ([rhs (in-list (m 'val-rhs))])
+                           (add-scope rhs sc))
+      #:frame-id frame-id #:ctx rec-ctx #:source s
+      #:get-body get-body)])))
 
 (add-core-form!
  'let-values
- (make-let-values-form #f #f))
+ (make-let-values-form))
 
 (add-core-form!
  'letrec-values
- (make-let-values-form #f #t))
+ (make-let-values-form #:rec? #t))
 
 (add-core-form!
  'letrec-syntaxes+values
- (make-let-values-form #t #t))
+ (make-let-values-form #:syntaxes? #t #:rec? #t #:split-by-reference? #t))
 
 ;; ----------------------------------------
 

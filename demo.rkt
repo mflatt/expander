@@ -13,9 +13,10 @@
           demo-ns))
 
 (define (compile+eval-expression e)
+  (define exp-e (expand-expression e))
   (define c
-    (compile (expand-expression e) demo-ns))
-  (values c
+    (compile exp-e demo-ns))
+  (values exp-e
           (eval c)))
 
 (define (eval-expression e #:check [check-val #f])
@@ -68,6 +69,31 @@
  '(lambda (x)
    (define-syntaxes (y) (lambda (stx) (quote-syntax 7)))
    y))
+
+;; Expands to `let-values`:
+(compile+eval-expression
+ '(lambda (x)
+   (define-values (z) 1)
+   (define-values (y) z)
+   y))
+
+;; Expands to two separate `letrec-values`:
+(compile+eval-expression
+ '(lambda (x)
+   (define-values (z) (lambda () y))
+   (define-values (y) 1)
+   (define-values (q) (lambda () q))
+   z))
+
+;; Same as previous:
+(compile+eval-expression
+ '(lambda (x)
+   (letrec-syntaxes+values
+    ()
+    ([(z) (lambda () y)]
+     [(y) 1]
+     [(q) (lambda () q)])
+    z)))
 
 (compile+eval-expression
  '(let-values ([(z) 9])
