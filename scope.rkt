@@ -601,7 +601,8 @@
 (define (register-bindings-reachable bindings reachable-scopes reach register-trigger)
   (for* ([(sym bindings-for-sym) (in-hash bindings)]
          [(scopes binding) (in-hash bindings-for-sym)])
-    (define v ((binding-reach-scopes-ref binding) binding))
+    (define v (and (binding-reach-scopes? binding)
+                   ((binding-reach-scopes-ref binding) binding)))
     (when v
       (cond
        [(subset? scopes reachable-scopes)

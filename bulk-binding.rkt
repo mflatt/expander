@@ -46,14 +46,13 @@
                                             #:provide-phase-level provide-phase-level
                                             #:phase-shift phase-shift)
   (define from-mod (module-binding-module out-binding))
-  (struct-copy module-binding out-binding
-               [module (module-path-index-shift from-mod self mpi)]
-               [nominal-module mpi]
-               [nominal-phase provide-phase-level]
-               [nominal-sym sym]
-               [nominal-require-phase phase-shift]
-               [frame-id #:parent binding #f]))
-
+  (module-binding-update out-binding
+                         #:module (module-path-index-shift from-mod self mpi)
+                         #:nominal-module mpi
+                         #:nominal-phase provide-phase-level
+                         #:nominal-sym sym
+                         #:nominal-require-phase phase-shift
+                         #:frame-id #f))
 
 ;; ----------------------------------------
 

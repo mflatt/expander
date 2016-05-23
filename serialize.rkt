@@ -5,6 +5,8 @@
          "syntax.rkt"
          "scope.rkt"
          "binding.rkt"
+         "module-binding.rkt"
+         "local-binding.rkt"
          "bulk-binding.rkt"
          "module-path.rkt")
 
@@ -393,6 +395,7 @@
   (add! 'deserialize-representative-scope deserialize-representative-scope)
   (add! 'deserialize-representative-scope-fill! deserialize-representative-scope-fill!)
   (add! 'deserialize-bulk-binding-at deserialize-bulk-binding-at)
-  (add! 'deserialize-module-binding deserialize-module-binding)
-  (add! 'deserialize-local-binding deserialize-local-binding)
+  (add! 'deserialize-full-module-binding deserialize-full-module-binding)
+  (add! 'deserialize-simple-module-binding deserialize-simple-module-binding)
+  (add! 'deserialize-full-local-binding deserialize-full-local-binding)
   (add! 'deserialize-bulk-binding deserialize-bulk-binding))
