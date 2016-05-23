@@ -54,7 +54,7 @@
 
 (struct scope (id             ; internal scope identity; used for sorting
                kind           ; debug info
-               [bindings #:mutable]       ; #f or sym -> scope-set -> binding [shadows any bulk binding]
+               [bindings #:mutable]       ; sym -> scope-set -> binding [shadows any bulk binding]
                [bulk-bindings #:mutable]) ; list of bulk-binding-at [earlier shadows later]
         ;; Custom printer:
         #:property prop:custom-write
@@ -71,15 +71,15 @@
             ,(ser (scope-kind s))))
         #:property prop:serialize-fill!
         (lambda (id s ser state)
-          (if (or (scope-bindings s)
-                  (pair? (scope-bulk-bindings s)))
+          (if (and (empty-bindings? (scope-bindings s))
+                   (empty-bulk-bindings? (scope-bulk-bindings s)))
+              `(void)
               `(deserialize-scope-fill!
                 ,id
                 ,(ser (prune-bindings-to-reachable (scope-bindings s)
                                                    state))
                 ,(ser (prune-bulk-bindings-to-reachable (scope-bulk-bindings s)
-                                                        state)))
-              `(void)))
+                                                        state)))))
         #:property prop:reach-scopes
         (lambda (s reach)
           ;; the `bindings` field is handled via `prop:scope-with-bindings`
@@ -231,10 +231,16 @@
   id-counter)
   
 (define (make-bindings)
-  #f)
+  #hasheq())
+
+(define (empty-bindings? bs)
+  (zero? (hash-count bs)))
 
 (define (make-bulk-bindings)
   null)
+
+(define (empty-bulk-bindings? bbs)
+  (null? bbs))
 
 (define (new-scope kind)
   (scope (new-scope-id!) kind (make-bindings) (make-bulk-bindings)))
@@ -464,15 +470,11 @@
 
 (define (add-binding-in-scopes! scopes sym binding)
   (define max-sc (find-max-scope scopes))
-  (define bindings (or (scope-bindings max-sc)
-                       (let ([h (make-hasheq)])
-                         (set-scope-bindings! max-sc h)
-                         h)))
-  (define sym-bindings (or (hash-ref bindings sym #f)
-                           (let ([h (make-hash)])
-                             (hash-set! bindings sym h)
-                             h)))
-  (hash-set! sym-bindings scopes binding))
+  (define bindings (scope-bindings max-sc))
+  (define sym-bindings (hash-ref bindings sym #hash()))
+  (set-scope-bindings! max-sc (hash-set bindings
+                                        sym
+                                        (hash-set sym-bindings scopes binding))))
 
 (define (add-binding! id binding phase)
   (add-binding-in-scopes! (syntax-scope-set id phase) (syntax-e id) binding))
@@ -483,7 +485,7 @@
   (set-scope-bulk-bindings! max-sc
                             (cons (bulk-binding-at scopes binding)
                                   (scope-bulk-bindings max-sc)))
-  (remove-matching-bindings! (scope-bindings max-sc) scopes binding))
+  (remove-matching-bindings! max-sc scopes binding))
 
 
 ;; ----------------------------------------
@@ -501,7 +503,7 @@
   (define sym (syntax-e s))
   (define candidates
     (for*/list ([sc (in-set scopes)]
-                [bindings (in-value (or (hash-ref (or (scope-bindings sc) #hasheq()) sym #f)
+                [bindings (in-value (or (hash-ref (scope-bindings sc) sym #f)
                                         ;; Check bulk bindings; if a symbol match is found,
                                         ;; synthesize a non-bulk binding table
                                         (for/or ([bulk-at (in-list (scope-bulk-bindings sc))])
@@ -538,21 +540,25 @@
 
 ;; The bindings of `bulk at `scopes` should shadow any existing
 ;; mappings in `sym-bindings`
-(define (remove-matching-bindings! bindings scopes bulk)
+(define (remove-matching-bindings! sc scopes bulk)
   (define bulk-symbols (bulk-binding-symbols bulk #f #f null))
-  (cond
-   [(not bindings) (void)]
-   [((hash-count bindings) . < . (hash-count bulk-symbols))
-    ;; Faster to consider each sym in `sym-binding`
-    (for ([(sym sym-bindings) (in-hash bindings)])
-      (when (hash-ref bulk-symbols sym #f)
-        (hash-remove! sym-bindings scopes)))]
-   [else
-    ;; Faster to consider each sym in `bulk-symbols`
-    (for ([sym (in-hash-keys bulk-symbols)])
-      (define sym-bindings (hash-ref bindings sym #f))
-      (when sym-bindings
-        (hash-remove! sym-bindings scopes)))]))
+  (define bindings (scope-bindings sc))
+  (define new-bindings
+    (cond
+     [((hash-count bindings) . < . (hash-count bulk-symbols))
+      ;; Faster to consider each sym in `sym-binding`
+      (for/fold ([bindings bindings]) ([(sym sym-bindings) (in-hash bindings)])
+        (if (hash-ref bulk-symbols sym #f)
+            (hash-set bindings sym (hash-remove sym-bindings scopes))
+            bindings))]
+     [else
+      ;; Faster to consider each sym in `bulk-symbols`
+      (for/fold ([bindings bindings]) ([sym (in-hash-keys bulk-symbols)])
+        (define sym-bindings (hash-ref bindings sym #f))
+        (if sym-bindings
+            (hash-set bindings sym (hash-remove sym-bindings scopes))
+            bindings))]))
+  (set-scope-bindings! sc new-bindings))
 
 ;; ----------------------------------------
 
@@ -565,19 +571,19 @@
 ;; ----------------------------------------
 
 (define (prune-bindings-to-reachable bindings state)
-  (and bindings
-       (or (hash-ref (serialize-state-bindings-intern state) bindings #f)
-           (let ([new-bindings (make-hasheq)]
-                 [reachable-scopes (serialize-state-reachable-scopes state)])
-             (for ([(sym bindings-for-sym) (in-hash bindings)])
-               (define new-bindings-for-sym (make-hash))
-               (for ([(scopes binding) (in-hash bindings-for-sym)]
-                     #:when (subset? scopes reachable-scopes))
-                 (hash-set! new-bindings-for-sym (intern-scopes scopes state) binding))
-               (when (hash-count new-bindings)
-                 (hash-set! new-bindings sym new-bindings-for-sym)))
-             (hash-set! (serialize-state-bindings-intern state) bindings new-bindings)
-             new-bindings))))
+  (or (hash-ref (serialize-state-bindings-intern state) bindings #f)
+      (let ([reachable-scopes (serialize-state-reachable-scopes state)])
+        (define new-bindings
+          (for*/hash ([(sym bindings-for-sym) (in-hash bindings)]
+                      [new-bindings-for-sym
+                       (in-value
+                        (for/hash ([(scopes binding) (in-hash bindings-for-sym)]
+                                   #:when (subset? scopes reachable-scopes))
+                          (values (intern-scopes scopes state) binding)))]
+                      #:unless (zero? (hash-count new-bindings-for-sym)))
+            (values sym new-bindings-for-sym)))
+        (hash-set! (serialize-state-bindings-intern state) bindings new-bindings)
+        new-bindings)))
 
 (define (prune-bulk-bindings-to-reachable bulk-bindings state)
   (and bulk-bindings
