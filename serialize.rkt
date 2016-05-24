@@ -8,16 +8,22 @@
          "module-binding.rkt"
          "local-binding.rkt"
          "bulk-binding.rkt"
-         "module-path.rkt")
+         "module-path.rkt"
+         "module-use.rkt"
+         "compilation-unit.rkt")
 
 (provide make-module-path-index-table
          add-module-path-index!
          generate-module-path-index-deserialize
+         mpis-as-vector-getter
          mpi-vector-id
          
          generate-deserialize
+
+         deserialize-instance
+         deserialize-imports
          
-         add-deserialize-variables!)
+         serialize-module-uses)
 
 (define mpi-vector-id (gensym 'mpi-vector))
 
@@ -58,7 +64,7 @@
     (for/list ([i (in-range (hash-count gen-order))])
       (define mpi (hash-ref rev-gen-order i))
       (define-values (path base) (module-path-index-split mpi))
-      `[,(mpi-id i)
+      `[(,(mpi-id i))
         ,(cond
           [(not path)
            `(deserialize-module-path-index ',(or (resolved-module-path-name
@@ -71,6 +77,12 @@
    gens
    `(vector ,@(for/list ([i (in-range (hash-count rev-mpis))])
                 (mpi-id (hash-ref gen-order (hash-ref rev-mpis i)))))))
+
+(define (mpis-as-vector-getter mpis)
+  (define vec (make-vector (hash-count mpis) #f))
+  (for ([(mpi pos) (in-hash mpis)])
+    (vector-set! vec pos mpi))
+  (lambda () vec))
 
 ;; ----------------------------------------
   
@@ -338,7 +350,7 @@
                          (values v k)))
   (define mutable-shell-bindings
     (for/list ([i (in-range (hash-count mutables))])
-      `[,(mutable-id i) ,(ser-shell (hash-ref rev-mutables i))]))
+      `[(,(mutable-id i)) ,(ser-shell (hash-ref rev-mutables i))]))
   
   ;; Generate shared values in reverse order:
   (define rev-shares (for/hasheqv ([v (in-hash-keys shares)])
@@ -346,7 +358,7 @@
   (define shared-bindings
     (for/list ([i (in-range obj-count)]
                #:when (hash-ref rev-shares i #f))
-      `[,(shared-id i) ,(do-ser (hash-ref rev-shares i))]))
+      `[(,(shared-id i)) ,(do-ser (hash-ref rev-shares i))]))
   
   ;; Fill in mutable values last
   (define mutable-fills
@@ -354,7 +366,7 @@
       (ser-shell-fill (mutable-id i) (hash-ref rev-mutables i))))
   
   ;; Put it all together:
-  `(let ,mutable-shell-bindings
+  `(let-values ,mutable-shell-bindings
     ,(make-let* 
       shared-bindings
       `(begin
@@ -367,11 +379,11 @@
 (define (make-let* bindings body)
   (let loop ([vars #hasheq()] [group null] [bindings bindings])
     (cond
-     [(null? bindings) `(let ,(reverse group) ,body)]
+     [(null? bindings) `(let-values ,(reverse group) ,body)]
      [(has-symbol? (cadar bindings) vars)
-      `(let ,(reverse group) ,(loop #hasheq() null bindings))]
+      `(let-values ,(reverse group) ,(loop #hasheq() null bindings))]
      [else
-      (loop (hash-set vars (caar bindings) #t)
+      (loop (hash-set vars (caaar bindings) #t)
             (cons (car bindings) group)
             (cdr bindings))])))
 
@@ -383,19 +395,34 @@
 
 ;; ----------------------------------------
 
-(define (add-deserialize-variables! ns)
-  (define (add! sym val)
-    (namespace-set-variable-value! sym val #t ns))
-  (add! 'deserialize-module-path-index deserialize-module-path-index)
-  (add! 'deserialize-syntax deserialize-syntax)
-  (add! 'deserialize-scope deserialize-scope)
-  (add! 'deserialize-scope-fill! deserialize-scope-fill!)
-  (add! 'deserialize-multi-scope deserialize-multi-scope)
-  (add! 'deserialize-shifted-multi-scope deserialize-shifted-multi-scope)
-  (add! 'deserialize-representative-scope deserialize-representative-scope)
-  (add! 'deserialize-representative-scope-fill! deserialize-representative-scope-fill!)
-  (add! 'deserialize-bulk-binding-at deserialize-bulk-binding-at)
-  (add! 'deserialize-full-module-binding deserialize-full-module-binding)
-  (add! 'deserialize-simple-module-binding deserialize-simple-module-binding)
-  (add! 'deserialize-full-local-binding deserialize-full-local-binding)
-  (add! 'deserialize-bulk-binding deserialize-bulk-binding))
+(define (serialize-module-uses mus mpis)
+  (for/list ([mu (in-list mus)])
+    `(module-use
+      ,(add-module-path-index! mpis (module-use-module mu))
+      ,(module-use-phase mu))))
+
+;; ----------------------------------------
+
+(define deserialize-instance (make-instance))
+(define deserialize-imports null)
+
+(define (add! sym val)
+  (set-instance-variable-value! deserialize-instance sym val)
+  (set! deserialize-imports
+        (cons sym deserialize-imports)))
+(add! 'deserialize-module-path-index deserialize-module-path-index)
+(add! 'deserialize-syntax deserialize-syntax)
+(add! 'deserialize-scope deserialize-scope)
+(add! 'deserialize-scope-fill! deserialize-scope-fill!)
+(add! 'deserialize-multi-scope deserialize-multi-scope)
+(add! 'deserialize-shifted-multi-scope deserialize-shifted-multi-scope)
+(add! 'deserialize-representative-scope deserialize-representative-scope)
+(add! 'deserialize-representative-scope-fill! deserialize-representative-scope-fill!)
+(add! 'deserialize-bulk-binding-at deserialize-bulk-binding-at)
+(add! 'deserialize-full-module-binding deserialize-full-module-binding)
+(add! 'deserialize-simple-module-binding deserialize-simple-module-binding)
+(add! 'deserialize-full-local-binding deserialize-full-local-binding)
+(add! 'deserialize-bulk-binding deserialize-bulk-binding)
+(add! 'syntax-module-path-index-shift syntax-module-path-index-shift)
+(add! 'syntax-shift-phase-level syntax-shift-phase-level)
+(add! 'module-use module-use)

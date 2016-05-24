@@ -2,7 +2,9 @@
 (require "phase.rkt"
          "scope.rkt"
          "bulk-binding.rkt"
-         "module-path.rkt")
+         "module-path.rkt"
+         "module-use.rkt"
+         "compilation-unit.rkt")
 
 (provide make-empty-namespace
          namespace?
@@ -35,8 +37,10 @@
          namespace-set-variable!
          namespace-set-transformer!
          namespace-get-variable
-         namespace-get-variable-box
-         namespace-get-transformer)
+         namespace-get-transformer
+         
+         namespace->instance
+         namespace-module-use->instance)
 
 (struct namespace (module-name         ; #f or resolved module name
                    scope               ; scope for top-level bindings
@@ -64,7 +68,7 @@
 ;; Wrapper to make the registry opqaue
 (struct module-registry (declarations))
 
-(struct definitions (variables      ; sym -> val
+(struct definitions (variables      ; compilation unit instance
                      transformers   ; sym -> val
                      [instantiated? #:mutable]))
 
@@ -227,7 +231,7 @@
                                      #:complain-on-failure? [complain-on-failure? #f])
   (or (hash-ref (namespace-module-instances ns) (cons name phase) #f)
       (and complain-on-failure?
-           (error "no module instance found:" name))
+           (error "no module instance found:" name phase))
       (and create?
            (let ([m (namespace->module ns name)])
              (unless m
@@ -253,33 +257,46 @@
 (define (namespace->definitions ns phase-level)
   (define d (hash-ref (namespace-phase-level-to-definitions ns) phase-level #f))
   (or d
-      (let ([d (definitions (make-hasheq) (make-hasheq) #f)])
+      (let ([d (definitions (make-instance) (make-hasheq) #f)])
         (hash-set! (namespace-phase-level-to-definitions ns) phase-level d)
         d)))
 
 (define (namespace-set-variable! ns phase-level name val)
   (define d (namespace->definitions ns phase-level))
-  (define b (or (hash-ref (definitions-variables d) name #f)
-                (let ([b (box #f)])
-                  (hash-set! (definitions-variables d) name b)
-                  b)))
-    (set-box! b val))
+  (set-instance-variable-value! (definitions-variables d) name val))
 
 (define (namespace-set-transformer! ns phase-level name val)
   (define d (namespace->definitions ns phase-level))
   (hash-set! (definitions-transformers d) name val))
 
-(define (namespace-get-variable-box ns phase-level name fail-k)
-  (define d (namespace->definitions ns phase-level))
-  (hash-ref (definitions-variables d) name fail-k))
-  
 (define (namespace-get-variable ns phase-level name fail-k)
-  (define b (namespace-get-variable-box ns phase-level name #f))
-  (cond
-   [b (unbox b)]
-   [(procedure? fail-k) (fail-k)]
-   [else fail-k]))
-
+  (define d (namespace->definitions ns phase-level))
+  (instance-variable-value (definitions-variables d) name fail-k))
+  
 (define (namespace-get-transformer ns phase-level name fail-k)
   (define d (namespace->definitions ns phase-level))
   (hash-ref (definitions-transformers d) name fail-k))
+
+;; ----------------------------------------
+
+(define (namespace->instance ns phase-shift)
+  (definitions-variables (namespace->definitions ns phase-shift)))
+
+
+
+(define (namespace-module-use->instance ns mu 
+                                        #:shift-from [shift-from #f]
+                                        #:shift-to [shift-to #f]
+                                        #:phase-shift phase-shift)
+  (define mod (module-use-module mu))
+  (define m-ns (namespace->module-namespace ns 
+                                            (module-path-index-resolve
+                                             (if shift-from
+                                                 (module-path-index-shift mod shift-from shift-to)
+                                                 mod))
+                                            phase-shift
+                                            #:complain-on-failure? #t))
+  (define d (hash-ref (namespace-phase-level-to-definitions m-ns) (module-use-phase mu) #f))
+  (if d
+      (definitions-variables d)
+      (error "namespace mismatch: phase level not found")))

@@ -9,9 +9,11 @@
 ;; of initial module definitions and parameter values.
 
 (module #%kernel '#%core
-  (#%require '#%pre-kernel)
+  (#%require '#%pre-kernel
+             '#%main)
   (#%provide (all-from '#%core)
-             (all-from '#%pre-kernel))
+             (all-from '#%pre-kernel)
+             (all-from '#%main))
   (#%declare #:cross-phase-persistent))
 
 ;; ------------------------------------------------------

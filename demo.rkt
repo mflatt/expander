@@ -14,10 +14,9 @@
 
 (define (compile+eval-expression e)
   (define exp-e (expand-expression e))
-  (define c
-    (compile exp-e demo-ns))
+  (define c (compile exp-e demo-ns))
   (values exp-e
-          (eval c)))
+          (eval c demo-ns)))
 
 (define (eval-expression e #:check [check-val #f])
   (define-values (c v) (compile+eval-expression e))
@@ -55,6 +54,9 @@
     (error "shouldn't get here")))
 
 ;; ----------------------------------------
+
+(compile+eval-expression
+ '(+ 1 1))
 
 (compile+eval-expression
  '(case-lambda
@@ -702,7 +704,7 @@
                            (println n)
                            (println n)))
 
-"print same number twive, then different number twice"
+"print same number twice, then different number twice"
 (namespace-require ''use-random-n demo-ns)
 
 ;; ----------------------------------------

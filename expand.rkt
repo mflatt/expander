@@ -548,9 +548,10 @@
   (define compiled (compile-top s (make-compile-context
                                    #:namespace ns
                                    #:phase phase
-                                   #:compile-time-for-self compile-time-for-self)))
+                                   #:compile-time-for-self compile-time-for-self)
+                                #:serializable? #f))
   (define vals
-    (call-with-values (lambda () (expand-time-eval compiled))
+    (call-with-values (lambda () (compiled-top-run compiled ns))
       list))
   (unless (= (length vals) (length ids))
     (error "wrong number of results (" (length vals) "vs." (length ids) ")"

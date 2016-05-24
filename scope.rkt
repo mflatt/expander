@@ -482,6 +482,7 @@
 (define (add-bulk-binding! s binding phase)
   (define scopes (syntax-scope-set s phase))
   (define max-sc (find-max-scope scopes))
+  (log-error "add binding ~s of ~s" max-sc scopes)
   (set-scope-bulk-bindings! max-sc
                             (cons (bulk-binding-at scopes binding)
                                   (scope-bulk-bindings max-sc)))

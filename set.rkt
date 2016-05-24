@@ -12,6 +12,7 @@
          set-first
          subset?
          set-subtract
+         set-union
          set->list
          for/set
          in-set)
@@ -46,6 +47,12 @@
 (define (set-subtract s1 s2)
   (for/fold ([s1 s1]) ([k (in-hash-keys s2)])
     (hash-remove s1 k)))
+
+(define (set-union s1 s2)
+  (if ((set-count s1) . < . (set-count s2))
+      (set-union s2 s1)
+      (for/fold ([s1 s1]) ([k (in-hash-keys s2)])
+        (hash-set s1 k #t))))
 
 (define (set->list s)
   (for/list ([k (in-hash-keys s)])

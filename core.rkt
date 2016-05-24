@@ -54,7 +54,7 @@
 (define (declare-core-module! ns)
   (declare-module!
    ns
-   (make-module #:primitive? #t
+   (make-module #:cross-phase-persistent? #t
                 core-mpi
                 #hasheq()
                 (hasheqv 0 (for/hasheq ([sym (in-sequences

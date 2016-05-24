@@ -334,6 +334,15 @@
                              #:ctx ctx 
                              #:phase phase
                              #:s s)
+  (define (make-mb-ctx)
+    (struct-copy expand-context ctx
+                 [context 'module-begin]
+                 [namespace m-ns]
+                 [phase phase]
+                 [only-immediate? #t]
+                 [post-expansion-scope inside-scope]
+                 [all-scopes-stx initial-require-s]
+                 [module-scopes new-module-scopes]))
   (cond
    [(= 1 (length bodys))
     ;; Maybe it's already a `#%module-begin` form, or maybe it
@@ -346,35 +355,32 @@
       ;; A single body form might be a macro that expands to
       ;; the primitive `#%module-begin` form:
       (define partly-expanded-body
-        (expand (car bodys) (struct-copy expand-context ctx
-                                         [context 'module-begin]
-                                         [namespace m-ns]
-                                         [phase phase]
-                                         [only-immediate? #t]
-                                         [post-expansion-scope inside-scope]
-                                         [all-scopes-stx initial-require-s]
-                                         [module-scopes new-module-scopes])))
+        (expand (car bodys) (make-mb-ctx)))
       (cond
        [(eq? '#%module-begin (core-form-sym partly-expanded-body phase))
         ;; Yes, it expanded to `#%module-begin`
         partly-expanded-body]
        [else
         ;; No, it didn't expand to `#%module-begin`
-        (add-module-begin (list partly-expanded-body) s initial-require-s phase)])])]
+        (add-module-begin (list partly-expanded-body) s initial-require-s phase (make-mb-ctx))])])]
    [else
     ;; Multiple body forms definitely need a `#%module-begin` wrapper
-    (add-module-begin bodys s initial-require-s phase)]))
+    (add-module-begin bodys s initial-require-s phase (make-mb-ctx))]))
 
 ;; Add `#%module-begin`, because it's needed
-(define (add-module-begin bodys s initial-require-s phase)
+(define (add-module-begin bodys s initial-require-s phase mb-ctx)
   (define mb-id (datum->syntax initial-require-s '#%module-begin))
   ;; If `mb-id` is not bound, we'd like to give a clear error message
   (unless (resolve mb-id phase)
     (error "no #%module-begin binding in the module's language" s))
-  (rebuild
-   s
-   `(,mb-id ,@bodys)))
-
+  (define mb (rebuild
+              s
+              `(,mb-id ,@bodys)))
+  (define partly-expanded-mb (expand mb mb-ctx))
+  (unless (eq? '#%module-begin (core-form-sym partly-expanded-mb phase))
+    (error "expansion of #%module-begin is not a #%plain-module-begin form" partly-expanded-mb))
+  partly-expanded-mb)
+  
 ;; ----------------------------------------
 
 ;; Make function to adjust syntax that appears in the original module body
@@ -697,17 +703,18 @@
                    self
                    self))
   
-  
   (define root-module-name (resolved-module-path-root-name
                             (module-path-index-resolve self)))
   (parameterize ([current-namespace m-ns]
                  [current-module-declare-name (make-resolved-module-path root-module-name)])
-    (run-time-eval (compile-module tmp-mod
-                                   (make-compile-context #:namespace m-ns
-                                                         #:self enclosing-self
-                                                         #:root-module-name root-module-name)
-                                   #:self self
-                                   #:as-submodule? #t))))
+    (declare-module-from-compilation-directory!
+     (compile-module tmp-mod
+                     (make-compile-context #:namespace m-ns
+                                           #:self enclosing-self
+                                           #:root-module-name root-module-name)
+                     #:self self
+                     #:as-submodule? #t)
+     #:as-submodule? #t)))
 
 ;; ----------------------------------------
 
@@ -822,10 +829,13 @@
        (void)]
       [else
        ;; an expression
-       (expand-time-eval (compile-top body (make-compile-context
-                                            #:namespace m-ns
-                                            #:phase phase
-                                            #:compile-time-for-self self)))])))
+       (compiled-top-run
+        (compile-top body (make-compile-context
+                           #:namespace m-ns
+                           #:phase phase
+                           #:compile-time-for-self self)
+                     #:serializable? #f)
+        m-ns)])))
 
 ;; ----------------------------------------
 
@@ -857,11 +867,13 @@
                             (module-path-index-resolve self)))
   (parameterize ([current-namespace ns]
                  [current-module-declare-name (make-resolved-module-path root-module-name)])
-    (run-time-eval (compile-module submod 
-                                   (make-compile-context #:namespace ns
-                                                         #:self self
-                                                         #:root-module-name root-module-name)
-                                   #:as-submodule? #t)))
+    (declare-module-from-compilation-directory!
+     (compile-module submod 
+                     (make-compile-context #:namespace ns
+                                           #:self self
+                                           #:root-module-name root-module-name)
+                     #:as-submodule? #t)
+     #:as-submodule? #t))
 
   ;; Return the expanded submodule
   submod)

@@ -1,5 +1,6 @@
 #lang racket/base
 (require racket/serialize
+         (only-in "syntax.rkt" syntax?)
          "checked-syntax.rkt"
          (only-in "scope.rkt" add-scope)
          "namespace.rkt"
@@ -11,6 +12,7 @@
          "expand-require.rkt"
          "compile.rkt"
          "module-path.rkt"
+         "compilation-unit.rkt"
          "bulk-binding.rkt")
 
 ;; Register core forms:
@@ -27,9 +29,6 @@
   (define ns (make-empty-namespace))
   (declare-core-module! ns)
   ns)
-
-(compile-install-primitives! (make-empty-core-namespace)
-                             core-module-name)
 
 (define (namespace-require req [ns (current-namespace)])
   (parse-and-perform-requires! #:run? #t
@@ -72,26 +71,42 @@
                               (namespace-require mod-path tmp-ns)
                               (eval sym tmp-ns)]))))
 
-(define (expand s [ns (current-namespace)])
+(define (intro s ns)
+  (if (syntax? s)
+      s
+      (namespace-syntax-introduce (datum->syntax #f s) ns)))
+
+(define (expand given-s [ns (current-namespace)])
+  (define s (intro given-s ns))
   (parameterize ([current-bulk-binding-fallback-registry
                   (namespace-bulk-binding-registry ns)])
     (expand-in-context s (make-expand-context ns))))
 
-(define (compile s [ns (current-namespace)])
-  (compile-top s (make-compile-context #:namespace ns)))
+(define (compile given-s [ns (current-namespace)])
+  (define s (intro given-s ns))
+  (case (core-form-sym s (namespace-phase ns))
+    [(module)
+     (compile-module s (make-compile-context #:namespace ns))]
+    [else
+     (compile-top s (make-compile-context #:namespace ns))]))
 
 (define (eval s [ns (current-namespace)])
   (parameterize ([current-bulk-binding-fallback-registry
                   (namespace-bulk-binding-registry ns)])
-    (if (compiled-expression? s)
-        (run-time-eval s)
-        (run-time-eval (compile-top
-                        (expand-in-context
-                         (namespace-syntax-introduce
-                          (datum->syntax #f s)
-                          ns)
-                         (make-expand-context ns))
-                        (make-compile-context #:namespace ns))))))
+    (define c (if (or (compiled-top? s)
+                      (compilation-directory? s))
+                  s
+                  (compile (expand s ns) ns)))
+    (cond
+     [(compiled-top? c)
+      (compiled-top-run c ns)]
+     [else
+      (define h (compilation-directory->hash c))
+      (cond
+       [(hash-ref h #"" #f)
+        (declare-module-from-compilation-directory! c #:namespace ns)]
+       [else
+        (run-top-level-from-compilation-directory c ns)])])))
 
 (define (namespace-module-identifier [where (current-namespace)])
   (unless (or (namespace? where)
