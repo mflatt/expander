@@ -8,18 +8,19 @@
 (namespace-require ''#%kernel demo-ns)
 (namespace-require '(for-syntax '#%kernel) demo-ns)
 
-(define (expand-expression e)
-  (expand (namespace-syntax-introduce (datum->syntax #f e) demo-ns)
-          demo-ns))
+(define (expand-expression e #:namespace [ns demo-ns])
+  (expand (namespace-syntax-introduce (datum->syntax #f e) ns)
+          ns))
 
-(define (compile+eval-expression e)
-  (define exp-e (expand-expression e))
-  (define c (compile exp-e demo-ns))
+(define (compile+eval-expression e #:namespace [ns demo-ns])
+  (define exp-e (expand-expression e #:namespace ns))
+  (define c (compile exp-e ns))
   (values exp-e
-          (eval c demo-ns)))
+          (eval c ns)))
 
-(define (eval-expression e #:check [check-val #f])
-  (define-values (c v) (compile+eval-expression e))
+(define (eval-expression e #:check [check-val #f]
+                         #:namespace [ns demo-ns])
+  (define-values (c v) (compile+eval-expression e #:namespace ns))
   (when check-val
     (unless (equal? v check-val)
       (error "check failed:" v "vs." check-val)))
@@ -556,9 +557,9 @@
 
 ;; ----------------------------------------
 
-(define (eval-module-declaration mod)
-  (parameterize ([current-namespace demo-ns])
-    (eval-expression mod)))
+(define (eval-module-declaration mod #:namespace [ns demo-ns])
+  (parameterize ([current-namespace ns])
+    (eval-expression mod #:namespace ns)))
 
 (eval-module-declaration '(module m1 '#%kernel
                            (#%require (for-syntax '#%kernel))
@@ -1134,3 +1135,53 @@
 (check-print
  (namespace-require ''use-cross-phase-persistent demo-ns)
  #t)
+
+;; ----------------------------------------
+;; namespace-attach
+
+(eval-module-declaration '(module provides-random-r '#%kernel
+                           (define-values (r) (random))
+                           (#%provide r)))
+
+
+(define random-r (parameterize ([current-namespace demo-ns])
+                   (dynamic-require ''provides-random-r 'r)))
+(unless (equal? random-r (parameterize ([current-namespace demo-ns])
+                           (dynamic-require ''provides-random-r 'r)))
+  (error "not the same random number"))
+'ok-dynamic
+
+(define other-ns (make-empty-namespace))
+(namespace-attach-module demo-ns ''provides-random-r other-ns)
+
+(unless (equal? random-r (parameterize ([current-namespace other-ns])
+                           (dynamic-require ''provides-random-r 'r)))
+  (error "not the same random number after attach"))
+'ok-instance
+
+(namespace-attach-module demo-ns ''provides-random-r other-ns) ; re-attach ok
+
+(define third-ns (make-empty-namespace))
+(namespace-attach-module-declaration demo-ns ''provides-random-r third-ns)
+
+(when (equal? random-r (parameterize ([current-namespace third-ns])
+                         (dynamic-require ''provides-random-r 'r)))
+  (error "the same random number after declaration attach"))
+'ok-declaration
+
+(namespace-attach-module-declaration demo-ns ''provides-random-r third-ns) ; re-attach ok
+(check-error
+ (namespace-attach-module demo-ns ''provides-random-r third-ns)
+ #rx"different instance")
+
+(define has-already-ns (make-empty-kernel-namespace))
+(namespace-require ''#%kernel has-already-ns)
+(eval-module-declaration '(module provides-random-r '#%kernel
+                           (define-values (r) 5)
+                           (#%provide r))
+                         #:namespace has-already-ns)
+(parameterize ([current-namespace has-already-ns])
+  (dynamic-require ''provides-random-r 'r))
+(check-error
+ (namespace-attach-module-declaration demo-ns ''provides-random-r has-already-ns)
+ #rx"different declaration")

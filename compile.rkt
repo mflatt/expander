@@ -418,15 +418,17 @@
         [(define-syntaxes)
          (define m (match-syntax body '(define-syntaxes (id ...) rhs)))
          (define syms (def-ids-to-syms (m 'id) phase self))
+         (define gen-syms (map gensym syms))
          (add-body!
           (add1 phase)
-          `(let-values ([,syms ,(compile (m 'rhs)
-                                         (struct-copy compile-context body-cctx
-                                                      [phase (add1 phase)]
-                                                      [def-syms (find-or-create-def-syms! (add1 phase))]
-                                                      [top-init (find-or-create-top-init! (add1 phase))]))])
-            ,@(for/list ([sym (in-list syms)])
-                `(,set-transformer!-id ',sym ,sym))
+          `(let-values ([,gen-syms ,(compile (m 'rhs)
+                                             (struct-copy compile-context body-cctx
+                                                          [phase (add1 phase)]
+                                                          [def-syms (find-or-create-def-syms! (add1 phase))]
+                                                          [top-init (find-or-create-top-init! (add1 phase))]))])
+            ,@(for/list ([sym (in-list syms)]
+                         [gen-sym (in-list gen-syms)])
+                `(,set-transformer!-id ',sym ,gen-sym))
             (void)))]
         [(begin-for-syntax)
          (define m (match-syntax body `(begin-for-syntax e ...)))

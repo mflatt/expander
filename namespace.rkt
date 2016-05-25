@@ -33,6 +33,7 @@
          namespace-module-instantiate!
          namespace-module-visit!
          namespace->module-namespace
+         namespace-same-instance?
          
          namespace-set-variable!
          namespace-set-transformer!
@@ -227,11 +228,20 @@
   (namespace-module-instantiate! ns name phase 1))
 
 (define (namespace->module-namespace ns name phase
+                                     #:install!-namespace [install!-ns #f]
                                      #:create? [create? #f]
                                      #:complain-on-failure? [complain-on-failure? #f])
   (or (hash-ref (namespace-module-instances ns) (cons name phase) #f)
       (and complain-on-failure?
            (error "no module instance found:" name phase))
+      (and install!-ns
+           (let ([m-ns (struct-copy namespace install!-ns
+                                    [scope (new-multi-scope)]
+                                    [phase-to-namespace (make-hasheqv)]
+                                    [done-phases (make-hasheqv)])])
+             (hash-set! (namespace-phase-to-namespace m-ns) phase m-ns)
+             (hash-set! (namespace-module-instances ns) (cons name phase) m-ns)
+             m-ns))
       (and create?
            (let ([m (namespace->module ns name)])
              (unless m
@@ -246,6 +256,10 @@
              (hash-set! (namespace-phase-to-namespace m-ns) phase m-ns)
              (hash-set! (namespace-module-instances ns) (cons name phase) m-ns)
              m-ns))))
+
+(define (namespace-same-instance? a-ns b-ns)
+  (eq? (namespace-phase-level-to-definitions a-ns)
+       (namespace-phase-level-to-definitions b-ns)))
 
 (define (namespace->namespace-at-phase ns phase)
   (or (hash-ref (namespace-phase-to-namespace ns) phase #f)

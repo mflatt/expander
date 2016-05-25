@@ -14,7 +14,8 @@
          "module-path.rkt"
          "compilation-unit.rkt"
          "bulk-binding.rkt"
-         "kernel.rkt")
+         "kernel.rkt"
+         "namespace-attach.rkt")
 
 ;; Register core forms:
 (require "expand-expr.rkt"
@@ -135,7 +136,9 @@
           'make-empty-namespace make-empty-namespace
           'namespace-syntax-introduce namespace-syntax-introduce
           'namespace-require namespace-require
-          'namespace-module-identifier namespace-module-identifier))
+          'namespace-module-identifier namespace-module-identifier
+          'namespace-attach-module namespace-attach-module
+          'namespace-attach-module-declaration namespace-attach-module-declaration))
 
 (define (make-empty-kernel-namespace)
   (define ns (make-empty-namespace))
@@ -166,6 +169,8 @@
          dynamic-require
          namespace-module-identifier
          check-module-form
+         namespace-attach-module
+         namespace-attach-module-declaration
          
          expand
          compile
