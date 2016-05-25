@@ -67,7 +67,6 @@
           (unless (set-member? (serialize-state-reachable-scopes state) s)
             (error "internal error: found supposedly unreachable scope"))
           `(deserialize-scope
-            ,(ser (scope-id s))
             ,(ser (scope-kind s))))
         #:property prop:serialize-fill!
         (lambda (id s ser state)
@@ -92,8 +91,8 @@
                                          reach
                                          register-trigger))))
 
-(define (deserialize-scope id kind)
-  (scope id kind (make-bindings) (make-bulk-bindings)))
+(define (deserialize-scope kind)
+  (scope (new-deserialize-scope-id!) kind (make-bindings) (make-bulk-bindings)))
 
 (define (deserialize-scope-fill! s bindings bulk-bindings)
   (set-scope-bindings! s bindings)
@@ -116,14 +115,13 @@
         #:property prop:serialize
         (lambda (ms ser state)
           `(deserialize-multi-scope
-            ,(ser (multi-scope-id ms))
             ,(ser (multi-scope-scopes ms))))
         #:property prop:reach-scopes
         (lambda (ms reach)
           (reach (multi-scope-scopes ms))))
 
-(define (deserialize-multi-scope id scopes)
-  (multi-scope id scopes))
+(define (deserialize-multi-scope scopes)
+  (multi-scope (new-deserialize-scope-id!) scopes))
 
 (struct representative-scope scope (owner   ; a multi-scope for which this one is a phase-specific identity
                                     phase)  ; phase of this scope
@@ -141,7 +139,6 @@
         #:property prop:serialize
         (lambda (s ser state)
           `(deserialize-representative-scope
-            ,(ser (scope-id s))
             ,(ser (scope-kind s))
             ,(ser (representative-scope-phase s))))
         #:property prop:serialize-fill!
@@ -158,8 +155,8 @@
           ;; the inherited `bindings` field is handled via `prop:scope-with-bindings`
           (reach (representative-scope-owner s))))
 
-(define (deserialize-representative-scope id kind phase)
-  (representative-scope id kind #f #f #f phase))
+(define (deserialize-representative-scope kind phase)
+  (representative-scope (new-deserialize-scope-id!) kind #f #f #f phase))
 
 (define (deserialize-representative-scope-fill! s bindings bulk-bindings owner)
   (deserialize-scope-fill! s bindings bulk-bindings)
@@ -229,7 +226,12 @@
 (define (new-scope-id!)
   (set! id-counter (add1 id-counter))
   id-counter)
-  
+
+(define (new-deserialize-scope-id!)
+  ;; negative scope ensures that new scopes are recognized as such by
+  ;; having a larger id
+  (- (new-scope-id!)))
+
 (define (make-bindings)
   #hasheq())
 

@@ -10,7 +10,6 @@ TODO:
  taints
  expander observer
  expand local references to binding
- ensure unmarshaled scopes are older than new scopes
 
 ----------------------------------------
 
