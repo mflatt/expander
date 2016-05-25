@@ -8,14 +8,6 @@
 ;; times. So, replace the content of this file to get a different set
 ;; of initial module definitions and parameter values.
 
-(module #%kernel '#%core
-  (#%require '#%pre-kernel
-             '#%main)
-  (#%provide (all-from '#%core)
-             (all-from '#%pre-kernel)
-             (all-from '#%main))
-  (#%declare #:cross-phase-persistent))
-
 ;; ------------------------------------------------------
 ;; Minimal syntax (no error checks!) needed for the rest
 

@@ -11,6 +11,7 @@
          "dup-check.rkt"
          "compile.rkt"
          "core.rkt"
+         "runtime-primitives.rkt"
          "expand-context.rkt"
          "lift-context.rkt"
          "already-expanded.rkt"
@@ -440,11 +441,12 @@
 ;; bindings
 (define (no-binds expr s phase)
   (define s-core-stx (syntax-shift-phase-level core-stx phase))
+  (define s-runtime-stx (syntax-shift-phase-level runtime-stx phase))
   (datum->syntax #f
                  `(,(datum->syntax s-core-stx 'begin)
                    ,expr
                    (,(datum->syntax s-core-stx '#%app)
-                    ,(datum->syntax s-core-stx 'values)))
+                    ,(datum->syntax s-runtime-stx 'values)))
                  s))
 
 ;; Helper to remove any created use-site scopes from the left-hand

@@ -154,20 +154,4 @@
                       variable-reference->module-source
                       variable-reference->phase
                       variable-reference->module-base-phase
-                      variable-reference->module-declaration-inspector
-                      
-                      ;; Needed to recognize cross-phase persistence
-                      cons list make-struct-type make-struct-type-property gensym string->uninterned-symbol
-
-                      ;; Things that we don't have to replace, but
-                      ;; used in "demo.rkt":
-                      car cdr pair? null? map filter append
-                      equal? values void
-                      symbol->string
-                      regexp-match?
-                      hash-ref
-                      assv
-                      error
-                      println
-                      random
-                      +)
+                      variable-reference->module-declaration-inspector)

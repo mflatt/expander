@@ -1,5 +1,5 @@
 #lang racket/base
-(require racket/serialize
+(require "set.rkt"
          (only-in "syntax.rkt" syntax?)
          "checked-syntax.rkt"
          (only-in "scope.rkt" add-scope)
@@ -13,7 +13,8 @@
          "compile.rkt"
          "module-path.rkt"
          "compilation-unit.rkt"
-         "bulk-binding.rkt")
+         "bulk-binding.rkt"
+         "kernel.rkt")
 
 ;; Register core forms:
 (require "expand-expr.rkt"
@@ -21,14 +22,9 @@
          "expand-top-level.rkt")
 
 ;; Register core primitives:
-(require "primitives.rkt")
+(require "core-primitives.rkt")
 
 ;; ----------------------------------------
-
-(define (make-empty-core-namespace)
-  (define ns (make-empty-namespace))
-  (declare-core-module! ns)
-  ns)
 
 (define (namespace-require req [ns (current-namespace)])
   (parse-and-perform-requires! #:run? #t
@@ -131,6 +127,27 @@
          
 ;; ----------------------------------------
 
+(define main-primitives
+  (hasheq 'eval eval
+          'compile compile
+          'expand expand
+          'dynamic-require dynamic-require
+          'make-empty-namespace make-empty-namespace
+          'namespace-syntax-introduce namespace-syntax-introduce
+          'namespace-require namespace-require
+          'namespace-module-identifier namespace-module-identifier))
+
+(define (make-empty-kernel-namespace)
+  (define ns (make-empty-namespace))
+  (declare-core-module! ns)
+  (declare-hash-based-module! '#%main main-primitives #:namespace ns)
+  (declare-kernel-module! ns
+                          #:eval eval
+                          #:main-ids (for/set ([name (in-hash-keys main-primitives)])
+                                       name))
+  ns)
+;; ----------------------------------------
+
 ;; Externally visible functions:
 (provide syntax? syntax-e
          identifier?
@@ -141,7 +158,7 @@
          bound-identifier=?
          
          make-empty-namespace
-         make-empty-core-namespace
+         make-empty-kernel-namespace
          current-namespace
          
          namespace-syntax-introduce

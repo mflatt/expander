@@ -4,12 +4,10 @@
          "match.rkt"
          "binding.rkt"
          "core.rkt"
-         "module-path.rkt")
+         "module-path.rkt"
+         "runtime-primitives.rkt")
 
 (provide check-cross-phase-persistent-form)
-
-(define (disallow body)
-  (error "not allowed in a cross-phase persistent module:" body))
 
 (define (check-cross-phase-persistent-form bodys)
   (check-body bodys))
@@ -41,7 +39,7 @@
      (define rands (m 'rand))
      (for ([rand (in-list rands)])
        (check-expr rand 1 e))
-     (case (core-primitive-name (m 'rator))
+     (case (cross-phase-primitive-name (m 'rator))
        [(cons list)
         (check-count 1 num-results enclosing)]
        [(make-struct-type)
@@ -74,8 +72,11 @@
   (and (eq? 'quote (core-form-sym e 0))
        (string? (syntax-e ((match-syntax e '(quote datum)) 'datum)))))
 
-(define (core-primitive-name id)
+(define (cross-phase-primitive-name id)
   (define b (resolve+shift id 0))
   (and (module-binding? b)
-       (eq? core-module-name (module-path-index-resolve (module-binding-module b)))
+       (eq? runtime-module-name (module-path-index-resolve (module-binding-module b)))
        (module-binding-sym b)))
+
+(define (disallow body)
+  (error "not allowed in a cross-phase persistent module:" body))

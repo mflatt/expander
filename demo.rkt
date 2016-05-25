@@ -3,10 +3,10 @@
 
 ;; ----------------------------------------
 
-(define demo-ns (make-empty-core-namespace))
+(define demo-ns (make-empty-kernel-namespace))
 
-(namespace-require ''#%core demo-ns)
-(namespace-require '(for-syntax '#%core) demo-ns)
+(namespace-require ''#%kernel demo-ns)
+(namespace-require '(for-syntax '#%kernel) demo-ns)
 
 (define (expand-expression e)
   (expand (namespace-syntax-introduce (datum->syntax #f e) demo-ns)
@@ -192,7 +192,7 @@
    (f 'still-ok)))
 
 "compile-time scopes pruned by `quote-syntax`"
-(namespace-require '(for-meta 2 '#%core) demo-ns)
+(namespace-require '(for-meta 2 '#%kernel) demo-ns)
 (eval-expression
  #:check 'bound
  '(letrec-syntaxes+values
@@ -501,9 +501,12 @@
                             ([(m) (lambda (stx)
                                     (datum->syntax
                                      (quote-syntax here)
-                                     (list (quote-syntax println)
-                                           (syntax-local-lift-expression
-                                            (quote-syntax (random))))))])
+                                     (list
+                                      (quote-syntax begin)
+                                      (list (quote-syntax print)
+                                            (syntax-local-lift-expression
+                                             (quote-syntax (random))))
+                                      (list (quote-syntax newline)))))])
                             ()
                             (datum->syntax (quote-syntax here)
                                            (m))))])
@@ -557,25 +560,25 @@
   (parameterize ([current-namespace demo-ns])
     (eval-expression mod)))
 
-(eval-module-declaration '(module m1 '#%core
-                           (#%require (for-syntax '#%core))
+(eval-module-declaration '(module m1 '#%kernel
+                           (#%require (for-syntax '#%kernel))
                            (begin-for-syntax
                              (define-values (ten) (quote-syntax 10)))
                            (define-syntaxes (m) (lambda (stx) ten))
                            (define-values (x) 1)
-                           (println x)
+                           (print x) (newline)
                            (define-values (posn make-posn struct:posn posn? 
                                                 posn-x posn-y
                                                 set-posn-x! set-posn-y!)
                              (values 1 2 3 4 5 6 7 8))
                            (#%provide (prefix-all-defined def:)
                                       (struct posn (x y))) 
-                           (println (m))
+                           (print (m)) (newline)
                            (m)))
 
-(eval-module-declaration '(module m2 '#%core
+(eval-module-declaration '(module m2 '#%kernel
                            (#%require 'm1)
-                           (println def:x)))
+                           (print def:x) (newline)))
 
 (check-print
  (namespace-require ''m2 demo-ns)
@@ -583,8 +586,8 @@
  10
  1)
 
-(eval-module-declaration '(module with-use-site-scope '#%core
-                           (#%require (for-syntax '#%core))
+(eval-module-declaration '(module with-use-site-scope '#%kernel
+                           (#%require (for-syntax '#%kernel))
 
                            (define-syntaxes (identity)
                              (lambda (stx)
@@ -605,7 +608,7 @@
                                       (list (car (cdr (syntax-e stx))))
                                       (quote-syntax  (lambda (x) x))))))
                            (define-identity f)
-                           (println (f 5))
+                           (print (f 5)) (newline)
                            
                            (define-syntaxes (define-x)
                              (lambda (stx)
@@ -621,23 +624,23 @@
                                (datum->syntax (quote-syntax here)
                                               (list (quote-syntax quote)
                                                     ct-5))))
-                           (println (ct-five))))
+                           (print (ct-five)) (newline)))
 
 (check-print
  (namespace-require ''with-use-site-scope demo-ns)
  5
  'ct-5)
 
-(eval-module-declaration '(module definition-shadows-initial-require '#%core
-                           (#%require (rename '#%core orig:list list))
+(eval-module-declaration '(module definition-shadows-initial-require '#%kernel
+                           (#%require (rename '#%kernel orig:list list))
                            (#%provide list)
                            (define-values (list)
                              (lambda (a b)
-                               (println a)
+                               (print a) (newline)
                                (orig:list a b)))))
 
-(eval-module-declaration '(module definition-shadows-plain-require '#%core
-                           (#%require '#%core)
+(eval-module-declaration '(module definition-shadows-plain-require '#%kernel
+                           (#%require '#%kernel)
                            (#%provide map)
                            (define-values (map)
                              (lambda (f l)
@@ -646,10 +649,10 @@
                                    (cons (car l) ; don't use `f`
                                          (map f (cdr l))))))))
 
-(eval-module-declaration '(module require-shadows-initial-require '#%core
+(eval-module-declaration '(module require-shadows-initial-require '#%kernel
                            (#%require 'definition-shadows-initial-require
                                       'definition-shadows-plain-require)
-                           (println (map pair? (list 'a 'b)))))
+                           (print (map pair? (list 'a 'b))) (newline)))
 
 (check-print
  (namespace-require ''require-shadows-initial-require demo-ns)
@@ -657,22 +660,22 @@
  '(a b))
 
 (check-error
- (eval-module-declaration '(module m '#%core
-                            (#%require '#%core 
+ (eval-module-declaration '(module m '#%kernel
+                            (#%require '#%kernel 
                                        'definition-shadows-initial-require)))
  #rx"already required")
 
 (check-error
- (eval-module-declaration '(module m '#%core
+ (eval-module-declaration '(module m '#%kernel
                             (define-values (list) 5)
-                            (#%require '#%core)))
+                            (#%require '#%kernel)))
  #rx"already defined")
 
 ;; ----------------------------------------
 
 (check-print
- (eval-module-declaration '(module forward-reference-in-begin-for-syntax '#%core
-                            (#%require (for-syntax '#%core))
+ (eval-module-declaration '(module forward-reference-in-begin-for-syntax '#%kernel
+                            (#%require (for-syntax '#%kernel))
                             (begin-for-syntax
                               (define-values (even) (lambda () odd)))
                             (begin-for-syntax
@@ -683,26 +686,26 @@
                              (define-values (later) 5)
                              (define-values (also-later) 6)
                              (assign-later!)
-                             (println later))))
+                             (print later) (newline))))
  6)
 
 ;; ----------------------------------------
 
-(eval-module-declaration '(module random-n '#%core
+(eval-module-declaration '(module random-n '#%kernel
                            (define-values (n) (random))
                            (#%provide n)))
 
-(eval-module-declaration '(module use-random-n '#%core
+(eval-module-declaration '(module use-random-n '#%kernel
                            (#%require 'random-n
-                                      (for-syntax '#%core
+                                      (for-syntax '#%kernel
                                                   'random-n))
                            (define-syntaxes (m)
                              (lambda (stx) (datum->syntax (quote-syntax here)
                                                      n)))
-                           (println (m))
-                           (println (m))
-                           (println n)
-                           (println n)))
+                           (print (m)) (newline)
+                           (print (m)) (newline)
+                           (print n) (newline)
+                           (print n) (newline)))
 
 "print same number twice, then different number twice"
 (namespace-require ''use-random-n demo-ns)
@@ -710,15 +713,15 @@
 ;; ----------------------------------------
 
 ;; Fresh compile-time, same run-time:
-(eval-module-declaration '(module use-random-n-again '#%core
+(eval-module-declaration '(module use-random-n-again '#%kernel
                            (#%require 'random-n
-                                      (for-syntax '#%core
+                                      (for-syntax '#%kernel
                                                   'random-n))
                            (define-syntaxes (m)
                              (lambda (stx) (datum->syntax (quote-syntax here)
                                                      n)))
-                           (println (m))
-                           (println n)))
+                           (print (m)) (newline)
+                           (print n) (newline)))
 
 "first number is fresh, second number is same"
 (namespace-require ''use-random-n-again demo-ns)
@@ -726,31 +729,31 @@
 ;; ----------------------------------------
 
 ;; Check phase shifting of syntax objects:
-(eval-module-declaration '(module two-xes '#%core
-                           (#%require (for-syntax '#%core))
+(eval-module-declaration '(module two-xes '#%kernel
+                           (#%require (for-syntax '#%kernel))
                            (define-values (x) 0)
                            (begin-for-syntax
                             (define-values (x) 1))
                            (#%provide x
                                       (for-syntax x))))
 
-(eval-module-declaration '(module use-two-xes '#%core
+(eval-module-declaration '(module use-two-xes '#%kernel
                            (#%require (for-template 'two-xes)
-                                      (for-syntax '#%core))
+                                      (for-syntax '#%kernel))
                            (define-values (rt-x-ref) (quote-syntax x))
                            (begin-for-syntax
                              (define-values (ct-x-ref) (quote-syntax x)))
                            (#%provide rt-x-ref
                                       (for-syntax ct-x-ref))))
 
-(eval-module-declaration '(module use-x-ref '#%core
+(eval-module-declaration '(module use-x-ref '#%kernel
                            (#%require 'use-two-xes
-                                      (for-syntax '#%core
+                                      (for-syntax '#%kernel
                                                   'use-two-xes))
                            (define-syntaxes (ct-m) (lambda (stx) ct-x-ref))
                            (define-syntaxes (rt-m) (lambda (stx) rt-x-ref))
-                           (println (ct-m))
-                           (println (rt-m))))
+                           (print (ct-m)) (newline)
+                           (print (rt-m)) (newline)))
 
 (check-print
  (namespace-require ''use-x-ref demo-ns)
@@ -760,9 +763,9 @@
 ;; ----------------------------------------
 
 ;; Custom `#%module-begin'
-(eval-module-declaration '(module printing-mb '#%core
-                           (#%require (for-syntax '#%core))
-                           (#%provide (all-from-except '#%core #%module-begin)
+(eval-module-declaration '(module printing-mb '#%kernel
+                           (#%require (for-syntax '#%kernel))
+                           (#%provide (all-from-except '#%kernel #%module-begin)
                                       (rename module-begin #%module-begin))
                            (define-syntaxes (module-begin)
                              (lambda (stx)
@@ -773,7 +776,9 @@
                                  (map (lambda (b)
                                         (datum->syntax
                                          (quote-syntax here)
-                                         (list (quote-syntax println) b)))
+                                         (list (quote-syntax begin)
+                                               (list (quote-syntax print) b)
+                                               (list (quote-syntax newline)))))
                                       (cdr (syntax-e stx)))))))))
 
 (eval-module-declaration '(module printed 'printing-mb
@@ -785,8 +790,8 @@
  3
  7)
 
-(eval-module-declaration '(module intro-printed-submodule '#%core
-                           (#%require (for-syntax '#%core))
+(eval-module-declaration '(module intro-printed-submodule '#%kernel
+                           (#%require (for-syntax '#%kernel))
                            (#%provide m)
                            (define-syntaxes (m)
                              (lambda (stx)
@@ -795,7 +800,7 @@
                                   (+ 5 6)
                                   (+ 7 8)))))))
 
-(eval-module-declaration '(module printed-submodule '#%core
+(eval-module-declaration '(module printed-submodule '#%kernel
                            (#%require 'intro-printed-submodule)
                            (m)))
 
@@ -808,57 +813,57 @@
 
 ;; Submodule
 
-(eval-module-declaration '(module with-pre-submodule '#%core
-                           (module a '#%core
+(eval-module-declaration '(module with-pre-submodule '#%kernel
+                           (module a '#%kernel
                              (#%provide a)
                              (define-values (a) 'a))
                            (#%require (submod "." a))
-                           (println a)))
+                           (print a) (newline)))
 
 (check-print
  (namespace-require ''with-pre-submodule demo-ns)
  'a)
 
-(eval-module-declaration '(module with-post-submodule '#%core
+(eval-module-declaration '(module with-post-submodule '#%kernel
                            (#%provide b)
                            (define-values (b) 'b)
-                           (module* b '#%core
+                           (module* b '#%kernel
                              (#%require (submod ".."))
-                             (println b))))
+                             (print b) (newline))))
 
 (check-print
  (namespace-require '(submod 'with-post-submodule b) demo-ns)
  'b)
 
-(eval-module-declaration '(module with-#f-submodule '#%core
+(eval-module-declaration '(module with-#f-submodule '#%kernel
                            (define-values (c) 'c)
                            (module* c #f
-                             (println c))))
+                             (print c) (newline))))
 
 (check-print
  (namespace-require '(submod 'with-#f-submodule c) demo-ns)
  'c)
 
-(eval-module-declaration '(module used-by-shifted-submodule '#%core
+(eval-module-declaration '(module used-by-shifted-submodule '#%kernel
                            (define-values (x) 'x)
                            (#%provide x)))
 
-(eval-module-declaration '(module with-shifted-pre-submodule '#%core
-                           (#%require (for-syntax '#%core))
+(eval-module-declaration '(module with-shifted-pre-submodule '#%kernel
+                           (#%require (for-syntax '#%kernel))
                            (begin-for-syntax
-                             (module xa '#%core
+                             (module xa '#%kernel
                                (#%require 'used-by-shifted-submodule)
                                (#%provide xa)
                                (define-values (xa) x)))
                            (#%require (submod "." xa))
-                           (println xa)))
+                           (print xa) (newline)))
 
 (check-print
  (namespace-require ''with-shifted-pre-submodule demo-ns)
  'x)
 
-(eval-module-declaration '(module with-shifted-#f-submodule '#%core
-                           (#%require (for-syntax '#%core
+(eval-module-declaration '(module with-shifted-#f-submodule '#%kernel
+                           (#%require (for-syntax '#%kernel
                                                   'used-by-shifted-submodule))
                            (define-values (d) 'd)
                            (begin-for-syntax
@@ -868,24 +873,24 @@
                                x
                                (define-values (get-d-stx) (lambda () d-stx))))))
 
-(eval-module-declaration '(module use-shifted-#f-submodule '#%core
-                           (#%require (for-syntax '#%core
+(eval-module-declaration '(module use-shifted-#f-submodule '#%kernel
+                           (#%require (for-syntax '#%kernel
                                                   (submod 'with-shifted-#f-submodule d)))
                            (define-syntaxes (m) (lambda (stx) (get-d-stx)))
-                           (println (m))))
+                           (print (m)) (newline)))
 
 (check-print
  (namespace-require ''use-shifted-#f-submodule demo-ns)
  'd)
 
-(eval-module-declaration '(module with-#f-submodule-provide '#%core
+(eval-module-declaration '(module with-#f-submodule-provide '#%kernel
                            (define-values (e) 'e)
                            (module* e #f
                              (#%provide e))))
 
-(eval-module-declaration '(module use-submodule-provide '#%core
+(eval-module-declaration '(module use-submodule-provide '#%kernel
                            (#%require (submod 'with-#f-submodule-provide e))
-                           (println e)))
+                           (print e) (newline)))
 
 (check-print
  (namespace-require ''use-submodule-provide demo-ns)
@@ -894,25 +899,26 @@
 ;; ----------------------------------------
 ;; rename-transformer provide redirection
 
-(eval-module-declaration '(module provides-original-binding '#%core
+(eval-module-declaration '(module provides-original-binding '#%kernel
                            (#%provide x)
                            (define-values (x) 'x)))
 
-(eval-module-declaration '(module provides-rename-transformer '#%core
-                           (#%require (for-syntax '#%core)
+(eval-module-declaration '(module provides-rename-transformer '#%kernel
+                           (#%require (for-syntax '#%kernel)
                                       'provides-original-binding)
                            (#%provide y)
                            (define-syntaxes (y) (make-rename-transformer
                                                  (quote-syntax x)))))
 
-(eval-module-declaration '(module checks-free=id '#%core
-                           (#%require (for-syntax '#%core)
+(eval-module-declaration '(module checks-free=id '#%kernel
+                           (#%require (for-syntax '#%kernel)
                                       'provides-original-binding
                                       'provides-rename-transformer)
-                           (println (if (free-identifier=? (quote-syntax x)
-                                                           (quote-syntax y))
-                                        'free=id
-                                        'not-free=id))))
+                           (print (if (free-identifier=? (quote-syntax x)
+                                                         (quote-syntax y))
+                                      'free=id
+                                      'not-free=id))
+                           (newline)))
 
 (check-print
  (namespace-require ''checks-free=id demo-ns)
@@ -921,17 +927,18 @@
 ;; ----------------------------------------
 ;; syntax-local-value of module binding
 
-(eval-module-declaration '(module define-non-transformer '#%core
-                           (#%require (for-syntax '#%core))
+(eval-module-declaration '(module define-non-transformer '#%kernel
+                           (#%require (for-syntax '#%kernel))
                            (#%provide car-id)
                            (define-syntaxes (car-id) (quote-syntax car))))
 
-(eval-module-declaration '(module use-non-transformer '#%core
-                           (#%require (for-syntax '#%core)
+(eval-module-declaration '(module use-non-transformer '#%kernel
+                           (#%require (for-syntax '#%kernel)
                                       'define-non-transformer)
                            (define-syntaxes (m)
                              (lambda (stx) (syntax-local-value (quote-syntax car-id))))
-                           (println ((m) '(1 2)))))
+                           (print ((m) '(1 2)))
+                           (newline)))
 
 (check-print
  (namespace-require ''use-non-transformer demo-ns)
@@ -940,30 +947,33 @@
 ;; ----------------------------------------
 ;; syntax-local-lift-{expression,module}, etc.
 
-(eval-module-declaration '(module lifts '#%core
-                           (#%require (for-syntax '#%core))
-                           (module pre '#%core
+(eval-module-declaration '(module lifts '#%kernel
+                           (#%require (for-syntax '#%kernel))
+                           (module pre '#%kernel
                              (#%provide pre)
                              (define-values (pre) 'pre))
                            (define-syntaxes (m)
                              (lambda (stx)
                                (datum->syntax
                                 (quote-syntax here)
-                                (list (quote-syntax println)
-                                      (syntax-local-lift-expression
-                                       (quote-syntax (+ 1 2)))))))
+                                (list
+                                 (quote-syntax begin)
+                                 (list (quote-syntax print)
+                                       (syntax-local-lift-expression
+                                        (quote-syntax (+ 1 2))))
+                                 (list (quote-syntax newline))))))
                            (m)
                            (list (m))
                            (define-values (dummy) (m))
                            (define-syntaxes (n)
                              (lambda (stx)
                                (syntax-local-lift-module
-                                (quote-syntax (module sub '#%core
+                                (quote-syntax (module sub '#%kernel
                                                 (#%provide sub)
                                                 (define-values (sub) 'sub))))
                                (syntax-local-lift-module
                                 (quote-syntax (module* main #f
-                                                (println x))))
+                                                (print x) (newline))))
                                (syntax-local-lift-module-end-declaration
                                 (quote-syntax (define-values (done) 'done)))
                                (syntax-local-lift-provide
@@ -975,9 +985,11 @@
                                   (quote-syntax here)
                                   (list
                                    (quote-syntax begin)
-                                   (list (quote-syntax println) pre-id)
+                                   (list (quote-syntax print) pre-id)
+                                   (quote-syntax (newline))
                                    (quote-syntax (#%require (submod "." sub)))
-                                   (quote-syntax (println sub)))))))
+                                   (quote-syntax (print sub))
+                                   (quote-syntax (newline)))))))
                            (n)
                            (define-values (x) '*)
                            (define-syntaxes (as-expr)
@@ -985,7 +997,7 @@
                                ;; (syntax-local-lift-module-end-declaration
                                ;;  (quote-syntax (define-values (fail) 'this-wont-work)))
                                (syntax-local-lift-module-end-declaration
-                                (quote-syntax (println 'end)))
+                                (quote-syntax (begin (print 'end) (newline))))
                                (quote-syntax (void))))
                            (list (as-expr))))
 
@@ -999,9 +1011,9 @@
  'end
  '*)
 
-(eval-module-declaration '(module use-lifted-provide '#%core
+(eval-module-declaration '(module use-lifted-provide '#%kernel
                            (#%require 'lifts)
-                           (println done)))
+                           (print done) (newline)))
 
 (check-print
  (namespace-require ''use-lifted-provide demo-ns)
@@ -1010,8 +1022,8 @@
 ;; ----------------------------------------
 ;; `local-transformer-expand`
 
-(eval-module-declaration '(module local-transformer-expand '#%core
-                           (#%require (for-syntax '#%core))
+(eval-module-declaration '(module local-transformer-expand '#%kernel
+                           (#%require (for-syntax '#%kernel))
                            (define-syntaxes (m)
                              (lambda (stx)
                                (datum->syntax
@@ -1027,11 +1039,11 @@
                                  (list)
                                  (car (cdr (cdr (cdr (syntax-e stx)))))))))
                            (begin-for-syntax
-                             (#%require (for-syntax '#%core))
+                             (#%require (for-syntax '#%kernel))
                              (define-syntaxes (tm)
                                (lambda (stx)
                                  (quote-syntax (quote-syntax 'local-trans)))))
-                           (println (m p (lambda (stx) (tm)) (p)))))
+                           (print (m p (lambda (stx) (tm)) (p))) (newline)))
 
 (check-print
  (namespace-require ''local-transformer-expand demo-ns)
@@ -1040,9 +1052,9 @@
 ;; ----------------------------------------
 ;; `expand` in `#%provide`
 
-(eval-module-declaration '(module expand-provide '#%core
-                           (#%require (for-syntax '#%core))
-                           (module sub '#%core
+(eval-module-declaration '(module expand-provide '#%kernel
+                           (#%require (for-syntax '#%kernel))
+                           (module sub '#%kernel
                              (#%provide a-sub b-sub)
                              (define-values (a-sub) 'a-sub)
                              (define-values (b-sub) 'b-sub))
@@ -1059,6 +1071,13 @@
                                                         (regexp-match? #rx"^a"
                                                                        (symbol->string
                                                                         (syntax-e id))))])
+                                 (define-values (filter)
+                                   (lambda (f l)
+                                     (if (null? l)
+                                         null
+                                         (if (f (car l))
+                                             (cons (car l) (filter f (cdr l)))
+                                             (filter f (cdr l))))))
                                  (datum->syntax
                                   #f
                                   (cons
@@ -1068,9 +1087,9 @@
                                     (filter keep-a (cdr (assv 0 there)))))))))
                            (#%provide (expand (all-a)))))
 
-(eval-module-declaration '(module use-expand-provide '#%core
+(eval-module-declaration '(module use-expand-provide '#%kernel
                            (#%require 'expand-provide)
-                           (println (list a-sub a-here))))
+                           (print (list a-sub a-here)) (newline)))
 
 (check-print
  (namespace-require ''use-expand-provide demo-ns)
@@ -1079,13 +1098,13 @@
 ;; ----------------------------------------
 ;; cross-phase persistent declaration
 
-(eval-module-declaration '(module cross-phase-persistent '#%core
+(eval-module-declaration '(module cross-phase-persistent '#%kernel
                            (#%declare #:cross-phase-persistent)
-                           (#%require '#%core)
+                           (#%require '#%kernel)
                            (#%provide gen)
                            (define-values (gen) (gensym "g"))
-                           (module ignored '#%core)
-                           (module* also-ignored '#%core)
+                           (module ignored '#%kernel)
+                           (module* also-ignored '#%kernel)
                            (begin
                              (define-values (y) (lambda () (error "anything")))
                              (define-values (x) (case-lambda
@@ -1100,9 +1119,9 @@
                                                (gensym)
                                                (string->uninterned-symbol "u")))))
 
-(eval-module-declaration '(module use-cross-phase-persistent '#%core
+(eval-module-declaration '(module use-cross-phase-persistent '#%kernel
                            (#%require 'cross-phase-persistent
-                                      (for-syntax '#%core
+                                      (for-syntax '#%kernel
                                                   'cross-phase-persistent))
                            (define-syntaxes (ct-gen)
                              (lambda (stx)
@@ -1110,7 +1129,7 @@
                                 (quote-syntax here)
                                 (list (quote-syntax quote)
                                       gen))))
-                           (println (equal? gen (ct-gen)))))
+                           (print (equal? gen (ct-gen))) (newline)))
 
 (check-print
  (namespace-require ''use-cross-phase-persistent demo-ns)

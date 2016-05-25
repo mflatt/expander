@@ -4,7 +4,6 @@
          "main.rkt"
          "namespace.rkt"
          "binding.rkt"
-         "primitives.rkt"
          "read-syntax.rkt"
          "module-path.rkt"
          racket/runtime-path
@@ -12,6 +11,7 @@
                   with-module-reading-parameterization)
          (only-in racket/base
                   [dynamic-require base:dynamic-require])
+         "kernel.rkt"
          "cache-for-boot.rkt")
 
 (define cache-dir #f)
@@ -46,77 +46,18 @@
 
 (define-runtime-path startup.rktl "startup.rktl")
 
-(define boot-ns (make-empty-core-namespace))
-(namespace-require ''#%core boot-ns)
+(define boot-ns (make-empty-kernel-namespace))
+(namespace-require ''#%kernel boot-ns)
 
-(define main-functions
-  (hasheq 'eval eval
-          'compile compile
-          'expand expand
-          'dynamic-require dynamic-require
-          'make-empty-namespace make-empty-namespace
-          'namespace-syntax-introduce namespace-syntax-introduce
-          'namespace-require namespace-require
-          'namespace-module-identifier namespace-module-identifier))
-(define main-ids (apply seteq (hash-keys main-functions)))
-
-(let ([to-mpi  (module-path-index-join ''#%main #f)])
-  (declare-module!
-   boot-ns
-   (make-module #:cross-phase-persistent? #t
-                to-mpi
-                #hasheqv()
-                (hasheqv 0 (for/hash ([sym (in-set main-ids)])
-                             (values sym
-                                     (make-module-binding to-mpi 0 sym))))
-                0 0
-                (lambda (ns phase-shift phase-level self bulk-binding-registry)
-                  (when (= 0 phase-level)
-                    (for ([(sym val) (in-hash main-functions)])
-                      (namespace-set-variable! ns 0 sym val)))))))
-   
- 
-(define (copy-racket-module! name #:to [to-name name]
-                             #:skip [skip-syms (seteq)]
-                             #:alts [alts #hasheq()]
-                             #:primitive? [primitive? #f])
-  (define mod-name `',name)
-  (define-values (vars transes) (module->exports mod-name))
-  (define syms (for/list ([sym (in-list (map car (cdr (assv 0 vars))))]
-                          #:unless (set-member? skip-syms sym))
-                 sym))
-  (define to-mpi (module-path-index-join (list 'quote to-name) #f))
-  (declare-module!
-   boot-ns
-   (make-module #:primitive? primitive?
-                #:cross-phase-persistent? #t
-                to-mpi
-                #hasheqv()
-                (hasheqv 0 (for/hash ([sym (in-list syms)])
-                             (values sym
-                                     (make-module-binding to-mpi 0 sym))))
-                0 0
-                (lambda (ns phase-shift phase-level self bulk-binding-registry)
-                  (when (= 0 phase-level)
-                    (for ([sym (in-list syms)])
-                      (namespace-set-variable! ns 0 sym
-                                               (or (hash-ref alts sym #f)
-                                                   (base:dynamic-require mod-name sym)))))))))
-
-(copy-racket-module! '#%kernel #:to '#%pre-kernel
-                     #:primitive? #t
-                     #:skip (set-union primitive-ids
-                                       main-ids))
-
-(copy-racket-module! '#%paramz)
-(copy-racket-module! '#%expobs)
-(copy-racket-module! '#%foreign)
-(copy-racket-module! '#%unsafe)
-(copy-racket-module! '#%flfxnum)
-(copy-racket-module! '#%extfl)
-(copy-racket-module! '#%network)
-(copy-racket-module! '#%place)
-(copy-racket-module! '#%futures)
+(copy-racket-module! '#%paramz #:namespace boot-ns)
+(copy-racket-module! '#%expobs #:namespace boot-ns)
+(copy-racket-module! '#%foreign #:namespace boot-ns)
+(copy-racket-module! '#%unsafe #:namespace boot-ns)
+(copy-racket-module! '#%flfxnum #:namespace boot-ns)
+(copy-racket-module! '#%extfl #:namespace boot-ns)
+(copy-racket-module! '#%network #:namespace boot-ns)
+(copy-racket-module! '#%place #:namespace boot-ns)
+(copy-racket-module! '#%futures #:namespace boot-ns)
 
 (current-namespace boot-ns)
 
