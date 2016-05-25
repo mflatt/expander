@@ -53,7 +53,8 @@
 
 (define (expand-module s ctx enclosing-self
                        #:keep-enclosing-scope-at-phase [keep-enclosing-scope-at-phase #f]
-                       #:enclosing-is-cross-phase-persistent? [enclosing-is-cross-phase-persistent? #f])
+                       #:enclosing-is-cross-phase-persistent? [enclosing-is-cross-phase-persistent? #f]
+                       #:enclosing-requires+provides [enclosing-r+p #f])
   (define m (match-syntax s '(module id:module-name initial-require body ...)))
    
    (define initial-require (syntax->datum (m 'initial-require)))
@@ -74,10 +75,13 @@
                                        (module-path-index-resolve self)
                                        (and enclosing-self #t)))
    
+   (define enclosing-mod (and enclosing-self
+                              (module-path-index-join '(submod "..") self)))
+   
    (define apply-module-scopes
      (make-apply-module-scopes outside-scope inside-scope 
                                ctx keep-enclosing-scope-at-phase
-                               self enclosing-self))
+                               self enclosing-self enclosing-mod))
 
    ;; Add the module's scope to the bodies
    (define bodys (map apply-module-scopes (m 'body)))
@@ -101,9 +105,13 @@
      ;; For `(module* name #f ....)`, just register the enclosing module
      ;; as an import and visit it
      (add-required-module! requires+provides
-                           enclosing-self
+                           enclosing-mod
                            keep-enclosing-scope-at-phase
                            enclosing-is-cross-phase-persistent?)
+     (add-enclosing-module-defined-and-required! requires+provides
+                                                 #:enclosing-requires+provides enclosing-r+p
+                                                 enclosing-mod
+                                                 keep-enclosing-scope-at-phase)
      (namespace-module-visit! m-ns (module-path-index-resolve enclosing-self)
                               keep-enclosing-scope-at-phase)])
    
@@ -263,6 +271,7 @@
                                #:original s
                                #:phase phase
                                #:self self
+                               #:requires-and-provides requires+provides
                                #:enclosing-is-cross-phase-persistent? is-cross-phase-persistent?
                                #:declared-submodule-names declared-submodule-names
                                #:ctx submod-ctx))
@@ -386,7 +395,7 @@
 ;; Make function to adjust syntax that appears in the original module body
 (define (make-apply-module-scopes inside-scope outside-scope
                                   ctx keep-enclosing-scope-at-phase
-                                  self enclosing-self)
+                                  self enclosing-self enclosing-mod)
   (lambda (s)
     (define s-without-enclosing
       (if keep-enclosing-scope-at-phase
@@ -411,7 +420,7 @@
         (syntax-module-path-index-shift
          s-with-edges
          enclosing-self
-         (module-path-index-join '(submod "..") self))]
+         enclosing-mod)]
        [else s-with-edges]))
     ;; In case we're expanding syntax that was previously expanded,
     ;; shift the generic "self" to the "self" for the current expansion:
@@ -726,6 +735,7 @@
                                 #:original s
                                 #:phase phase
                                 #:self self
+                                #:requires-and-provides requires+provides
                                 #:enclosing-is-cross-phase-persistent? enclosing-is-cross-phase-persistent?
                                 #:declared-submodule-names declared-submodule-names
                                 #:ctx submod-ctx)
@@ -746,6 +756,7 @@
              (define submod
                (expand-submodule shifted-s self submod-ctx
                                  #:keep-enclosing-scope-at-phase neg-phase
+                                 #:enclosing-requires+provides requires+provides
                                  #:enclosing-is-cross-phase-persistent? enclosing-is-cross-phase-persistent?
                                  #:declared-submodule-names declared-submodule-names))
              (syntax-shift-phase-level submod phase)]
@@ -841,6 +852,7 @@
 
 (define (expand-submodule s self ctx
                           #:keep-enclosing-scope-at-phase [keep-enclosing-scope-at-phase #f]
+                          #:enclosing-requires+provides [enclosing-r+p #f]
                           #:enclosing-is-cross-phase-persistent? [enclosing-is-cross-phase-persistent? #f]
                           #:declared-submodule-names declared-submodule-names)
   ;; Register name and check for duplicates
@@ -858,6 +870,7 @@
                                 [post-expansion-scope #f])
                    self
                    #:keep-enclosing-scope-at-phase keep-enclosing-scope-at-phase
+                   #:enclosing-requires+provides enclosing-r+p
                    #:enclosing-is-cross-phase-persistent? enclosing-is-cross-phase-persistent?))
   
   ;; Compile and declare the submodule for use by later forms

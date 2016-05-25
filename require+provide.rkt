@@ -14,6 +14,7 @@
          (struct-out required)
          add-required-module!
          add-defined-or-required-id!
+         add-enclosing-module-defined-and-required!
          remove-required-id!
          check-not-defined
          extract-module-requires
@@ -44,7 +45,7 @@
 
 (struct required (id phase can-shadow?))
 
-;; Register that a module is requires at a given phase shift
+;; Register that a module is required at a given phase shift
 (define (add-required-module! r+p mod-name phase-shift is-cross-phase-persistent?)
   (hash-update! (requires+provides-requires r+p)
                 mod-name
@@ -64,15 +65,43 @@
   (unless (equal? phase (phase+ (module-binding-nominal-phase binding)
                                 (module-binding-nominal-require-phase binding)))
     (error "internal error: binding phase does not match nominal info"))
-  
+   (add-defined-or-required-id-at-nominal! r+p id phase
+                                           #:nominal-module (module-binding-nominal-module binding)
+                                           #:nominal-require-phase (module-binding-nominal-require-phase binding)
+                                           #:can-shadow? can-shadow?))
+
+;; The internals of `add-defined-or-required-id!` that consumes just
+;; the needed part of the binding
+(define (add-defined-or-required-id-at-nominal! r+p id phase
+                                                #:nominal-module nominal-module
+                                                #:nominal-require-phase nominal-require-phase
+                                                #:can-shadow? can-shadow?)
   (hash-update! (requires+provides-requires r+p)
-                (module-binding-nominal-module binding)
+                nominal-module
                 (lambda (at-mod)
                   (hash-update at-mod
-                               (module-binding-nominal-require-phase binding)
+                               nominal-require-phase
                                (lambda (l) (cons (required id phase can-shadow?) l))
                                null))
                 #hasheqv()))
+
+;; Add bindings of an enclosing module
+(define (add-enclosing-module-defined-and-required! r+p
+                                                    #:enclosing-requires+provides enclosing-r+p
+                                                    enclosing-mod
+                                                    phase-shift)
+  (for ([(mod-name at-mod) (in-hash (requires+provides-requires enclosing-r+p))])
+    (for* ([(phase at-phase) (in-hash at-mod)]
+           [reqd (in-list at-phase)])
+      (add-defined-or-required-id-at-nominal! r+p
+                                              (syntax-module-path-index-shift
+                                               (required-id reqd)
+                                               (requires+provides-self enclosing-r+p)
+                                               enclosing-mod)
+                                              (phase+ (required-phase reqd) phase-shift)
+                                              #:nominal-module enclosing-mod
+                                              #:nominal-require-phase phase-shift
+                                              #:can-shadow? #t))))
 
 ;; Removes a required identifier, in anticiation of it being defined
 (define (remove-required-id! r+p id phase)
