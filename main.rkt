@@ -223,7 +223,7 @@
   ;; Expand the function body:
   (define exp-body (expand (add-scope (m 'body) sc)
                            body-env))
-  (syntax (list (m 'lambda) ids exp-body)
+  (syntax (list (m 'lambda) (syntax ids (seteq)) exp-body)
           (seteq)))
 
 (define (expand-let-syntax s env)
