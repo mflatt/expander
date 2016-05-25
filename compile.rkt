@@ -400,6 +400,21 @@
                                  [self self]
                                  [root-module-name root-module-name]))
   
+  ;; Phases with side effects
+  (define side-effects (make-hasheqv))
+  
+  (define (check-side-effects! e ; compiled expression
+                               expected-results ; number of expected reuslts, or #f if any number is ok
+                               phase)
+    (define actual-results
+      (case (and (pair? e) (car e))
+        [(quote lambda case-lambda) 1]
+        [else #f]))
+    (unless (and actual-results
+                 (or (not expected-results)
+                     (= actual-results expected-results)))
+      (hash-set! side-effects phase #t)))
+  
   (let loop! ([bodys bodys] [phase 0])
     (for ([body (in-list bodys)])
       (case (core-form-sym body phase)
@@ -408,28 +423,28 @@
          (define syms (def-ids-to-syms (m 'id) phase self))
          (define def-syms (find-or-create-def-syms! phase))
          (define dsyms (convert-def-syms syms def-syms))
-         (add-body!
-          phase
-          `(define-values ,dsyms ,(compile (m 'rhs)
-                                           (struct-copy compile-context body-cctx
-                                                        [phase phase]
-                                                        [def-syms def-syms]
-                                                        [top-init (find-or-create-top-init! phase)]))))]
+         (define rhs (compile (m 'rhs)
+                              (struct-copy compile-context body-cctx
+                                           [phase phase]
+                                           [def-syms def-syms]
+                                           [top-init (find-or-create-top-init! phase)])))
+         (check-side-effects! rhs (length syms) phase)
+         (add-body! phase `(define-values ,dsyms ,rhs))]
         [(define-syntaxes)
          (define m (match-syntax body '(define-syntaxes (id ...) rhs)))
          (define syms (def-ids-to-syms (m 'id) phase self))
          (define gen-syms (map gensym syms))
-         (add-body!
-          (add1 phase)
-          `(let-values ([,gen-syms ,(compile (m 'rhs)
-                                             (struct-copy compile-context body-cctx
-                                                          [phase (add1 phase)]
-                                                          [def-syms (find-or-create-def-syms! (add1 phase))]
-                                                          [top-init (find-or-create-top-init! (add1 phase))]))])
-            ,@(for/list ([sym (in-list syms)]
-                         [gen-sym (in-list gen-syms)])
-                `(,set-transformer!-id ',sym ,gen-sym))
-            (void)))]
+         (define rhs (compile (m 'rhs)
+                              (struct-copy compile-context body-cctx
+                                           [phase (add1 phase)]
+                                           [def-syms (find-or-create-def-syms! (add1 phase))]
+                                           [top-init (find-or-create-top-init! (add1 phase))])))
+         (check-side-effects! rhs (length syms) phase)
+         (add-body! (add1 phase) `(let-values ([,gen-syms ,rhs])
+                                   ,@(for/list ([sym (in-list syms)]
+                                                [gen-sym (in-list gen-syms)])
+                                       `(,set-transformer!-id ',sym ,gen-sym))
+                                   (void)))]
         [(begin-for-syntax)
          (define m (match-syntax body `(begin-for-syntax e ...)))
          (loop! (m 'e) (add1 phase))]
@@ -445,13 +460,13 @@
          ;; Submodules are handled separately below
          (void)]
         [else
-         (add-body!
-          phase
-          (compile body
-                   (struct-copy compile-context body-cctx
-                                [phase phase]
-                                [def-syms (find-or-create-def-syms! phase)]
-                                [top-init (find-or-create-top-init! phase)])))])))
+         (define e (compile body
+                            (struct-copy compile-context body-cctx
+                                         [phase phase]
+                                         [def-syms (find-or-create-def-syms! phase)]
+                                         [top-init (find-or-create-top-init! phase)])))
+         (check-side-effects! e #f phase)
+         (add-body! phase e)])))
   
   (define (compile-submodules form-name)
     (cond
@@ -513,6 +528,13 @@
       (define-values (cross-phase-persistent?) ,cross-phase-persistent?)
       (define-values (requires) ,(generate-deserialize requires mpis))
       (define-values (provides) ,(generate-deserialize provides mpis))
+      (define-values (variables)
+        ;; This mapping phase -> list of symbol will become redundant
+        ;; if a compilation unit can report a list of variables
+        ',(for/hash ([(phase def-syms) (in-hash phase-to-def-syms)])
+            (values phase
+                    (hash-keys def-syms))))
+      (define-values (side-effects) ',(sort (hash-keys side-effects) <))
       (define-values (min-phase) ,min-phase)
       (define-values (max-phase) ,max-phase)
       (define-values (phase-to-link-modules)
@@ -567,6 +589,8 @@
                  root-module-name
                  requires
                  provides
+                 variables
+                 side-effects
                  cross-phase-persistent?
                  min-phase
                  max-phase
@@ -716,7 +740,10 @@
 
 (define (eval-compilation-units h)
   (for/hash ([(name ccu) (in-hash h)])
-    (values name (eval-compilation-unit ccu))))
+    (values name
+            (if (compilation-directory? ccu)
+                ccu
+                (eval-compilation-unit ccu)))))
 
 ;; ----------------------------------------
 

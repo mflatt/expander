@@ -14,7 +14,9 @@
          set-subtract
          set-union
          set->list
+         list->set
          for/set
+         for*/set
          in-set)
 
 (define set
@@ -58,10 +60,20 @@
   (for/list ([k (in-hash-keys s)])
     k))
 
+(define (list->set l)
+  (for/set ([k (in-list l)])
+    k))
+
 (define-syntax-rule (for/set bindings body ...)
   (for/hash bindings (values
                       (let ()
                         body ...)
                       #t)))
+
+(define-syntax-rule (for*/set bindings body ...)
+  (for*/hash bindings (values
+                       (let ()
+                         body ...)
+                       #t)))
 
 (define-syntax in-set (make-rename-transformer #'in-hash-keys))

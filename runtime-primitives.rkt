@@ -7,7 +7,9 @@
          "module-path.rkt")
 
 (provide runtime-stx
-         runtime-module-name)
+         runtime-module-name
+
+         runtime-instances)
 
 ;; Runtime primitives are implemented in the runtime system (and not
 ;; shadowed by the expander's primitives). They're re-exported by
@@ -34,3 +36,17 @@
 (add-runtime-primitive! 'make-struct-type-property)
 (add-runtime-primitive! 'gensym)
 (add-runtime-primitive! 'string->uninterned-symbol)
+
+;; Instances that are built into the runtime system:
+(define runtime-instances
+  '(#%kernel
+    #%paramz
+    #%expobs
+    #%foreign
+    #%unsafe
+    #%flfxnum
+    #%extfl
+    #%network
+    #%place
+    #%futures))
+

@@ -12,7 +12,9 @@
          (only-in racket/base
                   [dynamic-require base:dynamic-require])
          "kernel.rkt"
-         "cache-for-boot.rkt")
+         "cache-for-boot.rkt"
+         "runtime-primitives.rkt"
+         "compilation-unit.rkt")
 
 (define cache-dir #f)
 (define cache-read-only? #f)
@@ -28,8 +30,10 @@
   (set! cache-read-only? #t)]
  [("-x" "--cache-only") file "Cache only for sources listed in <file>"
   (set! cache-save-only (call-with-input-file* file read))]
- [("-s" "--source-initial") "Don't use cache for the initial load"
+ [("-i" "--skip-initial") "Don't use cache for the initial load"
   (set! cache-skip-first? #t)]
+ [("-s" "--s-expr") "Compile to S-expression instead of bytecode"
+  (compilation-unit-compile-to-s-expr #t)]
  [("--time") "Time re-expansion"
   (set! time-expand? #t)]
  #:once-any
@@ -49,15 +53,9 @@
 (define boot-ns (make-empty-kernel-namespace))
 (namespace-require ''#%kernel boot-ns)
 
-(copy-racket-module! '#%paramz #:namespace boot-ns)
-(copy-racket-module! '#%expobs #:namespace boot-ns)
-(copy-racket-module! '#%foreign #:namespace boot-ns)
-(copy-racket-module! '#%unsafe #:namespace boot-ns)
-(copy-racket-module! '#%flfxnum #:namespace boot-ns)
-(copy-racket-module! '#%extfl #:namespace boot-ns)
-(copy-racket-module! '#%network #:namespace boot-ns)
-(copy-racket-module! '#%place #:namespace boot-ns)
-(copy-racket-module! '#%futures #:namespace boot-ns)
+(for ([name (in-list runtime-instances)]
+      #:unless (eq? name '#%kernel))
+  (copy-racket-module! name #:namespace boot-ns))
 
 (current-namespace boot-ns)
 

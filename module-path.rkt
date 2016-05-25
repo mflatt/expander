@@ -188,12 +188,12 @@
       base))
 
 (define (module-path-index-split mpi)
-  (check module-path-index-split module-path-index? mpi)
+  (check 'module-path-index-split module-path-index? mpi)
   (values (module-path-index-path mpi)
           (module-path-index-base mpi)))
 
 (define (module-path-index-submodule mpi)
-  (check module-path-index-submodule module-path-index? mpi)
+  (check 'module-path-index-submodule module-path-index? mpi)
   (and (not (module-path-index-path mpi))
        (let ([r (module-path-index-resolved mpi)])
          (and r

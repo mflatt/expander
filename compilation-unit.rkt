@@ -1,5 +1,6 @@
 #lang racket/base
 (require "set.rkt"
+         "datum-map.rkt"
          racket/unsafe/undefined)
 
 ;; Implement compilation units and compilation directories, to be
@@ -15,7 +16,9 @@
 
          compilation-directory?
          hash->compilation-directory
-         compilation-directory->hash)
+         compilation-directory->hash
+         
+         compilation-unit-compile-to-s-expr)
 
 (struct compilation-unit (code)
         #:prefab)
@@ -115,18 +118,28 @@
 
 (define orig-eval (current-eval))
 
+(define compilation-unit-compile-to-s-expr (make-parameter #f))
+
 ;; Compile to a serializable form
 (define (compile-compilation-unit c)
-  (define plain-c (desugar-compilation-unit c))
-  (parameterize ([current-namespace cu-namespace]
-                 [current-eval orig-eval])
-    (compile plain-c)))
+  (cond
+   [(compilation-unit-compile-to-s-expr)
+    (de-path c)]
+   [else
+    (define plain-c (desugar-compilation-unit c))
+    (parameterize ([current-namespace cu-namespace]
+                   [current-eval orig-eval])
+      (compile plain-c))]))
 
 ;; Convert serializable form to instantitable form
 (define (eval-compilation-unit ccu)
   (parameterize ([current-namespace cu-namespace]
                  [current-eval orig-eval])
-    (eval ccu)))
+    (eval (if (compiled-expression? ccu)
+              ;; Normal mode: compiled to bytecode
+              ccu
+              ;; Assume compilaing to source:
+              (desugar-compilation-unit (re-path ccu))))))
 
 ;; Instantiate
 (define (instantiate-compilation-unit cu imports [i (make-instance)])
@@ -143,3 +156,23 @@
 
 (define (compilation-directory->hash cd)
   (compilation-directory-table cd))
+
+;; ----------------------------------------
+
+(struct path-bytes (bstr) #:prefab)
+(struct void-value () #:prefab)
+
+(define (de-path p)
+  (datum-map p (lambda (tail? p)
+                 (cond
+                  [(path? p) (path-bytes (path->bytes p))]
+                  [(void? p) (void-value)]
+                  [else p]))))
+
+(define (re-path p)
+  (datum-map p
+             (lambda (tail? p)
+               (cond
+                [(path-bytes? p) (bytes->path (path-bytes-bstr p))]
+                [(void-value? p) (void)]
+                [else p]))))
