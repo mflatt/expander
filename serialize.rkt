@@ -403,7 +403,7 @@
 
 ;; ----------------------------------------
 
-(define deserialize-instance (make-instance))
+(define deserialize-instance (make-instance 'deserialize))
 (define deserialize-imports null)
 
 (define (add! sym val)

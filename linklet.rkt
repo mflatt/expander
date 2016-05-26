@@ -25,9 +25,10 @@
 (provide compile-linklet             ; result is serializable
          compiled-linklet-variables
          eval-linklet                ; serializable to instantiable
-         instantiate-linklet         ; produces an instance given instances
+         instantiate-linklet         ; fills in an instance given argument instances
 
          make-instance
+         instance-name               ; a "name" can be any data
          instance-variable-value
          set-instance-variable-value!
 
@@ -35,15 +36,20 @@
          hash->linklet-directory  ; converts a hash table to a cd
          linklet-directory->hash  ; the other way
          encode-linklet-directory-key ; S-expresion -> suitable byte string for a cd key
-
+         
+         variable-reference?
+         variable-reference->instance
+         variable-reference-constant?
+         
          linklet-compile-to-s-expr) ; a parameter; whether to "compile" to a source form
 
 (struct linklet (code)
         #:prefab)
-(struct instance (variables))
+(struct instance (name        ; any value (e.g., a namespace)
+                  variables)) ; symbol -> value
 
-(define (make-instance)
-  (instance (make-hasheq)))
+(define (make-instance name)
+  (instance name (make-hasheq)))
 
 (define (instance-variable-box i sym can-create?)
   (or (hash-ref (instance-variables i) sym #f)
@@ -65,11 +71,28 @@
 
 ;; ----------------------------------------
 
+(struct variable-reference (instance primitive-varref))
+
+(define (variable-reference->instance vr)
+  (variable-reference-instance vr))
+
+(define variable-reference-constant?*
+  (let ([variable-reference-constant?
+         (lambda (vr)
+           (variable-reference-constant? (variable-reference-primitive-varref vr)))])
+    variable-reference-constant?))
+
+;; ----------------------------------------
+
 (define cu-namespace (make-base-empty-namespace))
 (parameterize ([current-namespace cu-namespace])
   (namespace-require ''#%kernel)
   (namespace-require 'racket/unsafe/undefined)
-  (namespace-set-variable-value! 'instance-variable-box instance-variable-box))
+  (namespace-set-variable-value! 'instance-variable-box instance-variable-box)
+  (namespace-set-variable-value! 'variable-reference variable-reference)
+  (namespace-set-variable-value! 'variable-reference? variable-reference? #t)
+  (namespace-set-variable-value! 'variable-reference->instance variable-reference->instance #t)
+  (namespace-set-variable-value! 'variable-reference-constant? variable-reference-constant?* #t))
 
 ;; ----------------------------------------
 
@@ -123,6 +146,15 @@
         [(case-lambda)
          `(case-lambda ,@(for/list ([clause (cdr e)])
                       `[,(car clause) ,@(map desugar (cdr clause))]))]
+        [(#%variable-reference)
+         (if (and (pair? (cdr e))
+                  (set-member? box-syms (cadr e)))
+             ;; Using a plain `#%variable-reference` (for now) means
+             ;; that all imported and exported variables count as
+             ;; mutable:
+             '(variable-reference self-inst (#%variable-reference))
+             ;; Preserve info about a local identifier:
+             `(variable-reference self-inst ,e))]
         [else (map desugar e)])]
      [else e]))
   `(lambda (self-inst ,@(map car imports))
@@ -161,26 +193,26 @@
               (extract-variables-from-expression c)))]))
 
 ;; Extract variable list from a compiled linklet:
-(define (compiled-linklet-variables lu)
-  (if (vector? lu)
-      (vector-ref lu 1)
+(define (compiled-linklet-variables linklet)
+  (if (vector? linklet)
+      (vector-ref linklet 1)
       ;; Assumed previous "compiled" to source
-      (extract-variables-from-expression lu)))
+      (extract-variables-from-expression linklet)))
 
 ;; Convert serializable form to instantitable form
-(define (eval-linklet lu)
+(define (eval-linklet linklet)
   (parameterize ([current-namespace cu-namespace]
                  [current-eval orig-eval])
-    (eval (if (vector? lu)
+    (eval (if (vector? linklet)
               ;; Normal mode: compiled to bytecode
-              (vector-ref lu 0)
+              (vector-ref linklet 0)
               ;; Assume previously "compiled" to source:
-              (desugar-linklet (re-path lu))))))
+              (desugar-linklet (re-path linklet))))))
 
 ;; Instantiate
-(define (instantiate-linklet elu imports [i (make-instance)])
-  (apply elu i imports)
-  i)
+(define (instantiate-linklet linklet import-instances [target-instance (make-instance 'anonymous)])
+  (apply linklet target-instance import-instances)
+  target-instance)
 
 ;; ----------------------------------------
 
@@ -190,8 +222,8 @@
 (define (hash->linklet-directory ht)
   (linklet-directory ht))
 
-(define (linklet-directory->hash cd)
-  (linklet-directory-table cd))
+(define (linklet-directory->hash ld)
+  (linklet-directory-table ld))
 
 (define (encode-linklet-directory-key v)
   (string->bytes/utf-8 (format "~a" v)))
@@ -201,17 +233,17 @@
 (struct path-bytes (bstr) #:prefab)
 (struct void-value () #:prefab)
 
-(define (de-path p)
-  (datum-map p (lambda (tail? p)
+(define (de-path c)
+  (datum-map c (lambda (tail? c)
                  (cond
-                  [(path? p) (path-bytes (path->bytes p))]
-                  [(void? p) (void-value)]
-                  [else p]))))
+                  [(path? c) (path-bytes (path->bytes c))]
+                  [(void? c) (void-value)]
+                  [else c]))))
 
-(define (re-path p)
-  (datum-map p
-             (lambda (tail? p)
+(define (re-path c)
+  (datum-map c
+             (lambda (tail? c)
                (cond
-                [(path-bytes? p) (bytes->path (path-bytes-bstr p))]
-                [(void-value? p) (void)]
-                [else p]))))
+                [(path-bytes? c) (bytes->path (path-bytes-bstr c))]
+                [(void-value? c) (void)]
+                [else c]))))

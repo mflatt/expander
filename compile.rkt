@@ -83,23 +83,13 @@
                                 #:self self 
                                 #:bulk-binding-registry bulk-binding-registry
                                 #:set-transformer! set-transformer!)
-  (define i (make-instance))
+  (define i (make-instance 'instance))
   (set-instance-variable-value! i 'namespace ns)
   (set-instance-variable-value! i 'phase-shift phase-shift)
   (set-instance-variable-value! i 'self self)
   (set-instance-variable-value! i 'bulk-binding-registry bulk-binding-registry)
   (set-instance-variable-value! i 'set-transformer! set-transformer!)
   i)
-
-;; ----------------------------------------
-
-(define run-time-imports
-  `(variable-reference))
-
-(define run-time-instance (make-instance))
-(set-instance-variable-value! run-time-instance
-                              'variable-reference
-                              variable-reference)
 
 ;; ----------------------------------------
 
@@ -124,8 +114,7 @@
   (define cu
     (compile-linklet
      `(linklet
-       #:import ([run-time ,@run-time-imports]
-                 [instance ,@instance-imports]
+       #:import ([instance ,@instance-imports]
                  [link (mpi-vector ,mpi-vector-id)
                        (syntax-literals ,syntax-literals-id)
                        (get-syntax-literal! ,get-syntax-literal!-id)]
@@ -257,14 +246,9 @@
                             (try-match-syntax s '(#%variable-reference (#%top . id)))))
          (define id (or (and id-m (id-m 'id))
                         (and top-m (top-m 'id))))
-         (define binding (and id (resolve+shift id phase)))
-         `(variable-reference
-           ,self-id
-           ,ns-id
-           (+ ,phase-shift-id ,phase)
-           ,phase-shift-id
-           ;; FIXME: compute mutations
-           #f)]
+         (if id
+             `(#%variable-reference ,(compile-identifier id cctx))
+             `(#%variable-reference))]
         [else
          (error "unrecognized core form:" core-sym)])]
      [(identifier? s)
@@ -554,8 +538,7 @@
        (encode-linklet-directory-key phase)
        (compile-linklet
         `(linklet
-          #:import ([run-time ,@run-time-imports]
-                    [deserialize ,@(if (empty-syntax-literals? syntax-literals)
+          #:import ([deserialize ,@(if (empty-syntax-literals? syntax-literals)
                                        null
                                        deserialize-imports)]
                     [declaration (mpi-vector ,mpi-vector-id)
@@ -786,8 +769,7 @@
                                 #:bulk-binding-registry bulk-binding-registry
                                 #:set-transformer! (lambda (name val)
                                                      (namespace-set-transformer! ns (sub1 phase-level) name val))))
-                             (instantiate-linklet cu (list* run-time-instance
-                                                            deserialize-instance
+                             (instantiate-linklet cu (list* deserialize-instance
                                                             declaration-instance
                                                             inst
                                                             imports)
@@ -836,8 +818,7 @@
 
   (define i
     (instantiate-linklet (hash-ref h #"top")
-                         (list* run-time-instance
-                                inst
+                         (list* inst
                                 (or link-instance
                                     (compiled-top-make-link-instance ct phase-shift))
                                 imports)
@@ -848,7 +829,7 @@
   
 
 (define (compiled-top-make-link-instance ct phase-shift)
-  (define link-instance (make-instance))
+  (define link-instance (make-instance 'top))
   (set-instance-variable-value! link-instance 'mpi-vector
                                 ((compiled-top-get-mpis ct)))
   (set-instance-variable-value! link-instance 'syntax-literals

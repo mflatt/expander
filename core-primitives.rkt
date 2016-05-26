@@ -145,8 +145,6 @@
                       namespace-module-registry
                       namespace?
                       
-                      variable-reference?
-                      variable-reference-constant?
                       variable-reference->empty-namespace
                       variable-reference->namespace
                       variable-reference->resolved-module-path

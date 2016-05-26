@@ -324,7 +324,9 @@
   (check 'syntax-local-module-exports module-path? mod-path)
   (define ctx (get-current-expand-context 'syntax-local-module-exports))
   (define ns (expand-context-namespace ctx))
-  (define mod-name (resolve-module-path mod-path (namespace-module-name ns)))
+  (define mod-name (resolve-module-path mod-path
+                                        (module-path-index-resolve
+                                         (namespace-module-name ns))))
   (define m (namespace->module ns mod-name))
   (unless m (raise-unknown-module-error 'syntax-local-module-exports))
   (for/list ([(phase syms) (in-hash (module-provides m))])

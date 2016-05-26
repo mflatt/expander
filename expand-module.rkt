@@ -72,7 +72,7 @@
    (define self (make-self-module-path-index (syntax-e (m 'id:module-name))
                                              enclosing-self))
    (define m-ns (make-module-namespace (expand-context-namespace ctx)
-                                       (module-path-index-resolve self)
+                                       self
                                        (and enclosing-self #t)))
    
    (define enclosing-mod (and enclosing-self
