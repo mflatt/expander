@@ -14,6 +14,7 @@
          "variable-reference.rkt"
          "serialize.rkt"
          "linklet.rkt"
+         "side-effect.rkt"
          (only-in racket/base
                   [current-namespace base:current-namespace]
                   [compile base:compile]))
@@ -390,13 +391,7 @@
   (define (check-side-effects! e ; compiled expression
                                expected-results ; number of expected reuslts, or #f if any number is ok
                                phase)
-    (define actual-results
-      (case (and (pair? e) (car e))
-        [(quote lambda case-lambda) 1]
-        [else #f]))
-    (unless (and actual-results
-                 (or (not expected-results)
-                     (= actual-results expected-results)))
+    (when (any-side-effects? e expected-results)
       (hash-set! side-effects phase #t)))
   
   (let loop! ([bodys bodys] [phase 0])
@@ -423,7 +418,7 @@
                                            [phase (add1 phase)]
                                            [def-syms (find-or-create-def-syms! (add1 phase))]
                                            [top-init (find-or-create-top-init! (add1 phase))])))
-         (check-side-effects! rhs (length syms) phase)
+         (check-side-effects! rhs (length syms) (add1 phase))
          (add-body! (add1 phase) `(let-values ([,gen-syms ,rhs])
                                    ,@(for/list ([sym (in-list syms)]
                                                 [gen-sym (in-list gen-syms)])

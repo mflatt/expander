@@ -1,6 +1,5 @@
 #lang racket/base
-(require racket/list
-         "serialize-property.rkt"
+(require "serialize-property.rkt"
          "contract.rkt")
 
 (provide resolved-module-path?
@@ -312,7 +311,7 @@
       [(symbol? enclosing-module-name)
        (error "too many \"..\"s:" orig-name)]
       [(= 2 (length enclosing-module-name)) (car enclosing-module-name)]
-      [else (drop-right enclosing-module-name 1)])]
+      [else (reverse (cdr (reverse enclosing-module-name)))])]
     [else (append enclosing-module-name (list name))])))
 
 ;; ----------------------------------------

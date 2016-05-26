@@ -1,6 +1,8 @@
 #lang racket/base
 (require "set.rkt"
-         (only-in "syntax.rkt" syntax?)
+         (only-in "syntax.rkt"
+                  syntax?
+                  identifier?)
          "checked-syntax.rkt"
          (only-in "scope.rkt" add-scope)
          "namespace.rkt"

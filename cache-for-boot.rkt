@@ -1,6 +1,5 @@
 #lang racket/base
-(require racket/serialize
-         racket/file
+(require racket/file
          file/sha1)
 
 (provide make-cache

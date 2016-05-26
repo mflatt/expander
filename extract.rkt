@@ -240,6 +240,7 @@
   (define needed-reason (hash-ref needed lnk #f))
   (when needed-reason
     (define li (hash-ref linklets lnk))
+    (define complained-this? #f)
     (for ([in-lnk (in-list (linklet-info-imports li))])
       (define p (link-name in-lnk))
       (when (and (symbol? p)
@@ -250,11 +251,12 @@
                      "Unfortunately, some linklets depend on pre-defined host instances"
                      "that are not part of the runtime system:")
           (set! complained? #t))
-        (log-error " - ~a at ~s\n   needs ~s\n   needed by ~s"
-                   (link-name lnk)
-                   (link-phase lnk)
-                   p
-                   needed-reason)))))
+        (unless complained-this?
+          (log-error " - ~a at ~s" (link-name lnk) (link-phase lnk))
+          (set! complained-this? #t))
+        (log-error "   needs ~s" p)))
+    (when complained-this?
+      (log-error "   needed by ~s" needed-reason))))
 
 (when complained?
   (exit 1))

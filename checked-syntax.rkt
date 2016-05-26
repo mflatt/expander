@@ -27,7 +27,8 @@
          identifier-binding-symbol
          identifier-prune-lexical-context
          syntax-shift-phase-level
-         syntax-track-origin)
+         syntax-track-origin
+         syntax-debug-info)
 
 (define (syntax-e s)
   (check 'syntax-e syntax? s)
