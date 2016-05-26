@@ -7,6 +7,7 @@
 ;; replaced with a built-in implementation
 
 (provide compile-compilation-unit
+         compiled-compilation-unit-variables
          eval-compilation-unit
          instantiate-compilation-unit
          
@@ -17,6 +18,7 @@
          compilation-directory?
          hash->compilation-directory
          compilation-directory->hash
+         encode-compilation-directory-key
          
          compilation-unit-compile-to-s-expr)
 
@@ -114,6 +116,14 @@
             (desugar body))
         (void)))))
 
+;; Only `#:export`-listed names count as "variables"
+(define (extract-variables-from-expression c)
+  ;; position 4 is after `#:exports`
+  (for/list ([e (in-list (list-ref c 4))])
+    (if (symbol? e)
+        e
+        (cadr e))))
+
 ;; ----------------------------------------
 
 (define orig-eval (current-eval))
@@ -129,16 +139,26 @@
     (define plain-c (desugar-compilation-unit c))
     (parameterize ([current-namespace cu-namespace]
                    [current-eval orig-eval])
-      (compile plain-c))]))
+      ;; Use a vector to list the exported variables
+      ;; with the compiled bytecode
+      (vector (compile plain-c)
+              (extract-variables-from-expression c)))]))
+
+;; Extract variable list from a compiled compilation unit:
+(define (compiled-compilation-unit-variables ccu)
+  (if (vector? ccu)
+      (vector-ref ccu 1)
+      ;; Assumed previous "compiled" to source
+      (extract-variables-from-expression ccu)))
 
 ;; Convert serializable form to instantitable form
 (define (eval-compilation-unit ccu)
   (parameterize ([current-namespace cu-namespace]
                  [current-eval orig-eval])
-    (eval (if (compiled-expression? ccu)
+    (eval (if (vector? ccu)
               ;; Normal mode: compiled to bytecode
-              ccu
-              ;; Assume compilaing to source:
+              (vector-ref ccu 0)
+              ;; Assume previously "compiled" to source:
               (desugar-compilation-unit (re-path ccu))))))
 
 ;; Instantiate
@@ -156,6 +176,9 @@
 
 (define (compilation-directory->hash cd)
   (compilation-directory-table cd))
+
+(define (encode-compilation-directory-key v)
+  (string->bytes/utf-8 (format "~a" v)))
 
 ;; ----------------------------------------
 

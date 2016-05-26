@@ -1,6 +1,5 @@
 #lang racket/base
-(require racket/unit
-         "set.rkt"
+(require "set.rkt"
          "syntax.rkt"
          "scope.rkt"
          "match.rkt"

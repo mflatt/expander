@@ -528,12 +528,6 @@
       (define-values (cross-phase-persistent?) ,cross-phase-persistent?)
       (define-values (requires) ,(generate-deserialize requires mpis))
       (define-values (provides) ,(generate-deserialize provides mpis))
-      (define-values (variables)
-        ;; This mapping phase -> list of symbol will become redundant
-        ;; if a compilation unit can report a list of variables
-        ',(for/hash ([(phase def-syms) (in-hash phase-to-def-syms)])
-            (values phase
-                    (hash-keys def-syms))))
       (define-values (side-effects) ',(sort (hash-keys side-effects) <))
       (define-values (min-phase) ,min-phase)
       (define-values (max-phase) ,max-phase)
@@ -734,9 +728,6 @@
     (convert-def-sym sym def-syms)))
 
 ;; ----------------------------------------
-
-(define (encode-compilation-directory-key v)
-  (string->bytes/utf-8 (format "~a" v)))
 
 (define (eval-compilation-units h)
   (for/hash ([(name ccu) (in-hash h)])
