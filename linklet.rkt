@@ -3,26 +3,42 @@
          "datum-map.rkt"
          racket/unsafe/undefined)
 
-;; Implement compilation units and compilation directories, to be
-;; replaced with a built-in implementation
+;; A "linklet" is intended as the primitive form of separate (not
+;; necessarily independent) compilation and linking. A `linklet` form
+;; compiles to a serializable linklet, a serializable linklet can be
+;; converted to an instantiable linklet, and instantiation of a
+;; linklet produces an "instance" given other instances to satisfy its
+;; imports. An instance, which essentially just maps symbols to
+;; values, can also be created directly, so it serves as the bridge
+;; between the worlds of values and compiled objects.
 
-(provide compile-compilation-unit
-         compiled-compilation-unit-variables
-         eval-compilation-unit
-         instantiate-compilation-unit
-         
+;; Since Racket doesn't yet support linklets natively, we implement
+;; them here by compilaing `linklet` to `lambda`.
+
+;; A "linklet directory" is similarly intended as a primitive
+;; constructs that is essentially a mapping of byte strings to
+;; linklets and sub-directories. The intent is that individual
+;; linklets can be efficiently extracted from the marshaled form of a
+;; linklet directory --- the primitive form of accessing an indvidual
+;; submodule.
+
+(provide compile-linklet             ; result is serializable
+         compiled-linklet-variables
+         eval-linklet                ; serializable to instantiable
+         instantiate-linklet         ; produces an instance given instances
+
          make-instance
          instance-variable-value
          set-instance-variable-value!
 
-         compilation-directory?
-         hash->compilation-directory
-         compilation-directory->hash
-         encode-compilation-directory-key
-         
-         compilation-unit-compile-to-s-expr)
+         linklet-directory?       ; maps byte strings to linking units and nested cds
+         hash->linklet-directory  ; converts a hash table to a cd
+         linklet-directory->hash  ; the other way
+         encode-linklet-directory-key ; S-expresion -> suitable byte string for a cd key
 
-(struct compilation-unit (code)
+         linklet-compile-to-s-expr) ; a parameter; whether to "compile" to a source form
+
+(struct linklet (code)
         #:prefab)
 (struct instance (variables))
 
@@ -57,10 +73,10 @@
 
 ;; ----------------------------------------
 
-(define (desugar-compilation-unit c)
-  (unless (eq? '#:import (list-ref c 1)) (error "bad compilation-unit syntax" c))
+(define (desugar-linklet c)
+  (unless (eq? '#:import (list-ref c 1)) (error "bad linklet syntax" c))
   (define imports (list-ref c 2))
-  (unless (eq? '#:export (list-ref c 3)) (error "bad compilation-unit syntax" c))
+  (unless (eq? '#:export (list-ref c 3)) (error "bad linklet syntax" c))
   (define exports (list-ref c 4))
   (define bodys (list-tail c 5))
   (define box-bindings
@@ -128,15 +144,15 @@
 
 (define orig-eval (current-eval))
 
-(define compilation-unit-compile-to-s-expr (make-parameter #f))
+(define linklet-compile-to-s-expr (make-parameter #f))
 
 ;; Compile to a serializable form
-(define (compile-compilation-unit c)
+(define (compile-linklet c)
   (cond
-   [(compilation-unit-compile-to-s-expr)
+   [(linklet-compile-to-s-expr)
     (de-path c)]
    [else
-    (define plain-c (desugar-compilation-unit c))
+    (define plain-c (desugar-linklet c))
     (parameterize ([current-namespace cu-namespace]
                    [current-eval orig-eval])
       ;; Use a vector to list the exported variables
@@ -144,40 +160,40 @@
       (vector (compile plain-c)
               (extract-variables-from-expression c)))]))
 
-;; Extract variable list from a compiled compilation unit:
-(define (compiled-compilation-unit-variables ccu)
-  (if (vector? ccu)
-      (vector-ref ccu 1)
+;; Extract variable list from a compiled linklet:
+(define (compiled-linklet-variables lu)
+  (if (vector? lu)
+      (vector-ref lu 1)
       ;; Assumed previous "compiled" to source
-      (extract-variables-from-expression ccu)))
+      (extract-variables-from-expression lu)))
 
 ;; Convert serializable form to instantitable form
-(define (eval-compilation-unit ccu)
+(define (eval-linklet lu)
   (parameterize ([current-namespace cu-namespace]
                  [current-eval orig-eval])
-    (eval (if (vector? ccu)
+    (eval (if (vector? lu)
               ;; Normal mode: compiled to bytecode
-              (vector-ref ccu 0)
+              (vector-ref lu 0)
               ;; Assume previously "compiled" to source:
-              (desugar-compilation-unit (re-path ccu))))))
+              (desugar-linklet (re-path lu))))))
 
 ;; Instantiate
-(define (instantiate-compilation-unit cu imports [i (make-instance)])
-  (apply cu i imports)
+(define (instantiate-linklet elu imports [i (make-instance)])
+  (apply elu i imports)
   i)
 
 ;; ----------------------------------------
 
-(struct compilation-directory (table)
+(struct linklet-directory (table)
         #:prefab)
 
-(define (hash->compilation-directory ht)
-  (compilation-directory ht))
+(define (hash->linklet-directory ht)
+  (linklet-directory ht))
 
-(define (compilation-directory->hash cd)
-  (compilation-directory-table cd))
+(define (linklet-directory->hash cd)
+  (linklet-directory-table cd))
 
-(define (encode-compilation-directory-key v)
+(define (encode-linklet-directory-key v)
   (string->bytes/utf-8 (format "~a" v)))
 
 ;; ----------------------------------------

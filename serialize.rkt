@@ -10,7 +10,7 @@
          "bulk-binding.rkt"
          "module-path.rkt"
          "module-use.rkt"
-         "compilation-unit.rkt")
+         "linklet.rkt")
 
 (provide make-module-path-index-table
          add-module-path-index!

@@ -13,7 +13,7 @@
          "expand-require.rkt"
          "variable-reference.rkt"
          "serialize.rkt"
-         "compilation-unit.rkt"
+         "linklet.rkt"
          (only-in racket/base
                   [current-namespace base:current-namespace]
                   [compile base:compile]))
@@ -24,8 +24,8 @@
          
          compiled-top?
 
-         declare-module-from-compilation-directory!
-         run-top-level-from-compilation-directory
+         declare-module-from-linklet-directory!
+         run-top-level-from-linklet-directory
          compiled-top-run)
 
 (struct compile-context (namespace   ; compile-time namespace
@@ -103,13 +103,13 @@
 
 ;; ----------------------------------------
 
-(struct compiled-top (compilation-directory
+(struct compiled-top (linklet-directory
                       phase
                       link-module-uses
                       get-mpis
                       get-syntax-literals))
 
-;; Returns a compilation directory with two compilation units
+;; Returns a linking directory with two linking units
 (define (compile-top s cctx
                      #:serializable? [serializable? #t])
   (define mpis (make-module-path-index-table))
@@ -122,8 +122,8 @@
     (generate-links+imports top-init phase cctx))
   
   (define cu
-    (compile-compilation-unit
-     `(compilation-unit
+    (compile-linklet
+     `(linklet
        #:import ([run-time ,@run-time-imports]
                  [instance ,@instance-imports]
                  [link (mpi-vector ,mpi-vector-id)
@@ -146,8 +146,8 @@
         (serialize-module-uses link-module-uses mpis))
       
       (define link-cu
-        (compile-compilation-unit
-         `(compilation-unit
+        (compile-linklet
+         `(linklet
            #:import ([deserialize ,@deserialize-imports])
            #:export ([,mpi-vector-id mpi-vector]
                      deserialized-syntax
@@ -162,12 +162,12 @@
              (list ,@link-module-use-exprs))
            ,@syntax-literals)))
       
-      (hash->compilation-directory
+      (hash->linklet-directory
        (hash #"top" cu
              #"link" link-cu))]
      [else
-      ;; Will combine the compilation unit with non-serilized link info
-      (hash->compilation-directory
+      ;; Will combine the linking unit with non-serilized link info
+      (hash->linklet-directory
        (hash #"top" cu))]))
   
   ;; If the compiled code is executed directly in its original phase,
@@ -356,7 +356,7 @@
 
 ;; ----------------------------------------
 
-;; Returns a compilation directory
+;; Returns a linking directory
 (define (compile-module s cctx
                         #:self [given-self #f]
                         #:as-submodule? [as-submodule? #f])
@@ -497,7 +497,7 @@
           [else
            (loop (cdr bodys) phase)])]))]))
 
-  ;; Each list is (cons compilation-directory-key compilation-unit-directory)
+  ;; Each list is (cons linklet-directory-key linklet-directory)
   (define pre-submodules (compile-submodules 'module))
   (define post-submodules (compile-submodules 'module*))
 
@@ -544,16 +544,16 @@
       (define-values (post-submodules)
         ',(map car post-submodules))))
 
-  ;; Generate the phase-specific compilation units
-  (define body-compilation-units
+  ;; Generate the phase-specific linking units
+  (define body-linklets
     (for/hash ([phase (in-list phases-in-order)])
       (define bodys (hash-ref phase-to-body phase))
       (define li (hash-ref phase-to-link-info phase))
       (define syntax-literals (top-init-syntax-literals (hash-ref phase-to-top-init phase)))
       (values
-       (encode-compilation-directory-key phase)
-       (compile-compilation-unit
-        `(compilation-unit
+       (encode-linklet-directory-key phase)
+       (compile-linklet
+        `(linklet
           #:import ([run-time ,@run-time-imports]
                     [deserialize ,@(if (empty-syntax-literals? syntax-literals)
                                        null
@@ -572,11 +572,11 @@
         0
         (apply max (hash-keys phase-to-top-init))))
 
-  ;; Assemble the declaration compilation unit, which is instanted
+  ;; Assemble the declaration linking unit, which is instanted
   ;; once for a module declaration and shared among instances
-  (define declaration-compilation-unit
-    (compile-compilation-unit
-     `(compilation-unit
+  (define declaration-linklet
+    (compile-linklet
+     `(linklet
        #:import ([deserialize ,@deserialize-imports])
        #:export (self-mpi
                  default-name
@@ -599,10 +599,10 @@
          (make-vector ,(add1 max-top-init-phase) #f))
        ,@declaration-body)))
 
-  (hash->compilation-directory
-   (for/fold ([ht (hash-set body-compilation-units #"" declaration-compilation-unit)])
+  (hash->linklet-directory
+   (for/fold ([ht (hash-set body-linklets #"" declaration-linklet)])
              ([sm (in-list (append pre-submodules post-submodules))])
-     (hash-set ht (encode-compilation-directory-key (car sm)) (cdr sm)))))
+     (hash-set ht (encode-linklet-directory-key (car sm)) (cdr sm)))))
 
 ;; ----------------------------------------
   
@@ -729,31 +729,31 @@
 
 ;; ----------------------------------------
 
-(define (eval-compilation-units h)
-  (for/hash ([(name ccu) (in-hash h)])
+(define (eval-linklets h)
+  (for/hash ([(name v) (in-hash h)])
     (values name
-            (if (compilation-directory? ccu)
-                ccu
-                (eval-compilation-unit ccu)))))
+            (if (linklet-directory? v)
+                v
+                (eval-linklet v)))))
 
 ;; ----------------------------------------
 
-(define (declare-module-from-compilation-directory! cd
-                                                    #:namespace [ns (current-namespace)]
-                                                    #:as-submodule? [as-submodule? #f])
-  (define h (eval-compilation-units (compilation-directory->hash cd)))
+(define (declare-module-from-linklet-directory! cd
+                                                #:namespace [ns (current-namespace)]
+                                                #:as-submodule? [as-submodule? #f])
+  (define h (eval-linklets (linklet-directory->hash cd)))
   (define declaration-instance
-    (instantiate-compilation-unit (hash-ref h #"")
-                                  (list deserialize-instance)))
+    (instantiate-linklet (hash-ref h #"")
+                         (list deserialize-instance)))
   
   (define (decl key)
     (instance-variable-value declaration-instance key))
   
   (define (declare-submodules names)
     (for ([name (in-list names)])
-      (define sm-cd (hash-ref h (encode-compilation-directory-key name)))
+      (define sm-cd (hash-ref h (encode-linklet-directory-key name)))
       (unless sm-cd (error "missing submodule declaration:" name))
-      (declare-module-from-compilation-directory! sm-cd #:namespace ns)))
+      (declare-module-from-linklet-directory! sm-cd #:namespace ns)))
   
   (unless as-submodule?
     (declare-submodules (decl 'pre-submodules)))
@@ -768,7 +768,7 @@
                          (decl 'min-phase)
                          (decl 'max-phase)
                          (lambda (ns phase-shift phase-level self bulk-binding-registry)
-                           (define cu (hash-ref h (encode-compilation-directory-key phase-level) #f))
+                           (define cu (hash-ref h (encode-linklet-directory-key phase-level) #f))
                            (when cu
                              (define imports
                                (for/list ([mu (in-list (hash-ref (decl 'phase-to-link-modules) phase-level))])
@@ -786,12 +786,12 @@
                                 #:bulk-binding-registry bulk-binding-registry
                                 #:set-transformer! (lambda (name val)
                                                      (namespace-set-transformer! ns (sub1 phase-level) name val))))
-                             (instantiate-compilation-unit cu (list* run-time-instance
-                                                                     deserialize-instance
-                                                                     declaration-instance
-                                                                     inst
-                                                                     imports)
-                                                           (namespace->instance ns phase-level))))
+                             (instantiate-linklet cu (list* run-time-instance
+                                                            deserialize-instance
+                                                            declaration-instance
+                                                            inst
+                                                            imports)
+                                                  (namespace->instance ns phase-level))))
                          #:cross-phase-persistent? (decl 'cross-phase-persistent?)))
 
   (declare-module! ns
@@ -806,16 +806,16 @@
 
 ;; ----------------------------------------
 
-(define (run-top-level-from-compilation-directory cd ns)
+(define (run-top-level-from-linklet-directory cd ns)
   (compiled-top-run (compiled-top cd #f #f #f #f)))
 
 (define (compiled-top-run ct ns)
-  (define cd (compiled-top-compilation-directory ct))
-  (define h (eval-compilation-units (compilation-directory->hash cd)))
+  (define cd (compiled-top-linklet-directory ct))
+  (define h (eval-linklets (linklet-directory->hash cd)))
   (define link-instance
     (and (not (compiled-top-link-module-uses ct))
-         (instantiate-compilation-unit (hash-ref h #"link")
-                                       (list deserialize-instance))))
+         (instantiate-linklet (hash-ref h #"link")
+                              (list deserialize-instance))))
   (define phase (namespace-phase ns))
   (define imports
     (for/list ([mu (or (compiled-top-link-module-uses ct)
@@ -835,14 +835,14 @@
                                      (namespace-set-transformer! ns phase-shift name val))))
 
   (define i
-    (instantiate-compilation-unit (hash-ref h #"top")
-                                  (list* run-time-instance
-                                         inst
-                                         (or link-instance
-                                             (compiled-top-make-link-instance ct phase-shift))
-                                         imports)
-                                  ;; Instantiation merges with the namespace's current instance:
-                                  (namespace->instance ns (namespace-phase ns))))
+    (instantiate-linklet (hash-ref h #"top")
+                         (list* run-time-instance
+                                inst
+                                (or link-instance
+                                    (compiled-top-make-link-instance ct phase-shift))
+                                imports)
+                         ;; Instantiation merges with the namespace's current instance:
+                         (namespace->instance ns (namespace-phase ns))))
   
   ((instance-variable-value i 'body-thunk)))
   

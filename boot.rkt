@@ -14,7 +14,7 @@
          "kernel.rkt"
          "cache-for-boot.rkt"
          "runtime-primitives.rkt"
-         "compilation-unit.rkt")
+         "linklet.rkt")
 
 (define cache-dir #f)
 (define cache-read-only? #f)
@@ -33,7 +33,7 @@
  [("-i" "--skip-initial") "Don't use cache for the initial load"
   (set! cache-skip-first? #t)]
  [("-s" "--s-expr") "Compile to S-expression instead of bytecode"
-  (compilation-unit-compile-to-s-expr #t)]
+  (linklet-compile-to-s-expr #t)]
  [("--time") "Time re-expansion"
   (set! time-expand? #t)]
  #:once-any

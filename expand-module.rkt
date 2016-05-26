@@ -716,7 +716,7 @@
                             (module-path-index-resolve self)))
   (parameterize ([current-namespace m-ns]
                  [current-module-declare-name (make-resolved-module-path root-module-name)])
-    (declare-module-from-compilation-directory!
+    (declare-module-from-linklet-directory!
      (compile-module tmp-mod
                      (make-compile-context #:namespace m-ns
                                            #:self enclosing-self
@@ -880,7 +880,7 @@
                             (module-path-index-resolve self)))
   (parameterize ([current-namespace ns]
                  [current-module-declare-name (make-resolved-module-path root-module-name)])
-    (declare-module-from-compilation-directory!
+    (declare-module-from-linklet-directory!
      (compile-module submod 
                      (make-compile-context #:namespace ns
                                            #:self self

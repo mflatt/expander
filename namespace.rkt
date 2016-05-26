@@ -4,7 +4,7 @@
          "bulk-binding.rkt"
          "module-path.rkt"
          "module-use.rkt"
-         "compilation-unit.rkt")
+         "linklet.rkt")
 
 (provide make-empty-namespace
          namespace?
@@ -69,7 +69,7 @@
 ;; Wrapper to make the registry opqaue
 (struct module-registry (declarations))
 
-(struct definitions (variables      ; compilation unit instance
+(struct definitions (variables      ; linklet instance
                      transformers   ; sym -> val
                      [instantiated? #:mutable]))
 

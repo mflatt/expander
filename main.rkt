@@ -12,7 +12,7 @@
          "expand-require.rkt"
          "compile.rkt"
          "module-path.rkt"
-         "compilation-unit.rkt"
+         "linklet.rkt"
          "bulk-binding.rkt"
          "kernel.rkt"
          "namespace-attach.rkt")
@@ -91,19 +91,19 @@
   (parameterize ([current-bulk-binding-fallback-registry
                   (namespace-bulk-binding-registry ns)])
     (define c (if (or (compiled-top? s)
-                      (compilation-directory? s))
+                      (linklet-directory? s))
                   s
                   (compile (expand s ns) ns)))
     (cond
      [(compiled-top? c)
       (compiled-top-run c ns)]
      [else
-      (define h (compilation-directory->hash c))
+      (define h (linklet-directory->hash c))
       (cond
        [(hash-ref h #"" #f)
-        (declare-module-from-compilation-directory! c #:namespace ns)]
+        (declare-module-from-linklet-directory! c #:namespace ns)]
        [else
-        (run-top-level-from-compilation-directory c ns)])])))
+        (run-top-level-from-linklet-directory c ns)])])))
 
 (define (namespace-module-identifier [where (current-namespace)])
   (unless (or (namespace? where)
