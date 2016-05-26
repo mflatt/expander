@@ -186,7 +186,7 @@
                         (module-cross-phase-persistent? m))
   (bind-all-provides!
    m
-   bind-in-stx phase-shift m-ns module-name mpi
+   bind-in-stx phase-shift m-ns mpi
    #:can-bulk? (not adjust)
    #:filter (lambda (binding)
               (define sym (module-binding-nominal-sym binding))
@@ -225,9 +225,9 @@
                                              s bind-phase binding
                                              #:can-shadow? can-shadow?))
               adjusted-sym))
-  (namespace-module-visit! m-ns module-name phase-shift)
+  (namespace-module-visit! m-ns mpi phase-shift)
   (when run?
-    (namespace-module-instantiate! m-ns module-name phase-shift))
+    (namespace-module-instantiate! m-ns mpi phase-shift))
   ;; check that we covered all expected ids:
   (define need-syms (cond
                     [(adjust-only? adjust)
@@ -245,7 +245,7 @@
 
 ;; ----------------------------------------
 
-(define (bind-all-provides! m in-stx phase-shift ns module-name mpi
+(define (bind-all-provides! m in-stx phase-shift ns mpi
                             #:can-bulk? can-bulk?
                             #:filter filter)
   (define self (module-self m))

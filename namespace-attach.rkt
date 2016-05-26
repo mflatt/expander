@@ -83,13 +83,16 @@
       (unless already?
         (for* ([(req-phase reqs) (in-hash (module-requires m))]
                [req (in-list reqs)])
-          (loop req (phase+ phase req-phase))))))
+          (loop (module-path-index-shift req
+                                         (module-self m)
+                                         mpi)
+                (phase+ phase req-phase))))))
 
   (parameterize ([current-namespace dest-namespace]) ; for resolver notifications
     (for* ([(mod-name phases) (in-hash todo)]
            [(phase ns) (in-hash phases)])
       (define m (namespace->module src-namespace mod-name))
-      (declare-module! dest-namespace m)
+      (declare-module! dest-namespace m mod-name)
       (when attach-instances?
         (define m-ns (namespace->module-namespace src-namespace mod-name phase))
         (namespace->module-namespace dest-namespace mod-name phase #:install!-namespace m-ns)))))

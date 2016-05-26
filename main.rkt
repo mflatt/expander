@@ -43,13 +43,23 @@
                           "(or/c module-path? module-path-index? resolved-module-path?)"
                           mod-path))
   (define ns (current-namespace))
-  (define mod-name 
+  (define mpi
     (cond
-     [(module-path? mod-path) (resolve-module-path mod-path #f)]
-     [(module-path-index? mod-path) (module-path-index-resolve mod-path #t)]
-     [else mod-path]))
+     [(module-path? mod-path) (module-path-index-join mod-path #f)]
+     [(module-path-index? mod-path) mod-path]
+     [else
+      (define name (resolved-module-path-name mod-path))
+      (define root-name (if (pair? name) (car name) name))
+      (define root-mod-path (if (path? root-name)
+                                root-name
+                                `(quote ,root-name)))
+      (define new-mod-path (if (pair? name)
+                               root-mod-path
+                               `(submod ,root-mod-path ,@(cdr name))))
+      (module-path-index-join new-mod-path #f)]))
+  (define mod-name (module-path-index-resolve mpi #t))
   (define phase (namespace-phase ns))
-  (namespace-module-instantiate! ns mod-name phase)
+  (namespace-module-instantiate! ns mpi phase)
   (define m-ns (namespace->module-namespace ns mod-name phase #:complain-on-failure? #t))
   (namespace-get-variable m-ns 0 sym
                           (lambda ()

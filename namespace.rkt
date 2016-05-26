@@ -23,7 +23,6 @@
          namespace-scope
          
          make-module
-         remake-module
          declare-module!
          module-self
          module-requires
@@ -155,14 +154,7 @@
           primitive?
           cross-phase-persistent?))
 
-(define (remake-module m self requires provides)
-  (struct-copy module m
-               [self self]
-               [requires requires]
-               [provides provides]))
-
-(define (declare-module! ns m #:as-submodule? [as-submodule? #f])
-  (define mod-name (module-path-index-resolve (module-self m)))
+(define (declare-module! ns m mod-name #:as-submodule? [as-submodule? #f])
   (hash-set! (if as-submodule?
                  (namespace-submodule-declarations ns)
                  (module-registry-declarations (namespace-module-registry ns)))
@@ -185,9 +177,10 @@
                          "unknown module" 
                          "module name" mod-name))
 
-(define (namespace-module-instantiate! ns name phase [min-phase 0])
-  (unless (resolved-module-path? name)
-    (error "not a resolved module path:" name))
+(define (namespace-module-instantiate! ns mpi phase [min-phase 0])
+  (unless (module-path-index? mpi)
+    (error "not a module path index:" mpi))
+  (define name (module-path-index-resolve mpi #t))
   (define m (namespace->module ns name))
   (unless m (raise-unknown-module-error 'instantiate name))
   (cond
@@ -197,7 +190,7 @@
     (or (namespace->module-namespace ns name phase)
         (let ([c-ns (or (namespace-cross-phase-persistent-namespace ns)
                         ns)])
-          (namespace-module-instantiate! c-ns name 0 0)
+          (namespace-module-instantiate! c-ns mpi 0 0)
           (define m-ns (namespace->module-namespace c-ns name 0 #:create? #t))
           (hash-set! (namespace-module-instances ns) (cons name phase) m-ns)
           (for ([(req-phase mods) (in-hash (module-requires m))])
@@ -213,7 +206,10 @@
     (unless ((hash-ref (namespace-done-phases m-ns) phase +inf.0) . <= . min-phase)
       (for ([(req-phase mods) (in-hash (module-requires m))])
         (for ([mod (in-list mods)])
-          (namespace-module-instantiate! ns (module-path-index-resolve mod #t)
+          (namespace-module-instantiate! ns
+                                         (module-path-index-shift mod
+                                                                  (module-self m)
+                                                                  mpi)
                                          (phase+ phase req-phase)
                                          min-phase)))
       (define phase-shift phase) ; base phase = phase shift for instantiation
@@ -226,11 +222,11 @@
           (unless (definitions-instantiated? defs)
             (set-definitions-instantiated?! defs #t)
             (define p-ns (namespace->namespace-at-phase m-ns phase))
-            ((module-instantiate m) p-ns phase-shift phase-level (module-self m) bulk-binding-registry))))
+            ((module-instantiate m) p-ns phase-shift phase-level mpi bulk-binding-registry))))
       (hash-set! (namespace-done-phases m-ns) phase min-phase))]))
 
-(define (namespace-module-visit! ns name phase)
-  (namespace-module-instantiate! ns name phase 1))
+(define (namespace-module-visit! ns mpi phase)
+  (namespace-module-instantiate! ns mpi phase 1))
 
 (define (namespace->module-namespace ns name 0-phase
                                      #:install!-namespace [install!-ns #f]

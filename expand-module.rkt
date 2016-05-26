@@ -112,7 +112,7 @@
                                                  #:enclosing-requires+provides enclosing-r+p
                                                  enclosing-mod
                                                  keep-enclosing-scope-at-phase)
-     (namespace-module-visit! m-ns (module-path-index-resolve enclosing-self)
+     (namespace-module-visit! m-ns enclosing-self
                               keep-enclosing-scope-at-phase)])
    
    ;; All module bodies start at phase 0

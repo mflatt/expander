@@ -24,9 +24,7 @@
          reset-provides!
          add-provide!
          
-         attach-require-provide-properties
-         
-         module-shift-for-declare)
+         attach-require-provide-properties)
 
 ;; ----------------------------------------
 
@@ -231,21 +229,6 @@
                          [else binding])))))))
 
 ;; ----------------------------------------
-
-(define (module-shift-for-declare m name)
-  (if (eq? name (module-path-index-resolve (module-self m)))
-      m
-      (let ([new-self (make-self-module-path-index name)])
-        (remake-module m
-                       new-self
-                       (shift-requires-module-path-index
-                        (module-requires m)
-                        (module-self m)
-                        new-self)
-                       (shift-provides-module-path-index
-                        (module-provides m)
-                        (module-self m)
-                        new-self)))))
 
 (define (shift-requires-module-path-index requires from-mpi to-mpi)
   (cond

@@ -312,7 +312,7 @@
           (error "internal error: non-zero phase for a primitive"))
         (when rhs
           (error "internal error: cannot assign to a primitive:" s))
-        (namespace-module-instantiate! ns mod-name 0)
+        (namespace-module-instantiate! ns mpi 0)
         (define m-ns (namespace->module-namespace ns mod-name 0))
         ;; Expect each primitive to be bound:
         (module-binding-sym b)]
@@ -321,8 +321,8 @@
         (convert-def-sym (module-binding-sym b)
                          (compile-context-def-syms cctx))]
        [else
-        ;; Reference to a variable defined in another module; we'll look up
-        ;; the variable's box once at the top
+        ;; Reference to a variable defined in another module; register
+        ;; as a linklet import
         (define key (variable-use (module-use (module-binding-module b)
                                               (module-binding-phase b))
                                   (module-binding-sym b)))
@@ -777,10 +777,9 @@
                          #:cross-phase-persistent? (decl 'cross-phase-persistent?)))
 
   (declare-module! ns
-                   (module-shift-for-declare
-                    m
-                    (substitute-module-declare-name (decl 'root-module-name)
-                                                    (decl 'default-name)))
+                   m
+                   (substitute-module-declare-name (decl 'root-module-name)
+                                                   (decl 'default-name))
                    #:as-submodule? as-submodule?)
 
   (unless as-submodule?

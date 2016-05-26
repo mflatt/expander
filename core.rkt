@@ -17,6 +17,7 @@
          declare-core-module!
          
          core-module-name
+         core-mpi
          core-form-sym)
 
 ;; Accumulate all core bindings in `core-scope`, so we can
@@ -69,7 +70,8 @@
                        (namespace-set-variable! ns 0 sym val))]
                     [(1)
                      (for ([(sym proc) (in-hash core-forms)])
-                       (namespace-set-transformer! ns 0 sym (core-form proc)))])))))
+                       (namespace-set-transformer! ns 0 sym (core-form proc)))])))
+   core-module-name))
 
 ;; Helper for recognizing and dispatching on core forms:
 (define (core-form-sym s phase)

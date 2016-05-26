@@ -236,7 +236,7 @@
       (define shifted-base (module-path-index-shift base from-mpi to-mpi))
       (cond
        [(eq? shifted-base base) mpi]
-       [(shift-cache-ref (module-path-index-shift-cache base) mpi)]
+       [(shift-cache-ref (module-path-index-shift-cache shifted-base) mpi)]
        [else
         (define shifted-mpi
           (module-path-index (module-path-index-path mpi)

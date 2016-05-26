@@ -22,7 +22,7 @@
                                          main-ids)
                        #:namespace ns
                        #:primitive? #t)
-  (namespace-module-visit! ns core-module-name 0)
+  (namespace-module-visit! ns core-mpi 0)
   (eval (datum->syntax
          core-stx
          '(module #%kernel '#%core
@@ -73,4 +73,5 @@
                 (lambda (ns phase-shift phase-level self bulk-binding-registry)
                   (when (= 0 phase-level)
                     (for ([(sym val) (in-hash ht)])
-                      (namespace-set-variable! ns 0 sym val)))))))
+                      (namespace-set-variable! ns 0 sym val)))))
+   (module-path-index-resolve mpi)))
