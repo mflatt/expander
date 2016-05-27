@@ -1,6 +1,9 @@
 #lang racket/base
 (require '#%paramz
          racket/private/collect
+         (only-in "syntax.rkt" syntax?)
+         "checked-syntax.rkt"
+         "srcloc.rkt"
          "namespace.rkt"
          "eval.rkt"
          "module-path.rkt")

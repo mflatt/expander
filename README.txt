@@ -33,10 +33,10 @@ Roadmap to the main pieces:
 
  compile.rkt - from expanded to raw S-expression
 
- main.rkt - public interface to core for demo
+ main.rkt - expander; installs default module loader
 
  demo.rkt - exercises the expander and compiler
 
  run.rkt - starts a Racket replacement
 
- extract.rkt - extracts subset of compilation units
+ extract.rkt - extracts subset of compilation units (via "run.rkt")

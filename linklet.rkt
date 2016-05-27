@@ -23,9 +23,11 @@
 ;; submodule.
 
 (provide compile-linklet             ; result is serializable
-         compiled-linklet-variables
          eval-linklet                ; serializable to instantiable
          instantiate-linklet         ; fills in an instance given argument instances
+
+         compiled-linklet-import-variables
+         compiled-linklet-export-variables
 
          make-instance
          instance-name               ; a "name" can be any data
@@ -164,9 +166,18 @@
             (desugar body))
         (void)))))
 
-;; Only `#:export`-listed names count as "variables"
-(define (extract-variables-from-expression c)
-  ;; position 4 is after `#:exports`
+;; -> list of list of symbols
+(define (extract-import-variables-from-expression c)
+  ;; position 2 is after `#:import`
+  (for/list ([is (in-list (list-ref c 2))])
+    (for/list ([i (in-list (cdr is))])
+      (if (symbol? i)
+          i
+          (car i)))))
+
+;; -> list of symbols
+(define (extract-export-variables-from-expression c)
+  ;; position 4 is after `#:export`
   (for/list ([e (in-list (list-ref c 4))])
     (if (symbol? e)
         e
@@ -190,14 +201,8 @@
       ;; Use a vector to list the exported variables
       ;; with the compiled bytecode
       (vector (compile plain-c)
-              (extract-variables-from-expression c)))]))
-
-;; Extract variable list from a compiled linklet:
-(define (compiled-linklet-variables linklet)
-  (if (vector? linklet)
-      (vector-ref linklet 1)
-      ;; Assumed previous "compiled" to source
-      (extract-variables-from-expression linklet)))
+              (extract-import-variables-from-expression c)
+              (extract-export-variables-from-expression c)))]))
 
 ;; Convert serializable form to instantitable form
 (define (eval-linklet linklet)
@@ -213,6 +218,20 @@
 (define (instantiate-linklet linklet import-instances [target-instance (make-instance 'anonymous)])
   (apply linklet target-instance import-instances)
   target-instance)
+
+;; ----------------------------------------
+
+(define (compiled-linklet-import-variables linklet)
+  (if (vector? linklet)
+      (vector-ref linklet 1)
+      ;; Assumed previous "compiled" to source
+      (extract-import-variables-from-expression linklet)))
+
+(define (compiled-linklet-export-variables linklet)
+  (if (vector? linklet)
+      (vector-ref linklet 2)
+      ;; Assumed previous "compiled" to source
+      (extract-export-variables-from-expression linklet)))
 
 ;; ----------------------------------------
 

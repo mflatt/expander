@@ -15,21 +15,24 @@
          "runtime-primitives.rkt"
          "linklet.rkt"
          "status.rkt"
-         "boot.rkt")
+         "extract.rkt")
 
+(define extract? #f)
 (define cache-dir #f)
 (define cache-read-only? #f)
 (define cache-save-only #f)
 (define cache-skip-first? #f)
 (define time-expand? #f)
-(define boot-module 'racket)
+(define boot-module (path->complete-path "main.rkt"))
 (command-line
  #:once-each
+ [("-x" "--extract") "Extract bootstrap linklets"
+  (set! extract? #t)]
  [("-c" "--cache") dir "Save and load from <dir>"
   (set! cache-dir (path->complete-path dir))]
  [("-r" "--read-only") "Use cache in read-only mode"
   (set! cache-read-only? #t)]
- [("-x" "--cache-only") file "Cache only for sources listed in <file>"
+ [("-y" "--cache-only") file "Cache only for sources listed in <file>"
   (set! cache-save-only (call-with-input-file* file read))]
  [("-i" "--skip-initial") "Don't use cache for the initial load"
   (set! cache-skip-first? #t)]
@@ -43,7 +46,7 @@
  [("-l") lib "Load specified library"
   (set! boot-module (string->symbol lib))])
 
-(define cache (and cache-dir (make-cache cache-dir)))
+(define cache (make-cache cache-dir))
 
 ;; The `#lang` reader doesn't use the reimplemented module system,
 ;; so make sure the reader is loaded for `racket/base`:
@@ -78,7 +81,8 @@
                          (not cache-skip-first?)
                          (get-cached-compiled cache path
                                               (lambda ()
-                                                (log-status "cached ~s" path))))
+                                                (when cache-dir
+                                                  (log-status "cached ~s" path)))))
                     => eval]
                    [else
                     (log-status "compile ~s" path)
@@ -108,3 +112,6 @@
                        [else (eval c)]))]))))
 
 (namespace-require boot-module)
+
+(when extract?
+  (extract boot-module cache))

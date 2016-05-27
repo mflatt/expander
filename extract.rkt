@@ -1,5 +1,6 @@
 #lang racket/base
 (require racket/cmdline
+         racket/format
          "set.rkt"
          "phase.rkt"
          "run-cache.rkt"
@@ -11,30 +12,17 @@
          "status.rkt"
          (prefix-in new: "module-path.rkt"))
 
-;; Collect all of the linklets need to run phase 0 of the specified
-;; module while keeping the module's variables that are provided from
-;; phase 0. In other words, keep enogh to produce any value or affect
-;; that `dynamic-require` would produce.
+;; The `extract` function collects all of the linklets need to run
+;; phase 0 of the specified module while keeping the module's
+;; variables that are provided from phase 0. In other words, keep
+;; enogh to produce any value or affect that `dynamic-require` would
+;; produce.
+(provide extract)
 
-(define start-mod-path "main.rkt")
-
-(define cache-dir
-  (command-line
-   #:once-any
-   [("-l") module-path "Extract starting with <module-path>"
-    (set! start-mod-path (string->symbol module-path))]
-   #:args
-   (cache-dir)
-   cache-dir))
-
-;; All relevant files must have been built and cached via "boot.rkt"
-(define cache (make-cache cache-dir))
-
-;; We load each module's declation and phase-specific
-;; linklets once
+;; We location each module's declation and phase-specific
+;; linklets once:
 (struct compiled-module (declaration        ; linklet instance
                          phase-to-linklet)) ; phase -> linklet
-(define compiled-modules (make-hash))
 
 ;; A "link" represent a linklet reference, which is a name
 ;; (corersponds to a `resolved-module-path-name` result) plus a phase
@@ -47,32 +35,70 @@
                       imports          ; links for import "arguments"
                       re-exports       ; links for variables re-exported
                       variables        ; variables defined in the implementation; for detecting re-exports
+                      in-variables     ; for each import, variables used from the import
                       side-effects?))  ; whether the implementaiton has side effects other than variable definition
 
-;; All linklets that find we based on module `requires` from the
-;; starting module
-(define seen (make-hash)) ; link -> linklet-info
+(define (extract start-mod-path cache)
+  ;; Located modules:
+  (define compiled-modules (make-hash))
 
-;; The subset of `seen` that have that non-empty linklets
-(define linklets (make-hash)) ; link -> linklet-info
-;; The same linklets are referenced this list, but kept in reverse
-;; order of instantiation:
-(define linklets-in-order null)
+  ;; All linklets that find we based on module `requires` from the
+  ;; starting module
+  (define seen (make-hash)) ; link -> linklet-info
 
-;; Which linklets (as represented by a "link") are actually needed to run
-;; the code, which includes anything referenced by the starting
-;; point's exports and any imported linklet that has a side effect:
-(define needed (make-hash)) ; link -> value for reason
+  ;; The subset of `seen` that have that non-empty linklets
+  (define linklets (make-hash)) ; link -> linklet-info
+  ;; The same linklets are referenced this list, but kept in reverse
+  ;; order of instantiation:
+  (define linklets-in-order (box null))
 
-;; Use the host Racket's module name resolver to normalize the
-;; starting module path:
-(define start-name
-  (resolved-module-path-name
-   (module-path-index-resolve
-    (module-path-index-join start-mod-path #f))))
+  ;; Which linklets (as represented by a "link") are actually needed to run
+  ;; the code, which includes anything referenced by the starting
+  ;; point's exports and any imported linklet that has a side effect:
+  (define needed (make-hash)) ; link -> value for reason
 
-;; We always start at phase 0
-(define start-link (link start-name 0))
+  ;; Use the host Racket's module name resolver to normalize the
+  ;; starting module path:
+  (define start-name
+    (resolved-module-path-name
+     (module-path-index-resolve
+      (module-path-index-join start-mod-path #f))))
+
+  ;; We always start at phase 0
+  (define start-link (link start-name 0))
+  
+  ;; Start with the given link, and follow dependencies
+  (get-linklets! start-link
+                 #:cache cache
+                 #:compiled-modules compiled-modules
+                 #:seen seen
+                 #:linklets linklets
+                 #:linklets-in-order linklets-in-order)
+  
+  ;; Compute which linklets are actually used as imports
+  (needed! start-link 'start
+           #:seen seen
+           #:needed needed)
+  
+  ;; We also want the starting name's re-exports:
+  (for ([ex-lnk (in-list (linklet-info-re-exports (hash-ref seen start-link)))])
+    (needed! ex-lnk `(re-export ,start-link)
+             #:seen seen
+             #:needed needed))
+
+  ;; Anything that shows up in `codes` with a side effect also counts
+  (for ([(lnk li) (in-hash linklets)])
+    (when (linklet-info-side-effects? li)
+      (needed! lnk 'side-effect
+               #:seen seen
+               #:needed needed)))
+  
+  (report! #:compiled-modules compiled-modules
+           #:linklets linklets
+           #:linklets-in-order linklets-in-order
+           #:needed needed))
+
+;; ----------------------------------------
 
 ;; Convert a module path index implemented by our compiler to
 ;; a module path index in the host Racket:
@@ -96,7 +122,9 @@
 
 ;; Get (possibly already-loaded) representation of a compiled module
 ;; from the cache
-(define (get-compiled-module name root-name)
+(define (get-compiled-module name root-name
+                             #:compiled-modules compiled-modules
+                             #:cache cache)
   (or (hash-ref compiled-modules name #f)
       (let ([local-name name])
                                         ;: Seeing this module for the first time
@@ -120,158 +148,166 @@
         (hash-set! compiled-modules name comp-mod)
         comp-mod)))
 
-(define (get-linklets! lnk)
-  (define name (link-name lnk))
-  (define phase (link-phase lnk))
-  (define root-name (if (pair? name) (car name) name)) ; strip away submodule path
-  (unless (or (symbol? root-name) ; skip pre-defined modules
-              (hash-ref seen lnk #f))
-    ;; Seeing this module+phase combination for the first time
-    (log-status "Getting ~s at ~s" name phase)
-    (define comp-mod (get-compiled-module name root-name))
+(define (get-linklets! lnk
+                       #:cache cache
+                       #:compiled-modules compiled-modules
+                       #:seen seen
+                       #:linklets linklets
+                       #:linklets-in-order linklets-in-order)
+  (let get-linklets! ([lnk lnk] [first? #t])
+    (define name (link-name lnk))
+    (define phase (link-phase lnk))
+    (define root-name (if (pair? name) (car name) name)) ; strip away submodule path
+    (unless (or (symbol? root-name) ; skip pre-defined modules
+                (hash-ref seen lnk #f))
+      ;; Seeing this module+phase combination for the first time
+      (log-status "Getting ~s at ~s" name phase)
+      (define comp-mod (get-compiled-module name root-name
+                                            #:compiled-modules compiled-modules
+                                            #:cache cache))
 
-    ;; Extract the relevant linklet (i.e., at a given phase)
-    ;; from the compiled module
-    (define linklet
-      (hash-ref (compiled-module-phase-to-linklet comp-mod)
-                (encode-linklet-directory-key phase)
-                #f))
+      ;; Extract the relevant linklet (i.e., at a given phase)
+      ;; from the compiled module
+      (define linklet
+        (hash-ref (compiled-module-phase-to-linklet comp-mod)
+                  (encode-linklet-directory-key phase)
+                  #f))
 
-    ;; Extract other metadata at the module level:
-    (define reqs (instance-variable-value (compiled-module-declaration comp-mod) 'requires))
-    (define provs (instance-variable-value (compiled-module-declaration comp-mod) 'provides))
+      ;; Extract other metadata at the module level:
+      (define reqs (instance-variable-value (compiled-module-declaration comp-mod) 'requires))
+      (define provs (instance-variable-value (compiled-module-declaration comp-mod) 'provides))
 
-    ;; Extract phase-specific (i.e., compiliation-unit-specific) info on variables:
-    (define vars (if linklet
-                     (list->set (compiled-linklet-variables linklet))
-                     null))
-    ;; Extract phase-specific (i.e., compiliation-unit-specific) info on side effects:
-    (define side-effects? (and
-                           (member phase (instance-variable-value (compiled-module-declaration comp-mod)
-                                                                  'side-effects))
-                           #t))
-    ;; Extract phase-specific mapping of the linklet arguments to modules
-    (define uses
-      (hash-ref (instance-variable-value (compiled-module-declaration comp-mod) 'phase-to-link-modules)
-                phase
-                null))
-   
-    (define dependencies
-      (for*/list ([(req-phase reqs) (in-hash reqs)]
-                  [req (in-list reqs)])
-        ;; we want whatever required module will have at this module's `phase`
-        (define at-phase (phase- phase req-phase))
-        (link (module-path-index->module-name req name)
-              at-phase)))
+      ;; Extract phase-specific (i.e., linklet-specific) info on variables:
+      (define vars (if linklet
+                       (list->set (compiled-linklet-export-variables linklet))
+                       null))
+      ;; Extract phase-specific info on imports (for reporting bootstrap issues):
+      (define in-vars (if linklet
+                          ;; Skip over deserialize, declaration, and instance:
+                          (list-tail (compiled-linklet-import-variables linklet) 3)
+                          null))
+      ;; Extract phase-specific info on side effects:
+      (define side-effects? (and
+                             (member phase (instance-variable-value (compiled-module-declaration comp-mod)
+                                                                    'side-effects))
+                             #t))
+      ;; Extract phase-specific mapping of the linklet arguments to modules
+      (define uses
+        (hash-ref (instance-variable-value (compiled-module-declaration comp-mod) 'phase-to-link-modules)
+                  phase
+                  null))
+      
+      (define dependencies
+        (for*/list ([(req-phase reqs) (in-hash reqs)]
+                    [req (in-list reqs)])
+          ;; we want whatever required module will have at this module's `phase`
+          (define at-phase (phase- phase req-phase))
+          (link (module-path-index->module-name req name)
+                at-phase)))
 
-    ;; Get linklets implied by the module's `require` (although some
-    ;; of those may turn out to be dead code)
-    (for ([dependency (in-list dependencies)])
-      (get-linklets! dependency))
-    
-    ;; Imports are the subset of the transitive closure of `require`
-    ;; that are used by this linklet's implementation
-    (define imports
-      (for/list ([mu (in-list uses)])
-        (link (module-path-index->module-name (module-use-module mu) name)
-              (module-use-phase mu))))
-    (when (and (pair? imports)
-               (not linklet))
-      (error "no implementation, but uses arguments?" name phase))
+      ;; Get linklets implied by the module's `require` (although some
+      ;; of those may turn out to be dead code)
+      (for ([dependency (in-list dependencies)])
+        (get-linklets! dependency #f))
+      
+      ;; Imports are the subset of the transitive closure of `require`
+      ;; that are used by this linklet's implementation
+      (define imports
+        (for/list ([mu (in-list uses)])
+          (link (module-path-index->module-name (module-use-module mu) name)
+                (module-use-phase mu))))
+      (when (and (pair? imports)
+                 (not linklet))
+        (error "no implementation, but uses arguments?" name phase))
 
-    ;; Re-exports are the subset of the transitive closure of
-    ;; `require` that have variables that are re-exported from this
-    ;; linklet; relevant only for the starting point
-    (define re-exports
-      (and (equal? lnk start-link)
-           (set->list
-            (for*/set ([(sym binding) (in-hash (hash-ref provs phase #hasheq()))]
-                       [l (in-value
-                           (link (module-path-index->module-name (module-binding-module binding) name)
-                                 (module-binding-phase binding)))]
-                       [re-li (in-value (hash-ref linklets l #f))]
-                       #:when (and re-li
-                                   (set-member? (linklet-info-variables re-li) (module-binding-sym binding))))
-              l))))
+      ;; Re-exports are the subset of the transitive closure of
+      ;; `require` that have variables that are re-exported from this
+      ;; linklet; relevant only for the starting point
+      (define re-exports
+        (and first?
+             (set->list
+              (for*/set ([(sym binding) (in-hash (hash-ref provs phase #hasheq()))]
+                         [l (in-value
+                             (link (module-path-index->module-name (module-binding-module binding) name)
+                                   (module-binding-phase binding)))]
+                         [re-li (in-value (hash-ref linklets l #f))]
+                         #:when (and re-li
+                                     (set-member? (linklet-info-variables re-li) (module-binding-sym binding))))
+                l))))
 
-    (define li (linklet-info linklet imports re-exports vars side-effects?))
+      (define li (linklet-info linklet imports re-exports vars in-vars side-effects?))
 
-    (hash-set! seen lnk li)
-    
-    (when linklet
-      (hash-set! linklets lnk li)
-      (set! linklets-in-order (cons lnk linklets-in-order)))))
-
-;; Compute which linklets are actually used as imports
-(define (needed! lnk reason)
-  (unless (hash-ref needed lnk #f)
-    (define li (hash-ref seen lnk #f))
-    (when li
-      (hash-set! needed lnk reason)
-      (for ([in-lnk (in-list (linklet-info-imports li))])
-        (needed! in-lnk lnk)))))
+      (hash-set! seen lnk li)
+      
+      (when linklet
+        (hash-set! linklets lnk li)
+        (set-box! linklets-in-order (cons lnk (unbox linklets-in-order)))))))
 
 ;; ----------------------------------------
-;; Gather needed links
+;; Compute which linklets are actually used as imports
 
-;; Start with the given link, and follow dependencies
-(get-linklets! start-link)
-(needed! start-link 'start)
-
-;; We also want the starting name's re-exports:
-(for ([ex-lnk (in-list (linklet-info-re-exports (hash-ref seen start-link)))])
-  (needed! ex-lnk `(re-export ,start-link)))
-
-;; Anything that shows up in `codes` with a side effect also counts
-(for ([(lnk li) (in-hash linklets)])
-  (when (linklet-info-side-effects? li)
-    (needed! lnk 'side-effect)))
+(define (needed! lnk reason
+                 #:seen seen
+                 #:needed needed)
+  (let needed! ([lnk lnk] [reason reason])
+    (unless (hash-ref needed lnk #f)
+      (define li (hash-ref seen lnk #f))
+      (when li
+        (hash-set! needed lnk reason)
+        (for ([in-lnk (in-list (linklet-info-imports li))])
+          (needed! in-lnk lnk))))))
 
 ;; ----------------------------------------
 ;; Report the results
 
-(log-status "Traversed ~s modules" (hash-count compiled-modules))
-(log-status "Got ~s relevant linklets" (hash-count linklets))
-(log-status "Need ~s of those linklets" (hash-count needed))
+(define (report! #:compiled-modules compiled-modules
+                 #:linklets linklets
+                 #:linklets-in-order linklets-in-order
+                 #:needed needed)
 
-(define code-bytes
-  (let ([o (open-output-bytes)])
-    (for ([li (in-list linklets-in-order)])
-      (write (linklet-info-linklet (hash-ref linklets li)) o))
-    (get-output-bytes o)))
+  (log-status "Traversed ~s modules" (hash-count compiled-modules))
+  (log-status "Got ~s relevant linklets" (hash-count linklets))
+  (log-status "Need ~s of those linklets" (hash-count needed))
 
-(log-status "Code is ~s bytes" (bytes-length code-bytes))
-(log-status "Reading all code...")
-(time (let ([i (open-input-bytes code-bytes)])
-        (parameterize ([read-accept-compiled #t])
-          (let loop ()
-            (unless (eof-object? (read i))
-              (loop))))))
+  (define code-bytes
+    (let ([o (open-output-bytes)])
+      (for ([li (in-list (unbox linklets-in-order))])
+        (write (linklet-info-linklet (hash-ref linklets li)) o))
+      (get-output-bytes o)))
 
-;; Check whether any nneded linklet needs a an instance of a
-;; pre-defined instance that is not part of the runtime system:
-(define complained? #f)
-(for ([lnk (in-list linklets-in-order)])
-  (define needed-reason (hash-ref needed lnk #f))
-  (when needed-reason
-    (define li (hash-ref linklets lnk))
-    (define complained-this? #f)
-    (for ([in-lnk (in-list (linklet-info-imports li))])
-      (define p (link-name in-lnk))
-      (when (and (symbol? p)
-                 (not (member p runtime-instances))
-                 (hash-ref needed in-lnk #t))
-        (unless complained?
-          (log-status "~a\n~a"
-                     "Unfortunately, some linklets depend on pre-defined host instances"
-                     "that are not part of the runtime system:")
-          (set! complained? #t))
-        (unless complained-this?
-          (log-status " - ~a at ~s" (link-name lnk) (link-phase lnk))
-          (set! complained-this? #t))
-        (log-status "   needs ~s" p)))
-    (when complained-this?
-      (log-status "   needed by ~s" needed-reason))))
+  (log-status "Code is ~s bytes" (bytes-length code-bytes))
+  (log-status "Reading all code...")
+  (time (let ([i (open-input-bytes code-bytes)])
+          (parameterize ([read-accept-compiled #t])
+            (let loop ()
+              (unless (eof-object? (read i))
+                (loop))))))
 
-(when complained?
-  (exit 1))
+  ;; Check whether any nneded linklet needs a an instance of a
+  ;; pre-defined instance that is not part of the runtime system:
+  (define complained? #f)
+  (for ([lnk (in-list (unbox linklets-in-order))])
+    (define needed-reason (hash-ref needed lnk #f))
+    (when needed-reason
+      (define li (hash-ref linklets lnk))
+      (define complained-this? #f)
+      (for ([in-lnk (in-list (linklet-info-imports li))]
+            [in-vars (in-list (linklet-info-in-variables li))])
+        (define p (link-name in-lnk))
+        (when (and (symbol? p)
+                   (not (member p runtime-instances))
+                   (hash-ref needed in-lnk #t))
+          (unless complained?
+            (log-status "~a\n~a"
+                        "Unfortunately, some linklets depend on pre-defined host instances"
+                        "that are not part of the runtime system:")
+            (set! complained? #t))
+          (unless complained-this?
+            (log-status " - ~a at ~s" (link-name lnk) (link-phase lnk))
+            (set! complained-this? #t))
+          (log-status "   needs ~s: ~a" p (apply ~a #:separator " " in-vars))))
+      (when complained-this?
+        (log-status "   needed by ~s" needed-reason))))
+
+  (when complained?
+    (exit 1)))

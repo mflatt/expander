@@ -9,7 +9,8 @@
          "runtime-primitives.rkt"
          "boot.rkt"
          (only-in "syntax.rkt"
-                  syntax?)
+                  syntax?
+                  identifier?)
          "checked-syntax.rkt")
 
 (provide boot
