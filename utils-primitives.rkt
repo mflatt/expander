@@ -1,12 +1,13 @@
 #lang racket/base
+(require racket/private/config)
 
 (provide utils-primitives)
 
 ;; These functions are a small step away from `#%kernel`, and they
 ;; have traditionally been available as the `#%utils` module. Don't
 ;; use `#%utils` in `racket/base`, since that's where the actual
-;; implementation is, turns into a "primitive" module using this
-;; table in a bootstrapped load.
+;; implementation is. We turn the functions into a "primitive" module
+;; using this table in a bootstrapped load.
 
 (define utils-primitives
   (hasheq 'path-string? path-string?
@@ -25,5 +26,8 @@
           'collection-file-path collection-file-path
           'find-library-collection-paths find-library-collection-paths
           'find-library-collection-links find-library-collection-links
-         
-          'load/use-compiled load/use-compiled))
+          
+          'load/use-compiled load/use-compiled
+          
+          'find-main-config find-main-config
+          'find-main-collects find-main-collects))
