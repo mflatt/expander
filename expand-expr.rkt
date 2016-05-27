@@ -337,7 +337,8 @@
  (lambda (s ctx)
    (define m (match-syntax s '(set! id rhs)))
    (define id (m 'id))
-   (define binding (resolve+shift id (expand-context-phase ctx)))
+   (define binding (resolve+shift id (expand-context-phase ctx)
+                                  #:immediate? #t))
    (define t (and binding (lookup binding ctx s)))
    (cond
     [(or (variable? t)

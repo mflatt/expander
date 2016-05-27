@@ -8,13 +8,19 @@
 (namespace-require ''#%kernel demo-ns)
 (namespace-require '(for-syntax '#%kernel) demo-ns)
 
+(define check-reexpand? #f)
+
 (define (expand-expression e #:namespace [ns demo-ns])
   (expand (namespace-syntax-introduce (datum->syntax #f e) ns)
           ns))
 
 (define (compile+eval-expression e #:namespace [ns demo-ns])
   (define exp-e (expand-expression e #:namespace ns))
-  (define c (compile exp-e ns (lambda (exp-e ns) exp-e)))
+  (define c (compile exp-e ns (lambda (exp-e ns)
+                                (if check-reexpand?
+                                    (parameterize ([current-output-port (open-output-bytes)])
+                                      (expand exp-e ns))
+                                    exp-e))))
   (values exp-e
           (eval c ns)))
 
