@@ -2,7 +2,7 @@
 (require racket/cmdline
          "set.rkt"
          "phase.rkt"
-         "cache-for-boot.rkt"
+         "run-cache.rkt"
          "linklet.rkt"
          "serialize.rkt"
          "module-use.rkt"

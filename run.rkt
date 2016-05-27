@@ -11,7 +11,7 @@
          (only-in racket/base
                   [dynamic-require base:dynamic-require])
          "kernel.rkt"
-         "cache-for-boot.rkt"
+         "run-cache.rkt"
          "runtime-primitives.rkt"
          "linklet.rkt"
          "status.rkt"
