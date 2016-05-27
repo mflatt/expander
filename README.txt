@@ -37,6 +37,6 @@ Roadmap to the main pieces:
 
  demo.rkt - exercises the expander and compiler
 
- boot.rkt - starts a Racket replacement
+ run.rkt - starts a Racket replacement
 
  extract.rkt - extracts subset of compilation units

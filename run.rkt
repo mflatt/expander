@@ -25,7 +25,7 @@
 (define boot-module 'racket)
 (command-line
  #:once-each
- [("-c" "--cache") dir "Save and load fomr <dir>"
+ [("-c" "--cache") dir "Save and load from <dir>"
   (set! cache-dir (path->complete-path dir))]
  [("-r" "--read-only") "Use cache in read-only mode"
   (set! cache-read-only? #t)]
