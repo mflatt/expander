@@ -188,9 +188,10 @@
   (check who exact-nonnegative-integer? n)
   (define ctx (get-current-expand-context who))
   (define lifts (expand-context-lifts ctx))
+  (define counter (expand-context-counter ctx))
   (define ids (for/list ([i (in-range n)])
-                ;; FIXME: use deterministic counter
-                (define name (gensym 'lifted))
+                (set-box! counter (add1 (unbox counter)))
+                (define name (string->unreadable-symbol (format "lifted/~a" (unbox counter))))
                 (add-scope (datum->syntax #f name) (new-scope 'macro))))
   (map (lambda (id) (flip-introduction-scopes id ctx))
        ;; returns converted ids:

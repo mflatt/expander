@@ -10,7 +10,8 @@
          "bulk-binding.rkt"
          "module-path.rkt"
          "module-use.rkt"
-         "linklet.rkt")
+         "linklet.rkt"
+         "built-in-symbol.rkt")
 
 (provide make-module-path-index-table
          add-module-path-index!
@@ -25,7 +26,7 @@
          
          serialize-module-uses)
 
-(define mpi-vector-id (gensym 'mpi-vector))
+(define mpi-vector-id (make-built-in-symbol! 'mpi-vector))
 
 (define (make-module-path-index-table)
   (make-hasheq)) ; module path index -> pos
@@ -409,7 +410,8 @@
 (define (add! sym val)
   (set-instance-variable-value! deserialize-instance sym val)
   (set! deserialize-imports
-        (cons sym deserialize-imports)))
+        (cons sym deserialize-imports))
+  (register-built-in-symbol! sym))
 (add! 'deserialize-module-path-index deserialize-module-path-index)
 (add! 'deserialize-syntax deserialize-syntax)
 (add! 'deserialize-scope deserialize-scope)

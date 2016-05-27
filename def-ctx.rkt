@@ -55,7 +55,7 @@
                                                               ctx))
                        (add-intdef-scopes pre-id intdef #:always? #t)))
   (define syms (for/list ([intdef-id (in-list intdef-ids)])
-                 (add-local-binding! intdef-id phase
+                 (add-local-binding! intdef-id phase (expand-context-counter ctx)
                                      #:frame-id (internal-definition-context-frame-id intdef))))
   (define vals
     (cond

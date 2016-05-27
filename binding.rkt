@@ -92,8 +92,9 @@
    [else #f]))
 
 ;; Helper for registering a local binding in a set of scopes:
-(define (add-local-binding! id phase #:frame-id [frame-id #f])
-  (define key (gensym (format "~a/" (syntax-e id))))
+(define (add-local-binding! id phase counter #:frame-id [frame-id #f])
+  (set-box! counter (add1 (unbox counter)))
+  (define key (string->uninterned-symbol (format "~a_~a" (syntax-e id) (unbox counter))))
   (add-binding! id (make-local-binding key #:frame-id frame-id) phase)
   key)
 

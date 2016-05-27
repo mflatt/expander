@@ -283,8 +283,9 @@
          (define m (match-syntax exp-body '(define-values (id ...) rhs)))
          (define ids (remove-use-site-scopes (m 'id) body-ctx))
          (define new-dups (check-no-duplicate-ids ids phase exp-body dups))
+         (define counter (expand-context-counter ctx))
          (define keys (for/list ([id (in-list ids)])
-                        (add-local-binding! id phase #:frame-id frame-id)))
+                        (add-local-binding! id phase counter #:frame-id frame-id)))
          (define extended-env (for/fold ([env (expand-context-env body-ctx)]) ([key (in-list keys)])
                                 (env-extend env key variable)))
          (loop (struct-copy expand-context body-ctx
@@ -316,8 +317,9 @@
          (define m (match-syntax exp-body '(define-syntaxes (id ...) rhs)))
          (define ids (remove-use-site-scopes (m 'id) body-ctx))
          (define new-dups (check-no-duplicate-ids ids phase exp-body dups))
+         (define counter (expand-context-counter ctx))
          (define keys (for/list ([id (in-list ids)])
-                        (add-local-binding! id phase #:frame-id frame-id)))
+                        (add-local-binding! id phase counter #:frame-id frame-id)))
          (define vals (eval-for-syntaxes-binding (m 'rhs) ids ctx))
          (define extended-env (for/fold ([env (expand-context-env body-ctx)]) ([key (in-list keys)]
                                                                                [val (in-list vals)]
@@ -481,7 +483,7 @@
     (define capture-ctx (struct-copy expand-context ctx
                                      [lifts (make-lift-context
                                              (if local?
-                                                 (make-local-lift lift-env)
+                                                 (make-local-lift lift-env (expand-context-counter ctx))
                                                  (make-toplevel-lift)))]
                                      [lift-envs (if local?
                                                     (cons lift-env

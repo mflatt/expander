@@ -26,8 +26,9 @@
   (check-no-duplicate-ids ids phase s)
   ;; Bind each argument and generate a corresponding key for the
   ;; expand-time environment:
+  (define counter (expand-context-counter ctx))
   (define keys (for/list ([id (in-list ids)])
-                 (add-local-binding! id phase)))
+                 (add-local-binding! id phase counter)))
   (define body-env (for*/fold ([env (expand-context-env ctx)]) ([key (in-list keys)])
                      (env-extend env key variable)))
   ;; Expand the function body:
@@ -120,12 +121,13 @@
    (check-no-duplicate-ids (list trans-idss val-idss) phase s)
    ;; Bind each left-hand identifier and generate a corresponding key
    ;; fo the expand-time environment:
+   (define counter (expand-context-counter ctx))
    (define trans-keyss (for/list ([ids (in-list trans-idss)])
                          (for/list ([id (in-list ids)])
-                           (add-local-binding! id phase))))
+                           (add-local-binding! id phase counter))))
    (define val-keyss (for/list ([ids (in-list val-idss)])
                        (for/list ([id (in-list ids)])
-                         (add-local-binding! id phase #:frame-id frame-id))))
+                         (add-local-binding! id phase counter #:frame-id frame-id))))
    ;; Evaluate compile-time expressions (if any):
    (define trans-valss (for/list ([rhs (in-list (if syntaxes? (m 'trans-rhs) '()))]
                                   [ids (in-list trans-idss)])

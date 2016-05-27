@@ -796,7 +796,7 @@
                (no-extra-scopes? id module-scopes phase))
           sym
           (let loop ([pos 1])
-            (define s (string->symbol (format "~a~a" sym pos)))
+            (define s (string->unreadable-symbol (format "~a.~a" sym pos)))
             (if (hash-ref defined-syms-at-phase s #f)
                 (loop (add1 pos))
                 s))))

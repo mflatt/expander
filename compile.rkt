@@ -15,6 +15,7 @@
          "serialize.rkt"
          "linklet.rkt"
          "side-effect.rkt"
+         "built-in-symbol.rkt"
          (only-in racket/base
                   [current-namespace base:current-namespace]
                   [compile base:compile]))
@@ -34,12 +35,15 @@
                          self        ; if non-#f module path index, compiling the body of a module
                          compile-time-for-self ; for allowing forward references across `begin-for-syntax`
                          root-module-name ; set to a symbol if `self` is non-#f
-                         top-init    ; accumulates top-level initialization
-                         def-syms))  ; selects names that don't collide with primitives: sym -> sym 
+                         top-init))  ; accumulates top-level initialization
 
-(struct top-init (module-path-indexes ; module-path-index -> pos
-                  variable-uses      ; variable-use -> sym
-                  syntax-literals    ; box of list syntax-literal
+(struct top-init (module-path-indexes        ; module-path-index -> linklet import position
+                  binding-sym-to-define-sym  ; sym -> sym; avoid conflicts with primitives
+                  [binding-syms-in-order #:mutable] ; list of sym
+                  require-var-to-import-sym  ; variable-use -> sym
+                  [require-vars-in-order #:mutable] ; list of variable-use
+                  define-and-import-syms     ; hash of sym, to select distinct symbols
+                  syntax-literals            ; box of list of syntax-literal
                   [num-syntax-literals #:mutable]))
 
 (struct variable-use (module-use sym)
@@ -57,18 +61,17 @@
                    self
                    compile-time-for-self
                    root-module-name
-                   #f
-                   (make-hasheq)))
+                   #f))
 
-(define phase-shift-id (gensym 'phase))
-(define ns-id (gensym 'namespace))
-(define self-id (gensym 'self))
-(define syntax-literals-id (gensym 'syntax-literals))
-(define get-syntax-literal!-id (gensym 'get-syntax-literal!))
-(define bulk-binding-registry-id (gensym 'bulk-binding-registry))
-(define deserialized-syntax-id (gensym 'deserialized-syntax))
-(define set-transformer!-id (gensym 'set-transformer!))
-(define body-thunk-id (gensym 'body-thunk))
+(define phase-shift-id (make-built-in-symbol! 'phase))
+(define ns-id (make-built-in-symbol! 'namespace))
+(define self-id (make-built-in-symbol! 'self))
+(define syntax-literals-id (make-built-in-symbol! 'syntax-literals))
+(define get-syntax-literal!-id (make-built-in-symbol! 'get-syntax-literal!))
+(define bulk-binding-registry-id (make-built-in-symbol! 'bulk-binding-registry))
+(define deserialized-syntax-id (make-built-in-symbol! 'deserialized-syntax))
+(define set-transformer!-id (make-built-in-symbol! 'set-transformer!))
+(define body-thunk-id (make-built-in-symbol! 'body-thunk))
 
 ;; ----------------------------------------
 
@@ -319,19 +322,24 @@
         (module-binding-sym b)]
        [(eq? mpi (compile-context-self cctx))
         ;; Direct reference to a variable defined in the same module:
-        (convert-def-sym (module-binding-sym b)
-                         (compile-context-def-syms cctx))]
+        (define top-init (compile-context-top-init cctx))
+        (hash-ref (top-init-binding-sym-to-define-sym top-init)
+                  (module-binding-sym b))]
        [else
         ;; Reference to a variable defined in another module; register
         ;; as a linklet import
         (define key (variable-use (module-use (module-binding-module b)
                                               (module-binding-phase b))
                                   (module-binding-sym b)))
-        (define variable-uses (top-init-variable-uses
-                               (compile-context-top-init cctx)))
+        (define top-init (compile-context-top-init cctx))
+        (define variable-uses (top-init-require-var-to-import-sym top-init))
         (or (hash-ref variable-uses key #f)
-            (let ([sym (gensym (format "~a+" (variable-use-sym key)))])
+            (let ([sym (select-fresh (variable-use-sym key) top-init)])
               (hash-set! variable-uses key sym)
+              (set-top-init-require-vars-in-order! top-init
+                                                   (cons key
+                                                         (top-init-require-vars-in-order top-init)))
+              (hash-set! (top-init-define-and-import-syms top-init) sym #t)
               sym))])]
      [else
       (error "not a reference to a module or local binding:" s)]))
@@ -374,13 +382,27 @@
   
   (define cross-phase-persistent? #f)
   
-  (define phase-to-def-syms (make-hasheqv))
-  (define (find-or-create-def-syms! phase)
-    (or (hash-ref phase-to-def-syms phase #f)
-        (let ([def-syms (make-hasheq)])
-          (hash-set! phase-to-def-syms phase def-syms)
-          def-syms)))
-  
+  ;; Select non-conflicting symbols for definitions, first, in the
+  ;; hope that we can just the names as-is; and we'll rename locals as
+  ;; needed to avoid these names
+  (let loop! ([bodys bodys] [phase 0] [top-init (find-or-create-top-init! 0)])
+    (for ([body (in-list bodys)])
+      (case (core-form-sym body phase)
+        [(define-values)
+         (define m (match-syntax body '(define-values (id ...) rhs)))
+         (for ([sym (in-list (def-ids-to-binding-syms (m 'id) phase self))])
+           (define def-sym (select-fresh sym top-init))
+           (hash-set! (top-init-binding-sym-to-define-sym top-init)
+                      sym
+                      def-sym)
+           (set-top-init-binding-syms-in-order! top-init
+                                                (cons sym
+                                                      (top-init-binding-syms-in-order top-init)))
+           (hash-set! (top-init-define-and-import-syms top-init) def-sym #t))]
+         [(begin-for-syntax)
+          (define m (match-syntax body `(begin-for-syntax e ...)))
+          (loop! (m 'e) (add1 phase) (find-or-create-top-init! (add1 phase)))])))
+
   (define body-cctx (struct-copy compile-context cctx
                                  [self self]
                                  [root-module-name root-module-name]))
@@ -394,39 +416,40 @@
     (when (any-side-effects? e expected-results)
       (hash-set! side-effects phase #t)))
   
-  (let loop! ([bodys bodys] [phase 0])
+  (let loop! ([bodys bodys] [phase 0] [top-init (find-or-create-top-init! 0)])
     (for ([body (in-list bodys)])
       (case (core-form-sym body phase)
         [(define-values)
          (define m (match-syntax body '(define-values (id ...) rhs)))
-         (define syms (def-ids-to-syms (m 'id) phase self))
-         (define def-syms (find-or-create-def-syms! phase))
-         (define dsyms (convert-def-syms syms def-syms))
+         (define binding-syms (def-ids-to-binding-syms (m 'id) phase self))
+         (define def-syms (for/list ([binding-sym (in-list binding-syms)])
+                            (hash-ref (top-init-binding-sym-to-define-sym top-init)
+                                      binding-sym)))
          (define rhs (compile (m 'rhs)
                               (struct-copy compile-context body-cctx
                                            [phase phase]
-                                           [def-syms def-syms]
-                                           [top-init (find-or-create-top-init! phase)])))
-         (check-side-effects! rhs (length syms) phase)
-         (add-body! phase `(define-values ,dsyms ,rhs))]
+                                           [top-init top-init])))
+         (check-side-effects! rhs (length def-syms) phase)
+         (add-body! phase `(define-values ,def-syms ,rhs))]
         [(define-syntaxes)
          (define m (match-syntax body '(define-syntaxes (id ...) rhs)))
-         (define syms (def-ids-to-syms (m 'id) phase self))
-         (define gen-syms (map gensym syms))
+         (define binding-syms (def-ids-to-binding-syms (m 'id) phase self))
+         (define next-top-init (find-or-create-top-init! (add1 phase)))
+         (define gen-syms (for/list ([binding-sym (in-list binding-syms)])
+                            (select-fresh binding-sym next-top-init)))
          (define rhs (compile (m 'rhs)
                               (struct-copy compile-context body-cctx
                                            [phase (add1 phase)]
-                                           [def-syms (find-or-create-def-syms! (add1 phase))]
-                                           [top-init (find-or-create-top-init! (add1 phase))])))
-         (check-side-effects! rhs (length syms) (add1 phase))
+                                           [top-init next-top-init])))
+         (check-side-effects! rhs (length gen-syms) (add1 phase))
          (add-body! (add1 phase) `(let-values ([,gen-syms ,rhs])
-                                   ,@(for/list ([sym (in-list syms)]
+                                   ,@(for/list ([binding-sym (in-list binding-syms)]
                                                 [gen-sym (in-list gen-syms)])
-                                       `(,set-transformer!-id ',sym ,gen-sym))
+                                       `(,set-transformer!-id ',binding-sym ,gen-sym))
                                    (void)))]
         [(begin-for-syntax)
          (define m (match-syntax body `(begin-for-syntax e ...)))
-         (loop! (m 'e) (add1 phase))]
+         (loop! (m 'e) (add1 phase) (find-or-create-top-init! (add1 phase)))]
         [(#%require #%provide)
          ;; Nothing to do at run time
          (void)]
@@ -442,8 +465,7 @@
          (define e (compile body
                             (struct-copy compile-context body-cctx
                                          [phase phase]
-                                         [def-syms (find-or-create-def-syms! phase)]
-                                         [top-init (find-or-create-top-init! phase)])))
+                                         [top-init top-init])))
          (check-side-effects! e #f phase)
          (add-body! phase e)])))
   
@@ -490,7 +512,8 @@
   ;; Compute linking info for each phase
   (struct link-info (link-module-uses imports))
   (define phase-to-link-info
-    (for/hash ([(phase top-init) (in-hash phase-to-top-init)])
+    (for/hash ([phase (in-list phases-in-order)])
+      (define top-init (hash-ref phase-to-top-init phase))
       (define-values (link-module-uses imports def-decls)
         (generate-links+imports top-init phase body-cctx))
       (unless (null? def-decls)
@@ -529,6 +552,8 @@
       (define bodys (hash-ref phase-to-body phase))
       (define li (hash-ref phase-to-link-info phase))
       (define syntax-literals (top-init-syntax-literals (hash-ref phase-to-top-init phase)))
+      (define binding-sym-to-define-sym
+        (top-init-binding-sym-to-define-sym (hash-ref phase-to-top-init phase)))
       (values
        (encode-linklet-directory-key phase)
        (compile-linklet
@@ -540,8 +565,10 @@
                                  (deserialized-syntax ,deserialized-syntax-id)]
                     [instance ,@instance-imports]
                     ,@(link-info-imports li))
-          #:export (,@(for/list ([(sym def-sym) (in-hash (hash-ref phase-to-def-syms phase #hasheq()))])
-                        `[,def-sym ,sym]))
+          #:export (,@(for/list ([binding-sym (in-list (top-init-binding-syms-in-order
+                                                        (hash-ref phase-to-top-init phase)))])
+                        (define def-sym (hash-ref binding-sym-to-define-sym binding-sym))
+                        `[,def-sym ,binding-sym]))
           ,@(generate-syntax-literals! syntax-literals mpis phase self)
           ,@(reverse bodys))))))
 
@@ -586,7 +613,11 @@
   
 (define (make-top-init mpis)
   (top-init mpis
-            (make-variable-uses)
+            (make-hasheq)        ; binding-sym-to-define-sym
+            null                 ; binding-syms-in-order
+            (make-variable-uses) ; require-var-to-import-sym
+            null                 ; require-vars-in-order
+            (make-hasheq)        ; define-and-import-syms
             (box null)
             0))
 
@@ -608,13 +639,17 @@
 (define (generate-links+imports top-init phase cctx)
   ;; Make a link symbol for each distinct module+phase:
   (define mod-use-to-link-sym
-    (for/fold ([ht #hash()]) ([(vu) (in-hash-keys (top-init-variable-uses top-init))])
+    (for/fold ([ht #hash()]) ([(vu) (in-list (top-init-require-vars-in-order top-init))])
       (define mu (variable-use-module-use vu))
       (if (or (hash-ref ht mu #f)
               (eq? (module-use-module mu)
                    (compile-context-compile-time-for-self cctx)))
           ht
-          (hash-set ht mu (gensym 'module)))))
+          (hash-set ht mu (string->symbol
+                           (format "~a_~a_~a"
+                                   (extract-name (module-use-module mu))
+                                   (module-use-phase mu)
+                                   (hash-count ht)))))))
   ;; List of distinct module+phases:
   (define link-mod-uses (hash-keys mod-use-to-link-sym))
 
@@ -624,13 +659,15 @@
    ;; Imports, using the same order as module-uses list:
    (for/list ([mu (in-list link-mod-uses)])
      (cons (hash-ref mod-use-to-link-sym mu)
-           (for/list ([(vu var-sym) (in-hash (top-init-variable-uses top-init))]
+           (for/list ([vu (in-list (top-init-require-vars-in-order top-init))]
                       #:when (equal? mu (variable-use-module-use vu)))
+           (define var-sym (hash-ref (top-init-require-var-to-import-sym top-init) vu))
              `[,(variable-use-sym vu) ,var-sym])))
    ;; Declarations (for non-module contexts)
-   (for/list ([(vu var-sym) (in-hash (top-init-variable-uses top-init))]
+   (for/list ([vu (in-list (top-init-require-vars-in-order top-init))]
               #:when (eq? (module-use-module (variable-use-module-use vu))
                           (compile-context-compile-time-for-self cctx)))
+     (define var-sym (hash-ref (top-init-require-var-to-import-sym top-init) vu))
      `(,var-sym ,(variable-use-sym vu)))))
 
 (define (empty-syntax-literals? syntax-literals)
@@ -674,18 +711,8 @@
                     (syntax-shift-phase-level s phase-shift)))))
 
 ;; ----------------------------------------
-         
-(define (local->symbol id phase)
-  (define b (resolve id phase))
-  (unless (local-binding? b)
-    (error "bad binding:" id))
-  (key->symbol (local-binding-key b)))
 
-(define (key->symbol key)
-  ;; A local-binding key is already a symbol
-  key)
- 
-(define (def-ids-to-syms ids phase self)
+(define (def-ids-to-binding-syms ids phase self)
   (for/list ([id (in-list ids)])
     (define b (resolve+shift id phase #:immediate? #t))
     (unless (and (module-binding? b)
@@ -695,16 +722,47 @@
              self "vs." (module-binding-module b)))
     (module-binding-sym b)))
 
-(define (convert-def-sym sym def-syms)
-  (or (hash-ref def-syms sym #f)
-      (let ([def-sym (gensym sym)])
-        (hash-set! def-syms sym def-sym)
-        def-sym)))
+(define (select-fresh sym top-init)
+  (if (symbol-conflicts? sym top-init)
+      (let loop ([pos 1])
+        (define new-sym (string->symbol (format "~a/~a" pos sym)))
+        (if (symbol-conflicts? new-sym top-init)
+            (loop (add1 pos))
+            new-sym))
+      sym))
 
-(define (convert-def-syms syms def-syms)
-  (for/list ([sym (in-list syms)])
-    (convert-def-sym sym def-syms)))
+(define (symbol-conflicts? sym top-init)
+  (or (built-in-symbol? sym)
+      (hash-ref (top-init-define-and-import-syms top-init) sym #f)))
 
+(define (local->symbol id phase)
+  (define b (resolve id phase))
+  (unless (local-binding? b)
+    (error "bad binding:" id))
+  (key->symbol (local-binding-key b)))
+
+(define (key->symbol key)
+  ;; A local-binding key is already an distinct uninterned symbol
+  ;; (with a deterministic label)
+  key)
+
+;; Get a reasonably nice name from a module-path-index
+(define (extract-name mpi)
+  (define-values (p base) (module-path-index-split mpi))
+  (cond
+   [(symbol? p) p]
+   [(path? p) (let-values ([(base name dir?) (split-path p)])
+                (path-replace-extension name #""))]
+   [(string? p) (path-replace-extension p #"")]
+   [(and (pair? p) (eq? (car p) 'quote))
+    (cadr p)]
+   [(and (pair? p) (eq? (car p) 'file))
+    (let-values ([(base name dir?) (split-path (cadr p))])
+      (path-replace-extension name #""))]
+   [(and (pair? p) (eq? (car p) 'lib))
+    (path-replace-extension (cadr p) #"")]
+   [else 'module]))
+ 
 ;; ----------------------------------------
 
 (define (eval-linklets h)

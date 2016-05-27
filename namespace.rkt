@@ -4,7 +4,8 @@
          "bulk-binding.rkt"
          "module-path.rkt"
          "module-use.rkt"
-         "linklet.rkt")
+         "linklet.rkt"
+         "built-in-symbol.rkt")
 
 (provide make-empty-namespace
          namespace?
@@ -166,8 +167,12 @@
                             (module-self m)
                             (module-provides m)))
   ;; Tell resolver that the module is declared
-  ((current-module-name-resolver) mod-name #f))
-
+  ((current-module-name-resolver) mod-name #f)
+  ;; If it's a primitive module, add to the table of symbols
+  ;; to avoid for bindings
+  (when (module-primitive? m)
+    (for ([sym (in-hash-keys (hash-ref (module-provides m) 0))])
+      (register-built-in-symbol! sym))))
 
 (define (raise-unknown-module-error who mod-name)
   (raise-arguments-error who

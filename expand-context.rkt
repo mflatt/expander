@@ -35,7 +35,7 @@
                         lifts-to-module ; more lifts: requires, provides, etc.
                         requires+provides ; enclosing module's requires and provides during `provide`
                         name       ; identifier to name the expression
-                        ))
+                        counter))  ; box of an integer; used for generating names deterministically
 
 (define (make-expand-context ns)
   (expand-context null ; scopes
@@ -59,8 +59,8 @@
                   #f   ; module-lifts
                   #f   ; lifts-for-module
                   #f   ; requires+provides
-                  #f)) ; name
-
+                  #f   ; name
+                  (box 0))) ; counter
 
 (define current-expand-context (make-parameter #f))
 

@@ -35,14 +35,11 @@
                              #:primitive? [primitive? #f])
   (define mod-name `',name)
   (define-values (vars transes) (module->exports mod-name))
-  (define syms (for/list ([sym (in-list (map car (cdr (assv 0 vars))))]
-                          #:unless (set-member? skip-syms sym))
-                 sym))
-  (define ht
-    (for/hash ([sym (in-list syms)])
-      (values sym (or (hash-ref alts sym #f)
-                      (base:dynamic-require mod-name sym)))))
-  
+  (define ht (for/hash ([sym (in-list (map car (cdr (assv 0 vars))))]
+                        #:unless (set-member? skip-syms sym))
+               (values sym
+                       (or (hash-ref alts sym #f)
+                           (base:dynamic-require mod-name sym)))))
   (declare-hash-based-module! to-name ht
                               #:namespace ns
                               #:primitive? primitive?))
