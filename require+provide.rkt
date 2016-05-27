@@ -24,7 +24,9 @@
          reset-provides!
          add-provide!
          
-         attach-require-provide-properties)
+         attach-require-provide-properties
+         
+         shift-provides-module-path-index)
 
 ;; ----------------------------------------
 

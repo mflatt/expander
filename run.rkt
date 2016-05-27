@@ -6,7 +6,6 @@
          "binding.rkt"
          "read-syntax.rkt"
          "module-path.rkt"
-         racket/runtime-path
          (only-in syntax/modread
                   with-module-reading-parameterization)
          (only-in racket/base
@@ -15,7 +14,8 @@
          "cache-for-boot.rkt"
          "runtime-primitives.rkt"
          "linklet.rkt"
-         "status.rkt")
+         "status.rkt"
+         "boot.rkt")
 
 (define cache-dir #f)
 (define cache-read-only? #f)
@@ -49,31 +49,13 @@
 ;; so make sure the reader is loaded for `racket/base`:
 (base:dynamic-require 'racket/base/lang/reader #f)
 
-(define-runtime-path startup.rktl "startup.rktl")
-
-(define boot-ns (make-empty-kernel-namespace))
-(namespace-require ''#%kernel boot-ns)
-
-(for ([name (in-list runtime-instances)]
-      #:unless (eq? name '#%kernel))
-  (copy-racket-module! name #:namespace boot-ns))
-
-(current-namespace boot-ns)
-
 (define (eval-syntax s)
   (eval (compile (expand s))))
 
 (define (eval-s-expr e)
   (eval-syntax (namespace-syntax-introduce (datum->syntax #f e))))
 
-(call-with-input-file*
- startup.rktl
- (lambda (i)
-   (port-count-lines! i)
-   (for ([v (in-port (lambda (i) (read-syntax (object-name i) i)) i)])
-     (eval-s-expr v))))
-
-((dynamic-require ''#%boot 'boot))
+(boot)
 
 (use-compiled-file-paths null)
 (current-eval (lambda (s)

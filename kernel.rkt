@@ -6,6 +6,7 @@
          "binding.rkt"
          "core-primitives.rkt"
          "module-path.rkt"
+         "require+provide.rkt"
          (only-in racket/base
                   [dynamic-require base:dynamic-require]))
 
@@ -13,7 +14,8 @@
 
 (provide declare-kernel-module!
          copy-racket-module!
-         declare-hash-based-module!)
+         declare-hash-based-module!
+         declare-reexporting-module!)
 
 (define (declare-kernel-module! ns #:eval eval #:main-ids main-ids)
   (copy-racket-module! '#%kernel
@@ -22,18 +24,8 @@
                                          main-ids)
                        #:namespace ns
                        #:primitive? #t)
-  (namespace-module-visit! ns core-mpi 0)
-  (eval (datum->syntax
-         core-stx
-         '(module #%kernel '#%core
-           (#%require '#%runtime
-                      '#%main)
-           (#%provide (all-from '#%core)
-                      (all-from '#%runtime)
-                      (all-from '#%main))
-           (#%declare #:cross-phase-persistent)))
-        ns))
-
+  (declare-reexporting-module! '#%kernel '(#%core #%runtime #%main)
+                               #:namespace ns))
  
 (define (copy-racket-module! name
                              #:to [to-name name]
@@ -74,4 +66,34 @@
                   (when (= 0 phase-level)
                     (for ([(sym val) (in-hash ht)])
                       (namespace-set-variable! ns 0 sym val)))))
+   (module-path-index-resolve mpi)))
+
+(define (declare-reexporting-module! name require-names
+                                     #:reexport? [reexport? #t]
+                                     #:namespace ns)
+  (define mpi (module-path-index-join (list 'quote name) #f))
+  (define require-mpis (for/list ([require-name (in-list require-names)])
+                         (module-path-index-join (list 'quote require-name) #f)))
+  (declare-module!
+   ns
+   (make-module #:cross-phase-persistent? #t
+                mpi
+                (hasheqv 0 require-mpis)
+                (if reexport?
+                    (hasheqv 0
+                             (for*/hash ([require-mpi (in-list require-mpis)]
+                                         [m (in-value (namespace->module
+                                                       ns
+                                                       (module-path-index-resolve require-mpi)))]
+                                         [(sym binding) (in-hash
+                                                         (hash-ref
+                                                          (shift-provides-module-path-index
+                                                           (module-provides m)
+                                                           (module-self m)
+                                                           require-mpi)
+                                                          0))])
+                               (values sym binding)))
+                    #hasheqv())
+                0 0
+                void)
    (module-path-index-resolve mpi)))

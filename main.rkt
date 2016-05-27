@@ -3,6 +3,7 @@
          (only-in "syntax.rkt"
                   syntax?
                   identifier?)
+         "module-binding.rkt"
          "checked-syntax.rkt"
          (only-in "scope.rkt" add-scope)
          "namespace.rkt"
@@ -18,7 +19,9 @@
          "bulk-binding.rkt"
          "kernel.rkt"
          "utils-primitives.rkt"
-         "namespace-attach.rkt")
+         "runtime-primitives.rkt"
+         "namespace-attach.rkt"
+         "boot.rkt")
 
 ;; Register core forms:
 (require "expand-expr.rkt"
@@ -63,23 +66,40 @@
   (define mod-name (module-path-index-resolve mpi #t))
   (define phase (namespace-phase ns))
   (namespace-module-instantiate! ns mpi phase)
-  (define m-ns (namespace->module-namespace ns mod-name phase #:complain-on-failure? #t))
-  (namespace-get-variable m-ns 0 sym
-                          (lambda ()
-                            ;; Maybe syntax?
-                            (define missing (gensym 'missing))
-                            (define t (namespace-get-transformer m-ns 0 sym missing))
-                            (cond
-                             [(eq? t missing) (fail-k)]
-                             [else
-                              ;; expand in a fresh namespace
-                              (define tmp-ns (make-empty-namespace ns))
-                              (define name (resolved-module-path-name mod-name))
-                              (define mod-path (if (path? name)
-                                                   name
-                                                   `(quote ,name)))
-                              (namespace-require mod-path tmp-ns)
-                              (eval sym tmp-ns)]))))
+
+  (define m (namespace->module ns mod-name))
+  (define binding (hash-ref (hash-ref (module-provides m) 0 #hasheq())
+                            sym
+                            #f))
+  (cond
+   [(not binding) (fail-k)]
+   [else
+    (define ex-sym (module-binding-sym binding))
+    (define ex-phase (module-binding-phase binding))
+    (define m-ns (namespace->module-namespace ns
+                                              (module-path-index-resolve
+                                               (module-path-index-shift
+                                                (module-binding-module binding)
+                                                (module-self m)
+                                                mpi))
+                                              (phase- phase ex-phase)
+                                              #:complain-on-failure? #t))
+    (namespace-get-variable m-ns ex-phase ex-sym
+                            (lambda ()
+                              ;; Maybe syntax?
+                              (define missing (gensym 'missing))
+                              (define t (namespace-get-transformer m-ns ex-phase sym missing))
+                              (cond
+                               [(eq? t missing) (fail-k)]
+                               [else
+                                ;; expand in a fresh namespace
+                                (define tmp-ns (make-empty-namespace ns))
+                                (define name (resolved-module-path-name mod-name))
+                                (define mod-path (if (path? name)
+                                                     name
+                                                     `(quote ,name)))
+                                (namespace-require mod-path tmp-ns)
+                                (eval sym tmp-ns)])))]))
 
 (define (intro s ns)
   (if (syntax? s)
@@ -162,12 +182,25 @@
                           #:eval eval
                           #:main-ids (for/set ([name (in-hash-keys main-primitives)])
                                        name))
+  (for ([name (in-list runtime-instances)]
+        #:unless (eq? name '#%kernel))
+    (copy-racket-module! name #:namespace ns))
+  (declare-reexporting-module! '#%builtin runtime-instances #:namespace ns
+                               #:reexport? #f)
   ns)
+
+;; ----------------------------------------
+;; Startup
+
+(current-namespace (make-empty-kernel-namespace))
+(namespace-require ''#%kernel (current-namespace))
 
 ;; ----------------------------------------
 
 ;; Externally visible functions:
-(provide syntax? syntax-e
+(provide boot
+         
+         syntax? syntax-e
          identifier?
          datum->syntax syntax->datum
          syntax-property
