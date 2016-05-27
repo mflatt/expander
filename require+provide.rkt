@@ -180,15 +180,17 @@
                   (cond
                    [(not b)
                     (hash-set at-phase sym binding)]
-                   [(and (equal? (module-binding-module b) (module-binding-module binding))
+                   [(and (eq? (module-path-index-resolve (module-binding-module b))
+                              (module-path-index-resolve (module-binding-module binding)))
                          (eqv? (module-binding-phase b) (module-binding-phase binding))
                          (eq? (module-binding-sym b) (module-binding-sym binding)))
-                    ;; If `binding` has different nomina info (i.e., same binding
+                    ;; If `binding` has different nominal info (i.e., same binding
                     ;; required from different syntactic sources), we keep only
                     ;; the first once.
                     at-phase]
                    [else
-                    (error "name already provided as a different binding:" sym)]))
+                    (error "name already provided as a different binding:" sym
+                           b binding)]))
                 #hasheq()))
 
 ;; ----------------------------------------
