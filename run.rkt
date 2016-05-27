@@ -53,6 +53,8 @@
 ;; `boot` sets handlers):
 (base:dynamic-require 'racket/base/lang/reader #f)
 
+;; Simplified variant of the function from `syntax/modread`
+;; that uses the expander's `namespace-module-identifier`:
 (define (check-module-form s)
   (unless (and (pair? (syntax-e s))
                (eq? 'module (syntax-e (car (syntax-e s)))))
@@ -62,19 +64,14 @@
    (cons (namespace-module-identifier)
          (cdr (syntax-e s)))))
 
-(define (eval-syntax s)
-  (eval (compile (expand s))))
-
-(define (eval-s-expr e)
-  (eval-syntax (namespace-syntax-introduce (datum->syntax #f e))))
-
+;; Install handlers:
 (boot)
 
+;; Avoid use of ".zo" files:
 (use-compiled-file-paths null)
-(current-eval (lambda (s)
-                (if (syntax? s)
-                    (eval-syntax s)
-                    (eval-s-expr s))))
+
+;; Replace the load handler to stash compiled modules in the cache
+;; and/or load them from the cache
 (current-load (lambda (path expected-module)
                 (let loop ()
                   (cond
@@ -100,8 +97,9 @@
                                (lambda ()
                                  (check-module-form
                                   (read-syntax (object-name i) i)))))))
-                      (define c (compile (expand s)))
+                      (define c (compile s))
                       (when time-expand?
+                        ;; Re-expanding avoids timing load of required modules
                         (time (expand s)))
                       (cond
                        [(and cache
@@ -112,7 +110,9 @@
                         (loop)]
                        [else (eval c)]))]))))
 
+;; Load and run the requested module
 (namespace-require boot-module)
 
 (when extract?
+  ;; Extract a bootstrapping slice of the requested module
   (extract boot-module cache))

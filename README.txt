@@ -4,6 +4,7 @@ See "demo.rkt" for examples.
 
 TODO:
  bug fix for local definition contexts (MB's example)
+ set load handler
  top level
  lazy module instantiation
  origin tracking
@@ -33,7 +34,7 @@ Roadmap to the main pieces:
 
  compile.rkt - from expanded to raw S-expression
 
- main.rkt - expander; installs default module loader
+ main.rkt - installs eval handler, compile handler, and resolver
 
  demo.rkt - exercises the expander and compiler
 
