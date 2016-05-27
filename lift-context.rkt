@@ -132,8 +132,8 @@
 
 (define (get-and-clear-requires-and-provides! lifts-to-module)
   (append
-   (box-clear! (lift-to-module-context-requires lifts-to-module)))
-   (box-clear! (lift-to-module-context-provides lifts-to-module)))
+   (box-clear! (lift-to-module-context-requires lifts-to-module))
+   (box-clear! (lift-to-module-context-provides lifts-to-module))))
 
 (define (add-lifted-to-module-require! lifts-to-module s phase)
   ((lift-to-module-context-do-require lifts-to-module) s phase)

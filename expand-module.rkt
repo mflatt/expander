@@ -464,10 +464,10 @@
      [else
       (define exp-body (expand (car bodys) partial-body-ctx))
       (append
-       ;; Save any expressions lifted during partial expansion
-       (get-and-clear-lifts! (expand-context-lifts partial-body-ctx))
-       ;; Ditto for requires and provides
+       ;; Save any requires and provides lifted during partial expansion
        (get-and-clear-requires-and-provides! (expand-context-lifts-to-module partial-body-ctx))
+       ;; Ditto for expressions
+       (get-and-clear-lifts! (expand-context-lifts partial-body-ctx))
        ;; Ditto for modules, which need to be processed
        (loop #f (get-and-clear-module-lifts! (expand-context-module-lifts partial-body-ctx)))
        ;; Dispatch on form revealed by partial expansion
@@ -633,8 +633,8 @@
                                        body-ctx
                                        #:declared-submodule-names declared-submodule-names))
       (append
-       lifts
        lifted-requires-and-provides
+       lifts
        lifted-modules
        (cons exp-body
              (loop tail? (cdr bodys))))])))

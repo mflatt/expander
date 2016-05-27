@@ -74,7 +74,9 @@
     (unless m
       (error "namespace mismatch: cannot locate module"
              (module-binding-module b)
-             at-phase))
+             at-phase
+             "for identifier"
+             id))
     (namespace-get-transformer m (module-binding-phase b) (module-binding-sym b)
                                variable)]
    [(local-binding? b)
