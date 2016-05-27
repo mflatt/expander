@@ -49,7 +49,8 @@
 (define cache (make-cache cache-dir))
 
 ;; The `#lang` reader doesn't use the reimplemented module system,
-;; so make sure the reader is loaded for `racket/base`:
+;; so make sure the reader is loaded for `racket/base` (before
+;; `boot` sets handlers):
 (base:dynamic-require 'racket/base/lang/reader #f)
 
 (define (check-module-form s)

@@ -621,11 +621,24 @@
                        modname))))))])]))
     standard-module-name-resolver))
 
+(define default-eval-handler
+  (lambda (s)
+    (eval s
+          (current-namespace)
+          (let ([c (current-compile)])
+            (lambda (e ns) (c e #t))))))
+
+(define default-compile-handler
+  ;; Constrained to a single argument:
+  (lambda (s immediate-eval?) (compile s)))
+
 (define (boot)
   (seal)
   (current-module-name-resolver standard-module-name-resolver)
   (current-load/use-compiled default-load/use-compiled)
-  (current-reader-guard default-reader-guard))
+  (current-reader-guard default-reader-guard)
+  (current-eval default-eval-handler)
+  (current-compile default-compile-handler))
 
 (define (seal)
   (set! orig-paramz

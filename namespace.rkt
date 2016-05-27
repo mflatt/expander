@@ -19,7 +19,6 @@
          namespace-bulk-binding-registry
          raise-unknown-module-error
          
-         namespace-syntax-introduce
          namespace-scope
          
          make-module
@@ -58,10 +57,11 @@
         #:property prop:custom-write
         (lambda (ns port mode)
           (write-string "#<namespace" port)
-          (define n (module-path-index-resolve (namespace-module-name ns)))
+          (define n (namespace-module-name ns))
           (when n
             (fprintf port ":~.s" (format-resolved-module-path-name
-                                  (resolved-module-path-name n))))
+                                  (resolved-module-path-name
+                                   (module-path-index-resolve n)))))
           (define phase (namespace-phase ns))
           (unless (zero? phase)
             (fprintf port ":~s" phase))
@@ -115,9 +115,6 @@
   ns)
 
 (define current-namespace (make-parameter (make-empty-namespace)))
-
-(define (namespace-syntax-introduce s [ns (current-namespace)])
-  (add-scope s (namespace-scope ns)))
 
 (define (make-module-namespace ns name-mpi for-submodule?)
   (define phase 0) ; always start at 0 when compiling a module

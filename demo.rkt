@@ -14,7 +14,7 @@
 
 (define (compile+eval-expression e #:namespace [ns demo-ns])
   (define exp-e (expand-expression e #:namespace ns))
-  (define c (compile exp-e ns))
+  (define c (compile exp-e ns (lambda (exp-e ns) exp-e)))
   (values exp-e
           (eval c ns)))
 

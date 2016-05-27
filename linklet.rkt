@@ -25,7 +25,7 @@
 (provide compile-linklet             ; result is serializable
          eval-linklet                ; serializable to instantiable
          instantiate-linklet         ; fills in an instance given argument instances
-
+         
          compiled-linklet-import-variables
          compiled-linklet-export-variables
 
@@ -45,8 +45,6 @@
          
          linklet-compile-to-s-expr) ; a parameter; whether to "compile" to a source form
 
-(struct linklet (code)
-        #:prefab)
 (struct instance (name        ; any value (e.g., a namespace)
                   variables)) ; symbol -> value
 
@@ -186,6 +184,7 @@
 ;; ----------------------------------------
 
 (define orig-eval (current-eval))
+(define orig-compile (current-compile))
 
 (define linklet-compile-to-s-expr (make-parameter #f))
 
@@ -197,7 +196,8 @@
    [else
     (define plain-c (desugar-linklet c))
     (parameterize ([current-namespace cu-namespace]
-                   [current-eval orig-eval])
+                   [current-eval orig-eval]
+                   [current-compile orig-compile])
       ;; Use a vector to list the exported variables
       ;; with the compiled bytecode
       (vector (compile plain-c)
@@ -207,7 +207,8 @@
 ;; Convert serializable form to instantitable form
 (define (eval-linklet linklet)
   (parameterize ([current-namespace cu-namespace]
-                 [current-eval orig-eval])
+                 [current-eval orig-eval]
+                   [current-compile orig-compile])
     (eval (if (vector? linklet)
               ;; Normal mode: compiled to bytecode
               (vector-ref linklet 0)

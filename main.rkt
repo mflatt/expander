@@ -2,6 +2,7 @@
 (require "set.rkt"
          "namespace.rkt"
          "eval.rkt"
+         (prefix-in wrapper: "eval-wrapper.rkt")
          "namespace-attach.rkt"
          "core.rkt"
          "kernel.rkt"
@@ -13,7 +14,7 @@
                   identifier?)
          "checked-syntax.rkt")
 
-(provide boot
+(provide boot ; installs handlers: eval, module name resolver, etc.
 
          ;; This functions are provided for basic testing
          ;; (such as "demo.rkt")
@@ -36,6 +37,7 @@
          namespace-attach-module
          namespace-attach-module-declaration
          
+         ;; These are direct functions, not ones that use handlers:
          expand
          compile
          eval)
@@ -53,9 +55,12 @@
 ;; ----------------------------------------
 
 (define main-primitives
-  (hasheq 'eval eval
-          'compile compile
-          'expand expand
+  (hasheq 'eval wrapper:eval
+          'eval-syntax wrapper:eval-syntax
+          'compile wrapper:compile
+          'compile-syntax wrapper:compile-syntax
+          'expand wrapper:expand
+          'expand-syntax wrapper:expand-syntax
           'dynamic-require dynamic-require
           'make-empty-namespace make-empty-namespace
           'namespace-syntax-introduce namespace-syntax-introduce
@@ -81,7 +86,7 @@
   ns)
 
 ;; ----------------------------------------
-;; Startup
+;; Initial namespace
 
 (current-namespace (make-empty-kernel-namespace))
 (namespace-require ''#%kernel (current-namespace))
