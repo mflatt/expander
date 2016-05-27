@@ -8,6 +8,7 @@
          "module-use.rkt"
          "binding.rkt"
          "runtime-primitives.rkt"
+         "status.rkt"
          (prefix-in new: "module-path.rkt"))
 
 ;; Collect all of the linklets need to run phase 0 of the specified
@@ -126,7 +127,7 @@
   (unless (or (symbol? root-name) ; skip pre-defined modules
               (hash-ref seen lnk #f))
     ;; Seeing this module+phase combination for the first time
-    (log-error "Getting ~s at ~s" name phase)
+    (log-status "Getting ~s at ~s" name phase)
     (define comp-mod (get-compiled-module name root-name))
 
     ;; Extract the relevant linklet (i.e., at a given phase)
@@ -229,9 +230,23 @@
 ;; ----------------------------------------
 ;; Report the results
 
-(log-error "Traversed ~s modules" (hash-count compiled-modules))
-(log-error "Got ~s relevant linklets" (hash-count linklets))
-(log-error "Need ~s of those linklets" (hash-count needed))
+(log-status "Traversed ~s modules" (hash-count compiled-modules))
+(log-status "Got ~s relevant linklets" (hash-count linklets))
+(log-status "Need ~s of those linklets" (hash-count needed))
+
+(define code-bytes
+  (let ([o (open-output-bytes)])
+    (for ([li (in-list linklets-in-order)])
+      (write (linklet-info-linklet (hash-ref linklets li)) o))
+    (get-output-bytes o)))
+
+(log-status "Code is ~s bytes" (bytes-length code-bytes))
+(log-status "Reading all code...")
+(time (let ([i (open-input-bytes code-bytes)])
+        (parameterize ([read-accept-compiled #t])
+          (let loop ()
+            (unless (eof-object? (read i))
+              (loop))))))
 
 ;; Check whether any nneded linklet needs a an instance of a
 ;; pre-defined instance that is not part of the runtime system:
@@ -247,16 +262,16 @@
                  (not (member p runtime-instances))
                  (hash-ref needed in-lnk #t))
         (unless complained?
-          (log-error "~a\n~a"
+          (log-status "~a\n~a"
                      "Unfortunately, some linklets depend on pre-defined host instances"
                      "that are not part of the runtime system:")
           (set! complained? #t))
         (unless complained-this?
-          (log-error " - ~a at ~s" (link-name lnk) (link-phase lnk))
+          (log-status " - ~a at ~s" (link-name lnk) (link-phase lnk))
           (set! complained-this? #t))
-        (log-error "   needs ~s" p)))
+        (log-status "   needs ~s" p)))
     (when complained-this?
-      (log-error "   needed by ~s" needed-reason))))
+      (log-status "   needed by ~s" needed-reason))))
 
 (when complained?
   (exit 1))

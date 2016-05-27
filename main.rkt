@@ -17,6 +17,7 @@
          "linklet.rkt"
          "bulk-binding.rkt"
          "kernel.rkt"
+         "utils-primitives.rkt"
          "namespace-attach.rkt")
 
 ;; Register core forms:
@@ -156,11 +157,13 @@
   (define ns (make-empty-namespace))
   (declare-core-module! ns)
   (declare-hash-based-module! '#%main main-primitives #:namespace ns)
+  (declare-hash-based-module! '#%utils utils-primitives #:namespace ns)
   (declare-kernel-module! ns
                           #:eval eval
                           #:main-ids (for/set ([name (in-hash-keys main-primitives)])
                                        name))
   ns)
+
 ;; ----------------------------------------
 
 ;; Externally visible functions:

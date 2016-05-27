@@ -14,7 +14,8 @@
          "kernel.rkt"
          "cache-for-boot.rkt"
          "runtime-primitives.rkt"
-         "linklet.rkt")
+         "linklet.rkt"
+         "status.rkt")
 
 (define cache-dir #f)
 (define cache-read-only? #f)
@@ -86,13 +87,13 @@
                          (not cache-skip-first?)
                          (get-cached-compiled cache path
                                               (lambda ()
-                                                (log-error "cached ~s" path))))
+                                                (log-status "cached ~s" path))))
                     => eval]
                    [else
-                    (log-error "compile ~s" path)
+                    (log-status "compile ~s" path)
                     (set! cache-skip-first? #f)
                     (with-handlers ([exn:fail? (lambda (exn)
-                                                 (log-error "...during ~s..." path)
+                                                 (log-status "...during ~s..." path)
                                                  (raise exn))])
                       (define s
                         (call-with-input-file*
