@@ -7,6 +7,7 @@
          "core.rkt"
          "kernel.rkt"
          "utils-primitives.rkt"
+         "place-primitives.rkt"
          "runtime-primitives.rkt"
          "boot.rkt"
          (only-in "syntax.rkt"
@@ -74,6 +75,8 @@
   (declare-core-module! ns)
   (declare-hash-based-module! '#%main main-primitives #:namespace ns)
   (declare-hash-based-module! '#%utils utils-primitives #:namespace ns)
+  (declare-hash-based-module! '#%place-struct place-struct-primitives #:namespace ns)
+  (declare-hash-based-module! '#%boot boot-primitives #:namespace ns)
   (declare-kernel-module! ns
                           #:eval eval
                           #:main-ids (for/set ([name (in-hash-keys main-primitives)])
@@ -81,7 +84,11 @@
   (for ([name (in-list runtime-instances)]
         #:unless (eq? name '#%kernel))
     (copy-racket-module! name #:namespace ns))
-  (declare-reexporting-module! '#%builtin runtime-instances #:namespace ns
+  (declare-reexporting-module! '#%builtin (list* '#%place-struct
+                                                 '#%utils
+                                                 '#%boot
+                                                 runtime-instances)
+                               #:namespace ns
                                #:reexport? #f)
   ns)
 

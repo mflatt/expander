@@ -8,7 +8,11 @@
          "eval.rkt"
          "module-path.rkt")
 
-(provide boot seal orig-paramz)
+(provide boot
+         seal
+         orig-paramz
+
+         boot-primitives)
 
 (define-values (dll-suffix)
   (system-type 'so-suffix))
@@ -644,3 +648,11 @@
   (set! orig-paramz
         (reparameterize 
          (continuation-mark-set-first #f parameterization-key))))
+
+;; ----------------------------------------
+;; For historical uses of '#%boot
+
+(define boot-primitives
+  (hash 'boot boot
+        'seal seal
+        'orig-paramz orig-paramz))
