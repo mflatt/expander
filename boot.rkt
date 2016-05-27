@@ -2,6 +2,7 @@
 (require '#%paramz
          racket/private/collect
          "namespace.rkt"
+         "eval.rkt"
          "module-path.rkt")
 
 (provide boot seal orig-paramz)

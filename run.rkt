@@ -49,6 +49,15 @@
 ;; so make sure the reader is loaded for `racket/base`:
 (base:dynamic-require 'racket/base/lang/reader #f)
 
+(define (check-module-form s)
+  (unless (and (pair? (syntax-e s))
+               (eq? 'module (syntax-e (car (syntax-e s)))))
+    (error "not a module form:" s))
+  (datum->syntax
+   #f
+   (cons (namespace-module-identifier)
+         (cdr (syntax-e s)))))
+
 (define (eval-syntax s)
   (eval (compile (expand s))))
 
