@@ -7,6 +7,7 @@
          "core-primitives.rkt"
          "module-path.rkt"
          "require+provide.rkt"
+         "linklet.rkt"
          (only-in racket/base
                   [dynamic-require base:dynamic-require]))
 
@@ -34,12 +35,12 @@
                              #:alts [alts #hasheq()]
                              #:primitive? [primitive? #f])
   (define mod-name `',name)
-  (define-values (vars transes) (module->exports mod-name))
-  (define ht (for/hash ([sym (in-list (map car (cdr (assv 0 vars))))]
+  (define inst (lookup-primitive-instance name))
+  (define ht (for/hash ([sym (in-list (instance-variable-names inst))]
                         #:unless (set-member? skip-syms sym))
                (values sym
                        (or (hash-ref alts sym #f)
-                           (base:dynamic-require mod-name sym)))))
+                           (instance-variable-value inst sym)))))
   (declare-hash-based-module! to-name ht
                               #:namespace ns
                               #:primitive? primitive?))

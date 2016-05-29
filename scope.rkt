@@ -42,6 +42,8 @@
 
 (module+ for-debug
   (provide (struct-out scope)
+           (struct-out multi-scope)
+           (struct-out representative-scope)
            (struct-out bulk-binding-at)
            bulk-binding-symbols
            bulk-binding-create))
@@ -111,17 +113,19 @@
 ;; a module, the number of multi-scopes in a syntax is expected to
 ;; be small.
 (struct multi-scope (id       ; identity
+                     name     ; for debugging
                      scopes)  ; phase -> representative-scope
         #:property prop:serialize
         (lambda (ms ser state)
           `(deserialize-multi-scope
+            ,(ser (multi-scope-name ms))
             ,(ser (multi-scope-scopes ms))))
         #:property prop:reach-scopes
         (lambda (ms reach)
           (reach (multi-scope-scopes ms))))
 
-(define (deserialize-multi-scope scopes)
-  (multi-scope (new-deserialize-scope-id!) scopes))
+(define (deserialize-multi-scope name scopes)
+  (multi-scope (new-deserialize-scope-id!) name scopes))
 
 (struct representative-scope scope (owner   ; a multi-scope for which this one is a phase-specific identity
                                     phase)  ; phase of this scope
@@ -247,8 +251,8 @@
 (define (new-scope kind)
   (scope (new-scope-id!) kind (make-bindings) (make-bulk-bindings)))
 
-(define (new-multi-scope [name (gensym)])
-  (shifted-multi-scope 0 (multi-scope (new-scope-id!) (make-hasheqv))))
+(define (new-multi-scope [name #f])
+  (shifted-multi-scope 0 (multi-scope (new-scope-id!) name (make-hasheqv))))
 
 (define (multi-scope-to-scope-at-phase ms phase)
   ;; Get the identity of `ms` at phase`
@@ -524,7 +528,6 @@
                                (hash-set bindings
                                          (bulk-binding-at-scopes bulk-at)
                                          ((bulk-binding-create bulk) bulk b-info sym)))))]
-                #:when bindings
                 [(b-scopes binding) (in-hash bindings)]
                 #:when (subset? b-scopes scopes))
       (cons b-scopes binding)))

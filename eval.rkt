@@ -4,7 +4,7 @@
                   identifier?)
          "module-binding.rkt"
          "checked-syntax.rkt"
-         (only-in "scope.rkt" add-scope)
+         (only-in "scope.rkt" add-scopes)
          "namespace.rkt"
          "core.rkt"
          "phase.rkt"
@@ -80,10 +80,12 @@
 (define (namespace-syntax-introduce s [ns (current-namespace)])
   (check 'namespace-syntax-introduce syntax? s)
   (check 'namespace-syntax-introduce namespace? ns)
+  (define namespace-scopes (root-expand-context-module-scopes
+                            (namespace-root-expand-ctx ns)))
   (define maybe-module-id
     (and (pair? (syntax-e s))
          (identifier? (car (syntax-e s)))
-         (add-scope (car (syntax-e s)) (namespace-scope ns))))
+         (add-scopes (car (syntax-e s)) namespace-scopes)))
   (cond
    [(and maybe-module-id
          (free-identifier=? maybe-module-id
@@ -92,14 +94,15 @@
     (datum->syntax s (cons maybe-module-id (cdr (syntax-e s))) s s)]
    [else
     ;; Add scope everywhere:
-    (add-scope s (namespace-scope ns))]))
+    (add-scopes s namespace-scopes)]))
 
 ;; ----------------------------------------
 
 (define (namespace-require req [ns (current-namespace)])
   (parse-and-perform-requires! #:run? #t
-                               (list (add-scope (datum->syntax #f req)
-                                                (namespace-scope ns)))
+                               (list (add-scopes (datum->syntax #f req)
+                                                 (root-expand-context-module-scopes
+                                                  (namespace-root-expand-ctx ns))))
                                #f ns
                                (namespace-phase ns)
                                (make-requires+provides #f)))

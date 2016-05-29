@@ -79,7 +79,7 @@
    [(already-expanded? (syntax-e s))
     ;; An expression that is already fully expanded via `local-expand-expression`
     (define ae (syntax-e s))
-    (unless (bound-identifier=? (expand-context-all-scopes-stx ctx)
+    (unless (bound-identifier=? (root-expand-context-all-scopes-stx ctx)
                                 (already-expanded-all-scopes-stx ae)
                                 (expand-context-phase ctx))
       (error (string-append "expanded syntax not in its original lexical context"
@@ -175,26 +175,26 @@
 
 (define (maybe-add-use-site-scope s ctx binding)
   (cond
-   [(and (expand-context-use-site-scopes ctx)
-         (eq? (expand-context-frame-id ctx)
+   [(and (root-expand-context-use-site-scopes ctx)
+         (eq? (root-expand-context-frame-id ctx)
               (binding-frame-id binding)))
     ;; We're in a recursive definition context where use-site scopes
     ;; are needed, so create one, record it, and add to the given
     ;; syntax
     (define sc (new-scope 'use-site))
-    (define b (expand-context-use-site-scopes ctx))
+    (define b (root-expand-context-use-site-scopes ctx))
     (set-box! b (cons sc (unbox b)))
     (values (add-scope s sc) (list sc))]
    [else (values s null)]))
 
 (define (maybe-add-post-expansion-scope s ctx)
   (cond
-   [(expand-context-post-expansion-scope ctx)
+   [(root-expand-context-post-expansion-scope ctx)
     ;; We're in a definition context where an inside-edge scope needs
     ;; to be added to any immediate macro expansion; that way, if the
     ;; macro expands to a definition form, the binding will be in the
     ;; definition context's scope
-    (add-scope s (expand-context-post-expansion-scope ctx))]
+    (add-scope s (root-expand-context-post-expansion-scope ctx))]
    [else s]))
 
 ;; Helper to lookup a binding in an expansion context
@@ -238,15 +238,16 @@
   (define body-ctx (struct-copy expand-context ctx
                                 [context (list (make-liberal-define-context))]
                                 [only-immediate? #t]
-                                [post-expansion-scope inside-sc]
+                                [post-expansion-scope #:parent root-expand-context inside-sc]
                                 [scopes (list* outside-sc
                                                inside-sc
                                                (expand-context-scopes ctx))]
-                                [use-site-scopes (box null)]
-                                [frame-id frame-id]
+                                [use-site-scopes #:parent root-expand-context (box null)]
+                                [frame-id #:parent root-expand-context frame-id]
                                 [all-scopes-stx
+                                 #:parent root-expand-context
                                  (add-scope
-                                  (add-scope (expand-context-all-scopes-stx ctx)
+                                  (add-scope (root-expand-context-all-scopes-stx ctx)
                                              outside-sc)
                                   inside-sc)]))
   (let loop ([body-ctx body-ctx]
@@ -283,7 +284,7 @@
          (define m (match-syntax exp-body '(define-values (id ...) rhs)))
          (define ids (remove-use-site-scopes (m 'id) body-ctx))
          (define new-dups (check-no-duplicate-ids ids phase exp-body dups))
-         (define counter (expand-context-counter ctx))
+         (define counter (root-expand-context-counter ctx))
          (define keys (for/list ([id (in-list ids)])
                         (add-local-binding! id phase counter #:frame-id frame-id)))
          (define extended-env (for/fold ([env (expand-context-env body-ctx)]) ([key (in-list keys)])
@@ -317,7 +318,7 @@
          (define m (match-syntax exp-body '(define-syntaxes (id ...) rhs)))
          (define ids (remove-use-site-scopes (m 'id) body-ctx))
          (define new-dups (check-no-duplicate-ids ids phase exp-body dups))
-         (define counter (expand-context-counter ctx))
+         (define counter (root-expand-context-counter ctx))
          (define keys (for/list ([id (in-list ids)])
                         (add-local-binding! id phase counter #:frame-id frame-id)))
          (define vals (eval-for-syntaxes-binding (m 'rhs) ids ctx))
@@ -358,12 +359,12 @@
   ;; As we finish expanding, we're no longer in a definition context
   (define finish-ctx (struct-copy expand-context body-ctx
                                   [context 'expression]
-                                  [use-site-scopes #f]
+                                  [use-site-scopes #:parent root-expand-context #f]
                                   [scopes (append
-                                           (unbox (expand-context-use-site-scopes body-ctx))
+                                           (unbox (root-expand-context-use-site-scopes body-ctx))
                                            (expand-context-scopes body-ctx))]
                                   [only-immediate? #f]
-                                  [post-expansion-scope #f]))
+                                  [post-expansion-scope #:parent root-expand-context #f]))
   ;; Helper to expand and wrap the ending expressions in `begin`, if needed:
   (define (finish-bodys)
     (cond
@@ -458,7 +459,7 @@
 ;; definition context; the `s` argument can be syntax of a list
 ;; of syntax
 (define (remove-use-site-scopes s ctx)
-  (define use-sites (expand-context-use-site-scopes ctx))
+  (define use-sites (root-expand-context-use-site-scopes ctx))
   (if (and use-sites
            (pair? (unbox use-sites)))
       (if (syntax? s)
@@ -483,7 +484,7 @@
     (define capture-ctx (struct-copy expand-context ctx
                                      [lifts (make-lift-context
                                              (if local?
-                                                 (make-local-lift lift-env (expand-context-counter ctx))
+                                                 (make-local-lift lift-env (root-expand-context-counter ctx))
                                                  (make-toplevel-lift)))]
                                      [lift-envs (if local?
                                                     (cons lift-env
@@ -519,8 +520,7 @@
                                              phase)]
                                  [env empty-env]
                                  [only-immediate? #f]
-                                 [post-expansion-scope #f]
-                                 [module-scopes null]))
+                                 [post-expansion-scope #:parent root-expand-context #f]))
   (expand/capture-lifts s trans-ctx #:expand-lifts? #t #:begin-form? begin-form?))
 
 ;; Expand and evaluate `s` as a compile-time expression, ensuring that

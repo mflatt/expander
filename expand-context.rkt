@@ -1,54 +1,57 @@
 #lang racket/base
 (require "syntax.rkt"
-         "namespace.rkt"
+         "scope.rkt"
          "binding.rkt"
          "env.rkt"
-         "free-id-set.rkt")
+         "free-id-set.rkt"
+         "namespace.rkt"
+         "root-expand-context.rkt")
 
 (provide (struct-out expand-context)
+         (all-from-out "root-expand-context.rkt")
          make-expand-context
+         copy-root-expand-context
          current-expand-context
          
          as-expression-context
          as-tail-context
          as-named-context)
 
-(struct expand-context (scopes     ; list of scopes that should be pruned by `quote-syntax`
-                        use-site-scopes ; #f or boxed list: scopes that should be pruned from binders
-                        module-scopes ; list of scopes for enclosing module or top level
-                        all-scopes-stx ; all scopes from enclosing binding context; for `syntax-local-get-shadower`
-                        context    ; 'expression, 'module, or 'top-level
-                        frame-id   ; #f or a gensym to identify a binding frame
-                        phase      ; current expansion phase
-                        namespace  ; namespace for modules and top-levels
-                        env        ; environment for local bindings
-                        only-immediate? ; #t => stop at core forms
-                        post-expansion-scope  ; scope to add to every expansion; #f if none
-                        module-begin-k ; expander for `#%module-begin` in a 'module-begin context
-                        need-eventually-defined ; phase(>=1) -> variables expanded before binding
-                        stops      ; free-id-set
-                        current-introduction-scopes ; scope for current macro expansion
-                        declared-submodule-names ; hash table (mutable if non-empty): symbol -> 'module or 'module*
-                        lifts      ; #f or lift-context, which contains a list of lifteds
-                        lift-envs  ; list of box of env for lifts to locals
-                        module-lifts ; lifted modules
-                        lifts-to-module ; more lifts: requires, provides, etc.
-                        requires+provides ; enclosing module's requires and provides during `provide`
-                        name       ; identifier to name the expression
-                        counter))  ; box of an integer; used for generating names deterministically
+
+;; An `expand-context` has the rest of the information for an expansion 
+(struct expand-context root-expand-context (context    ; 'expression, 'module, or 'top-level
+                                       phase      ; current expansion phase; must match phase of `namespace`
+                                       namespace  ; namespace for modules and evaluation
+                                       env        ; environment for local bindings
+                                       scopes     ; list of scopes that should be pruned by `quote-syntax`
+                                       only-immediate? ; #t => stop at core forms
+                                       module-begin-k ; expander for `#%module-begin` in a 'module-begin context
+                                       need-eventually-defined ; phase(>=1) -> variables expanded before binding
+                                       stops      ; free-id-set
+                                       current-introduction-scopes ; scopes for current macro expansion
+                                       declared-submodule-names ; mutable hash table: symbol -> 'module or 'module*
+                                       lifts      ; #f or lift-context, which contains a list of lifteds
+                                       lift-envs  ; list of box of env for lifts to locals
+                                       module-lifts ; lifted modules
+                                       lifts-to-module ; more lifts: requires, provides, etc.
+                                       requires+provides ; enclosing module's requires and provides during `provide`
+                                       name))     ; #f or identifier to name the expression
 
 (define (make-expand-context ns)
-  (expand-context null ; scopes
-                  #f ; use-site scopes
-                  (list (namespace-scope ns)) ; module-scopes
-                  empty-syntax
+  (define root-ctx (namespace-root-expand-ctx ns))
+  (expand-context (root-expand-context-module-scopes root-ctx)
+                  (root-expand-context-module-push-scope root-ctx)
+                  (root-expand-context-post-expansion-scope root-ctx)
+                  (root-expand-context-all-scopes-stx root-ctx)
+                  (root-expand-context-use-site-scopes root-ctx)
+                  (root-expand-context-frame-id root-ctx)
+                  (root-expand-context-counter root-ctx)
                   'top-level
-                  #f   ; frame-id
                   (namespace-phase ns)
                   ns
                   empty-env
+                  null ; scopes
                   #f   ; only-immediate?
-                  #f   ; post-expansion-scope
                   #f   ; module-begin-k
                   #f   ; need-eventually-defined
                   empty-free-id-set
@@ -59,8 +62,17 @@
                   #f   ; module-lifts
                   #f   ; lifts-for-module
                   #f   ; requires+provides
-                  #f   ; name
-                  (box 0))) ; counter
+                  #f)) ; name
+
+(define (copy-root-expand-context ctx root-ctx)
+  (struct-copy expand-context ctx
+               [module-scopes #:parent root-expand-context (root-expand-context-module-scopes root-ctx)]
+               [module-push-scope #:parent root-expand-context (root-expand-context-module-push-scope root-ctx)]
+               [post-expansion-scope #:parent root-expand-context (root-expand-context-post-expansion-scope root-ctx)]
+               [all-scopes-stx #:parent root-expand-context (root-expand-context-all-scopes-stx root-ctx)]
+               [use-site-scopes #:parent root-expand-context (root-expand-context-use-site-scopes root-ctx)]
+               [frame-id #:parent root-expand-context (root-expand-context-frame-id root-ctx)]
+               [counter #:parent root-expand-context (root-expand-context-counter root-ctx)]))
 
 (define current-expand-context (make-parameter #f))
 
@@ -76,8 +88,8 @@
    [else (struct-copy expand-context ctx
                       [context 'expression]
                       [name #f]
-                      [use-site-scopes #f]
-                      [frame-id #f])]))
+                      [use-site-scopes #:parent root-expand-context #f]
+                      [frame-id #:parent root-expand-context #f])]))
 
 ;; Adjusts `ctx` (which should be an expression context) to make it
 ;; suitable for a subexpression in tail position

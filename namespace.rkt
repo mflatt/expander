@@ -4,6 +4,7 @@
          "bulk-binding.rkt"
          "module-path.rkt"
          "module-use.rkt"
+         "root-expand-context.rkt"
          "linklet.rkt"
          "built-in-symbol.rkt")
 
@@ -13,14 +14,13 @@
          namespace-module-registry
          namespace-phase
          namespace-0-phase
+         namespace-root-expand-ctx
          namespace->namespace-at-phase
          make-module-namespace
          namespace->module
          namespace-module-name
          namespace-bulk-binding-registry
          raise-unknown-module-error
-         
-         namespace-scope
          
          make-module
          declare-module!
@@ -44,7 +44,7 @@
          namespace-module-use->instance)
 
 (struct namespace (module-name         ; #f or module path index (that's already resolved)
-                   scope               ; scope for top-level bindings
+                   root-expand-ctx          ; module context for top-level expansion
                    phase               ; phase (not phase level! not base phase!) of this namespace
                    0-phase          ; phase of module's phase-level 0
                    phase-to-namespace  ; phase -> namespace for same module  [shared for the same module instance]
@@ -83,16 +83,18 @@
                 ;; expected to be consistent with provides and {min,max}-phase-level:
                 instantiate     ; namespace phase phase-level ->
                 primitive?      ; inline variable values in compiled code?
-                cross-phase-persistent?))
+                cross-phase-persistent?
+                root-expand-ctx)) ; preserve module's expand-context for `module->namespace`
 
 (define (make-empty-namespace [share-from-ns #f]
+                              #:root-expand-ctx [root-expand-ctx (make-root-expand-context)]
                               #:register? [register? #t])
   (define phase (if share-from-ns
                     (namespace-phase share-from-ns)
                     0))
   (define ns
     (namespace #f
-               (new-multi-scope) ; scope
+               root-expand-ctx
                phase
                phase
                (make-hasheqv)    ; phase-to-namespace
@@ -117,15 +119,20 @@
 
 (define current-namespace (make-parameter (make-empty-namespace)))
 
-(define (make-module-namespace ns name-mpi for-submodule?)
+(define (make-module-namespace ns
+                               #:mpi name-mpi
+                               #:root-expand-context root-expand-ctx
+                               #:for-submodule? for-submodule?)
   (define phase 0) ; always start at 0 when compiling a module
   (define name (module-path-index-resolve name-mpi))
   (define m-ns
     ;; Keeps all module declarations, but makes a fresh space of instances
-    (struct-copy namespace (make-empty-namespace ns #:register? #f)
+    (struct-copy namespace (make-empty-namespace ns
+                                                 #:root-expand-ctx root-expand-ctx
+                                                 #:register? #f)
                  [module-name name-mpi]
-                 [phase 0]
-                 [0-phase 0]
+                 [phase phase]
+                 [0-phase phase]
                  [submodule-declarations (if for-submodule?
                                              ;; Same set of submodules:
                                              (namespace-submodule-declarations ns)
@@ -145,12 +152,14 @@
                      min-phase-level max-phase-level
                      instantiate
                      #:primitive? [primitive? #f]
-                     #:cross-phase-persistent? [cross-phase-persistent? primitive?])
+                     #:cross-phase-persistent? [cross-phase-persistent? primitive?]
+                     #:root-expand-ctx [root-expand-ctx (make-root-expand-context)])
   (module self requires provides
           min-phase-level max-phase-level
           instantiate
           primitive?
-          cross-phase-persistent?))
+          cross-phase-persistent?
+          root-expand-ctx))
 
 (define (declare-module! ns m mod-name #:as-submodule? [as-submodule? #f])
   (hash-set! (if as-submodule?
@@ -239,7 +248,6 @@
            (error "no module instance found:" name 0-phase))
       (and install!-ns
            (let ([m-ns (struct-copy namespace install!-ns
-                                    [scope (new-multi-scope)]
                                     [phase-to-namespace (make-hasheqv)]
                                     [done-phases (make-hasheqv)])])
              (hash-set! (namespace-phase-to-namespace m-ns) 0-phase m-ns)
@@ -251,7 +259,7 @@
                (error "no module declared to instantiate:" name))
              (define m-ns (struct-copy namespace ns
                                        [module-name (module-self m)]
-                                       [scope (new-multi-scope)]
+                                       [root-expand-ctx (module-root-expand-ctx m)]
                                        [phase 0-phase]
                                        [0-phase 0-phase]
                                        [phase-to-namespace (make-hasheqv)]

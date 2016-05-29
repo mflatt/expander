@@ -26,7 +26,7 @@
   (check-no-duplicate-ids ids phase s)
   ;; Bind each argument and generate a corresponding key for the
   ;; expand-time environment:
-  (define counter (expand-context-counter ctx))
+  (define counter (root-expand-context-counter ctx))
   (define keys (for/list ([id (in-list ids)])
                  (add-local-binding! id phase counter)))
   (define body-env (for*/fold ([env (expand-context-env ctx)]) ([key (in-list keys)])
@@ -36,7 +36,8 @@
                                 [env body-env]
                                 [scopes (cons sc (expand-context-scopes ctx))]
                                 [all-scopes-stx
-                                 (add-scope (expand-context-all-scopes-stx ctx) sc)]))
+                                 #:parent root-expand-context
+                                 (add-scope (root-expand-context-all-scopes-stx ctx) sc)]))
   (define exp-body (expand-body bodys sc s body-ctx))
   ;; Return formals (with new scope) and expanded body:
   (values (add-scope formals sc)
@@ -121,7 +122,7 @@
    (check-no-duplicate-ids (list trans-idss val-idss) phase s)
    ;; Bind each left-hand identifier and generate a corresponding key
    ;; fo the expand-time environment:
-   (define counter (expand-context-counter ctx))
+   (define counter (root-expand-context-counter ctx))
    (define trans-keyss (for/list ([ids (in-list trans-idss)])
                          (for/list ([id (in-list ids)])
                            (add-local-binding! id phase counter))))
@@ -151,7 +152,8 @@
                                 [env rec-env]
                                 [scopes (cons sc (expand-context-scopes ctx))]
                                 [all-scopes-stx
-                                 (add-scope (expand-context-all-scopes-stx ctx) sc)]))
+                                 #:parent root-expand-context
+                                 (add-scope (root-expand-context-all-scopes-stx ctx) sc)]))
    (define letrec-values-id
      (if syntaxes?
          (datum->syntax (syntax-shift-phase-level core-stx phase) 'letrec-values)

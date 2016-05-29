@@ -31,8 +31,11 @@
 
          make-instance
          instance-name               ; a "name" can be any data
+         instance-variable-names
          instance-variable-value
          set-instance-variable-value!
+
+         lookup-primitive-instance
 
          linklet-directory?       ; maps byte strings to linking units and nested cds
          hash->linklet-directory  ; converts a hash table to a cd
@@ -51,6 +54,9 @@
 (define (make-instance name)
   (instance name (make-hasheq)))
 
+(define (instance-variable-names i)
+  (hash-keys (instance-variables i)))
+
 (define (instance-variable-box i sym can-create?)
   (or (hash-ref (instance-variables i) sym #f)
       (if can-create?
@@ -68,6 +74,15 @@
    [b (unbox b)]
    [(procedure? fail-k) (fail-k)]
    [else fail-k]))
+
+;; ----------------------------------------
+
+(define (lookup-primitive-instance name)
+  (define mod-name `(quote ,name))
+  (define-values (vars trans) (module->exports mod-name))
+  (instance name (for/hash ([sym (in-list (map car (cdr (assv 0 vars))))])
+                   (values sym
+                           (box (dynamic-require mod-name sym))))))
 
 ;; ----------------------------------------
 

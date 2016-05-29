@@ -37,7 +37,7 @@
   (define exp-s (do-local-expand 'local-expand s 'expression null #f))
   (values exp-s (already-expanded
                  exp-s
-                 (expand-context-all-scopes-stx (current-expand-context)))))
+                 (root-expand-context-all-scopes-stx (current-expand-context)))))
 
 ;; ----------------------------------------
 
@@ -94,23 +94,27 @@
                                  [env (add-intdef-bindings (expand-context-env ctx)
                                                            intdefs)]
                                  [use-site-scopes
+                                  #:parent root-expand-context
                                   (and (list? context)
-                                       (or (expand-context-use-site-scopes ctx)
+                                       (or (root-expand-context-use-site-scopes ctx)
                                            (box null)))]
-                                 [frame-id (cond
-                                            [same-kind? (expand-context-frame-id ctx)]
+                                 [frame-id #:parent root-expand-context
+                                           (cond
+                                            [same-kind? (root-expand-context-frame-id ctx)]
                                             [(pair? intdefs)
                                              (internal-definition-context-frame-id (car intdefs))]
                                             [else #f])]
                                  [post-expansion-scope
+                                  #:parent root-expand-context
                                   (and (and same-kind?
                                             (memq context '(module top-level))
-                                            (expand-context-post-expansion-scope ctx)))]
+                                            (root-expand-context-post-expansion-scope ctx)))]
                                  [only-immediate? (not stop-ids)]
                                  [stops (free-id-set phase (or all-stop-ids null))]
                                  [current-introduction-scopes null]
-                                 [all-scopes-stx (add-intdef-scopes
-                                                  (expand-context-all-scopes-stx ctx)
+                                 [all-scopes-stx #:parent root-expand-context
+                                                 (add-intdef-scopes
+                                                  (root-expand-context-all-scopes-stx ctx)
                                                   intdefs)]))
   (define input-s (add-intdef-scopes (flip-introduction-scopes s ctx) intdefs))
   (define output-s (cond

@@ -18,19 +18,26 @@
   (define bindings (cond
                     [(identifier? s)
                      (for*/list ([sc (in-set (syntax-scope-set s phase))]
-                                 [(scs b) (in-hash 
-                                           (or
-                                            (hash-ref (or (scope-bindings sc) #hasheq()) sym #f)
-                                            ;; Check bulk bindings; if a symbol match is found,
-                                            ;; synthesize a non-bulk binding table
-                                            (for/or ([bulk-at (in-list (scope-bulk-bindings sc))])
-                                              (define bulk (bulk-binding-at-bulk bulk-at))
-                                              (define syms (bulk-binding-symbols bulk s #f null))
-                                              (define b-info (hash-ref syms sym #f))
-                                              (and b-info
-                                                   (hasheq (bulk-binding-at-scopes bulk-at)
-                                                           ((bulk-binding-create bulk) bulk b-info sym))))
-                                            #hash()))]
+                                 [bindings (in-value
+                                            (let ([bindings (or (hash-ref (scope-bindings sc) sym #f)
+                                                                #hash())])
+                                              ;; Check bulk bindings; if a symbol match is found,
+                                              ;; synthesize a non-bulk binding table, as long as the
+                                              ;; same set of scopes is not already mapped
+                                              (for*/fold ([bindings bindings])
+                                                         ([bulk-at (in-list (scope-bulk-bindings sc))]
+                                                          [bulk (in-value (bulk-binding-at-bulk bulk-at))]
+                                                          [syms (in-value
+                                                                 (bulk-binding-symbols bulk s
+                                                                                       #f
+                                                                                       null))]
+                                                          [b-info (in-value (hash-ref syms sym #f))]
+                                                          #:when (and b-info
+                                                                      (not (hash-ref bindings (bulk-binding-at-scopes bulk-at) #f))))
+                                                (hash-set bindings
+                                                          (bulk-binding-at-scopes bulk-at)
+                                                          ((bulk-binding-create bulk) bulk b-info sym)))))]
+                                 [(scs b) (in-hash bindings)]
                                  #:when (or all-bindings?
                                             (subset? scs s-scs)))
                        (hash 'name (syntax-e s)
@@ -49,7 +56,11 @@
 (define (scope-set->context scs)
   (sort
    (for/list ([sc (in-set scs)])
-     (vector (scope-id sc)
-             (scope-kind sc)))
+     (if (representative-scope? sc)
+         (vector (scope-id sc)
+                 (scope-kind sc)
+                 (multi-scope-name (representative-scope-owner sc)))
+         (vector (scope-id sc)
+                 (scope-kind sc))))
    <
    #:key (lambda (v) (vector-ref v 0))))

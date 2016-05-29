@@ -33,7 +33,7 @@
 ;; syntax-local-make-definition-context
 (define (syntax-local-make-definition-context [parent-ctx #f] [add-scope? #t])
   (define ctx (get-current-expand-context 'syntax-local-make-definition-context))
-  (define frame-id (or (expand-context-frame-id ctx) (gensym)))
+  (define frame-id (or (root-expand-context-frame-id ctx) (gensym)))
   (define sc (new-scope 'intdef))
   (internal-definition-context frame-id sc add-scope? (box null)))
 
@@ -55,7 +55,7 @@
                                                               ctx))
                        (add-intdef-scopes pre-id intdef #:always? #t)))
   (define syms (for/list ([intdef-id (in-list intdef-ids)])
-                 (add-local-binding! intdef-id phase (expand-context-counter ctx)
+                 (add-local-binding! intdef-id phase (root-expand-context-counter ctx)
                                      #:frame-id (internal-definition-context-frame-id intdef))))
   (define vals
     (cond

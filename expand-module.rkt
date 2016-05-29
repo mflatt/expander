@@ -51,7 +51,7 @@
 
 ;; ----------------------------------------
 
-(define (expand-module s ctx enclosing-self
+(define (expand-module s init-ctx enclosing-self
                        #:keep-enclosing-scope-at-phase [keep-enclosing-scope-at-phase #f]
                        #:enclosing-is-cross-phase-persistent? [enclosing-is-cross-phase-persistent? #f]
                        #:enclosing-requires+provides [enclosing-r+p #f])
@@ -62,27 +62,51 @@
                (module-path? initial-require))
      (error "not a module path:" (m 'initial-require)))
    
+   ;; All module bodies start at phase 0
+   (define phase 0)
+   
    (define outside-scope (new-scope 'module))
-   (define inside-scope (new-multi-scope))
-   (define new-module-scopes (append (list inside-scope outside-scope)
-                                     (if keep-enclosing-scope-at-phase
-                                         (expand-context-module-scopes ctx)
-                                         null)))
+   (define inside-scope (new-multi-scope (syntax-e (m 'id:module-name))))
 
    (define self (make-self-module-path-index (syntax-e (m 'id:module-name))
                                              enclosing-self))
-   (define m-ns (make-module-namespace (expand-context-namespace ctx)
-                                       self
-                                       (and enclosing-self #t)))
    
    (define enclosing-mod (and enclosing-self
                               (module-path-index-join '(submod "..") self)))
    
    (define apply-module-scopes
      (make-apply-module-scopes outside-scope inside-scope 
-                               ctx keep-enclosing-scope-at-phase
+                               init-ctx keep-enclosing-scope-at-phase
                                self enclosing-self enclosing-mod))
 
+   ;; Initial require name provides the module's base scopes
+   (define initial-require-s (apply-module-scopes (m 'initial-require)))
+
+   (define root-ctx (make-root-expand-context
+                     #:initial-scopes (if keep-enclosing-scope-at-phase
+                                          (root-expand-context-module-scopes init-ctx)
+                                          null)
+                     #:module-push-scope outside-scope
+                     #:post-expansion-scope inside-scope
+                     #:all-scopes-stx initial-require-s))
+   
+   ;; Extract combined scopes
+   (define new-module-scopes (root-expand-context-module-scopes root-ctx))
+
+   ;; A frame-id is used to determine when use-site scopes are needed
+   (define frame-id (root-expand-context-frame-id root-ctx))
+
+   ;; Make a namespace for module expansion
+   (define m-ns (make-module-namespace (expand-context-namespace init-ctx)
+                                       #:mpi self
+                                       #:root-expand-context root-ctx
+                                       #:for-submodule? (and enclosing-self #t)))
+   
+   ;; Initial context for all body expansions:
+   (define ctx (struct-copy expand-context (copy-root-expand-context init-ctx root-ctx)
+                            [namespace m-ns]
+                            [phase phase]))
+   
    ;; Add the module's scope to the bodies
    (define bodys (map apply-module-scopes (m 'body)))
    
@@ -93,7 +117,6 @@
    (define defined-syms (make-hasheqv)) ; phase -> sym ->id
 
    ;; Initial require
-   (define initial-require-s (apply-module-scopes (m 'initial-require)))
    (cond
     [(not keep-enclosing-scope-at-phase)
      ;; Install the initial require
@@ -114,9 +137,6 @@
                                                  keep-enclosing-scope-at-phase)
      (namespace-module-visit! m-ns enclosing-self
                               keep-enclosing-scope-at-phase)])
-   
-   ;; All module bodies start at phase 0
-   (define phase 0)
    
    ;; The primitive `#%module-body` form calls this function to expand the
    ;; current module's body
@@ -162,16 +182,11 @@
          ;; Pass 1: partially expand to discover all bindings and install all 
          ;; defined macro transformers
          
-         (define frame-id (gensym))
          (define partial-body-ctx (struct-copy expand-context ctx
                                                [context 'module]
                                                [phase phase]
                                                [namespace (namespace->namespace-at-phase m-ns phase)]
                                                [only-immediate? #t]
-                                               [post-expansion-scope inside-scope]
-                                               [module-scopes new-module-scopes]
-                                               [all-scopes-stx initial-require-s]
-                                               [frame-id frame-id]
                                                [need-eventually-defined (and (phase . >= . 1)
                                                                              need-eventually-defined)]
                                                [declared-submodule-names declared-submodule-names]
@@ -209,7 +224,8 @@
          
          (define body-ctx (struct-copy expand-context partial-body-ctx
                                        [only-immediate? #f]
-                                       [post-expansion-scope #f]
+                                       [frame-id #:parent root-expand-context #f]
+                                       [post-expansion-scope #:parent root-expand-context #f]
                                        [lifts-to-module
                                         (make-lift-to-module-context
                                          (make-parse-lifted-require m-ns self requires+provides
@@ -252,8 +268,8 @@
      ;; Pass 4: expand `module*` submodules
 
      (define submod-ctx (struct-copy expand-context ctx
-                                     [namespace m-ns]
-                                     [module-scopes new-module-scopes]))
+                                     [frame-id #:parent root-expand-context #f]
+                                     [post-expansion-scope #:parent root-expand-context #f]))
      
      (define declare-enclosing-module
        ;; Ensure this module on demand for `module*` submodules that might use it
@@ -274,7 +290,7 @@
                                #:requires-and-provides requires+provides
                                #:enclosing-is-cross-phase-persistent? is-cross-phase-persistent?
                                #:declared-submodule-names declared-submodule-names
-                               #:ctx submod-ctx))
+                               #:ctx ctx))
      
      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
      ;; Finish
@@ -293,8 +309,6 @@
    ;; Add `#%module-begin` around the body if it's not already present
    (define mb
      (ensure-module-begin bodys 
-                          #:inside-scope inside-scope
-                          #:new-module-scopes new-module-scopes
                           #:initial-require-s initial-require-s
                           #:m-ns m-ns
                           #:ctx ctx 
@@ -306,11 +320,7 @@
      (expand mb
              (struct-copy expand-context ctx
                           [context 'module-begin]
-                          [namespace m-ns]
-                          [phase phase]
-                          [module-scopes new-module-scopes]
-                          [module-begin-k module-begin-k]
-                          [use-site-scopes (box null)])))
+                          [module-begin-k module-begin-k])))
 
    ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    ;; Assemble the `module` result
@@ -336,8 +346,6 @@
 
 ;; Add `#%module-begin` to `bodys`, if needed
 (define (ensure-module-begin bodys
-                             #:inside-scope inside-scope
-                             #:new-module-scopes new-module-scopes
                              #:initial-require-s initial-require-s
                              #:m-ns m-ns
                              #:ctx ctx 
@@ -346,12 +354,7 @@
   (define (make-mb-ctx)
     (struct-copy expand-context ctx
                  [context 'module-begin]
-                 [namespace m-ns]
-                 [phase phase]
-                 [only-immediate? #t]
-                 [post-expansion-scope inside-scope]
-                 [all-scopes-stx initial-require-s]
-                 [module-scopes new-module-scopes]))
+                 [only-immediate? #t]))
   (cond
    [(= 1 (length bodys))
     ;; Maybe it's already a `#%module-begin` form, or maybe it
@@ -394,7 +397,7 @@
 
 ;; Make function to adjust syntax that appears in the original module body
 (define (make-apply-module-scopes inside-scope outside-scope
-                                  ctx keep-enclosing-scope-at-phase
+                                  init-ctx keep-enclosing-scope-at-phase
                                   self enclosing-self enclosing-mod)
   (lambda (s)
     (define s-without-enclosing
@@ -404,9 +407,9 @@
           ;; Remove the scopes of the top level or a module outside of
           ;; this module, as well as any relevant use-site scopes
           (remove-use-site-scopes
-           (for/fold ([s s]) ([sc (in-list (expand-context-module-scopes ctx))])
+           (for/fold ([s s]) ([sc (in-list (root-expand-context-module-scopes init-ctx))])
              (remove-scope s sc))
-           ctx)))
+           init-ctx)))
     ;; Add outside- and inside-edge scopes
     (define s-with-edges
       (add-scope (add-scope s-without-enclosing
@@ -578,7 +581,7 @@
                        inside-scope))))
 
 (define (add-post-expansion-scope bodys ctx)
-  (define sc (expand-context-post-expansion-scope ctx))
+  (define sc (root-expand-context-post-expansion-scope ctx))
   (for/list ([body (in-list bodys)])
     (add-scope body sc)))
 
@@ -867,7 +870,7 @@
                    (struct-copy expand-context ctx
                                 [context 'module]
                                 [only-immediate? #f]
-                                [post-expansion-scope #f])
+                                [post-expansion-scope #:parent root-expand-context #f])
                    self
                    #:keep-enclosing-scope-at-phase keep-enclosing-scope-at-phase
                    #:enclosing-requires+provides enclosing-r+p

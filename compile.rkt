@@ -719,7 +719,8 @@
                  (eq? self (module-binding-module b))
                  (eqv? phase (module-binding-phase b)))
       (error "bad binding for module definition:" id
-             self "vs." (module-binding-module b)))
+             self "vs." (module-binding-module b)
+             phase))
     (module-binding-sym b)))
 
 (define (select-fresh sym top-init)

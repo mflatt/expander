@@ -188,7 +188,7 @@
   (check who exact-nonnegative-integer? n)
   (define ctx (get-current-expand-context who))
   (define lifts (expand-context-lifts ctx))
-  (define counter (expand-context-counter ctx))
+  (define counter (root-expand-context-counter ctx))
   (define ids (for/list ([i (in-range n)])
                 (set-box! counter (add1 (unbox counter)))
                 (define name (string->unreadable-symbol (format "lifted/~a" (unbox counter))))
@@ -348,5 +348,5 @@
   (check 'syntax-local-get-shadower identifier? id)
   (define ctx (get-current-expand-context 'syntax-local-get-shadower))
   (add-scopes id (set->list
-                  (syntax-scope-set (expand-context-all-scopes-stx ctx)
+                  (syntax-scope-set (root-expand-context-all-scopes-stx ctx)
                                     (expand-context-phase ctx)))))
