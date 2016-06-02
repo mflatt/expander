@@ -9,6 +9,7 @@
          "free-id-set.rkt"
          "dup-check.rkt"
          "compile.rkt"
+         "eval-compiled-top.rkt"
          "core.rkt"
          "runtime-primitives.rkt"
          "expand-context.rkt"
@@ -557,7 +558,7 @@
                                    #:compile-time-for-self compile-time-for-self)
                                 #:serializable? #f))
   (define vals
-    (call-with-values (lambda () (compiled-top-run compiled ns))
+    (call-with-values (lambda () (eval-top-from-compiled-top compiled ns))
       list))
   (unless (= (length vals) (length ids))
     (error "wrong number of results (" (length vals) "vs." (length ids) ")"

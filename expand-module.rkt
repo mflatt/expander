@@ -15,6 +15,8 @@
          "expand-require.rkt"
          "expand-provide.rkt"
          "compile.rkt"
+         "eval-compiled-top.rkt"
+         "eval-compiled-module.rkt"
          "cross-phase.rkt"
          "debug.rkt")
 
@@ -719,7 +721,7 @@
                             (module-path-index-resolve self)))
   (parameterize ([current-namespace m-ns]
                  [current-module-declare-name (make-resolved-module-path root-module-name)])
-    (declare-module-from-linklet-directory!
+    (eval-module
      (compile-module tmp-mod
                      (make-compile-context #:namespace m-ns
                                            #:self enclosing-self
@@ -843,7 +845,7 @@
        (void)]
       [else
        ;; an expression
-       (compiled-top-run
+       (eval-top-from-compiled-top
         (compile-top body (make-compile-context
                            #:namespace m-ns
                            #:phase phase
@@ -883,7 +885,7 @@
                             (module-path-index-resolve self)))
   (parameterize ([current-namespace ns]
                  [current-module-declare-name (make-resolved-module-path root-module-name)])
-    (declare-module-from-linklet-directory!
+    (eval-module
      (compile-module submod 
                      (make-compile-context #:namespace ns
                                            #:self self

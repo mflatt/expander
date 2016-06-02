@@ -32,7 +32,9 @@ Roadmap to the main pieces:
 
  module-path.rkt - [resolved] module path [indexes]
 
- compile.rkt - from expanded to raw S-expression
+ compile[-....].rkt - from expanded to raw S-expression linket
+
+ boot.rkt - implements the default module name resolver
 
  main.rkt - installs eval handler, compile handler, and resolver
 

@@ -1,0 +1,23 @@
+#lang racket/base
+(require "built-in-symbol.rkt")
+
+;; Identifers used in the compiler's output:
+(provide phase-shift-id
+         ns-id
+         self-id
+         syntax-literals-id
+         get-syntax-literal!-id
+         bulk-binding-registry-id
+         deserialized-syntax-id
+         set-transformer!-id
+         body-thunk-id)
+
+(define phase-shift-id (make-built-in-symbol! 'phase))
+(define ns-id (make-built-in-symbol! 'namespace))
+(define self-id (make-built-in-symbol! 'self))
+(define syntax-literals-id (make-built-in-symbol! 'syntax-literals))
+(define get-syntax-literal!-id (make-built-in-symbol! 'get-syntax-literal!))
+(define bulk-binding-registry-id (make-built-in-symbol! 'bulk-binding-registry))
+(define deserialized-syntax-id (make-built-in-symbol! 'deserialized-syntax))
+(define set-transformer!-id (make-built-in-symbol! 'set-transformer!))
+(define body-thunk-id (make-built-in-symbol! 'body-thunk))

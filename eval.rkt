@@ -13,6 +13,8 @@
          (rename-in "expand.rkt" [expand expand-in-context])
          "expand-require.rkt"
          "compile.rkt"
+         "eval-compiled-top.rkt"
+         "eval-compiled-module.rkt"
          "module-path.rkt"
          "linklet.rkt"
          "bulk-binding.rkt"
@@ -44,14 +46,14 @@
                 (compile s ns)]))
     (cond
      [(compiled-top? c)
-      (compiled-top-run c ns)]
+      (eval-top-from-compiled-top c ns)]
      [else
       (define h (linklet-directory->hash c))
       (cond
        [(hash-ref h #"" #f)
-        (declare-module-from-linklet-directory! c #:namespace ns)]
+        (eval-module c #:namespace ns)]
        [else
-        (run-top-level-from-linklet-directory c ns)])])))
+        (eval-top-from-linklet-directory c ns)])])))
 
 ;; This `compile` is suitable as a compile handler that will be called
 ;; by the `compile` and `compile-syntax` of '#%kernel
