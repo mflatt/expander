@@ -327,7 +327,7 @@
   (define ns (expand-context-namespace ctx))
   (define mod-name (resolve-module-path mod-path
                                         (module-path-index-resolve
-                                         (namespace-module-name ns))))
+                                         (namespace-mpi ns))))
   (define m (namespace->module ns mod-name))
   (unless m (raise-unknown-module-error 'syntax-local-module-exports))
   (for/list ([(phase syms) (in-hash (module-provides m))])

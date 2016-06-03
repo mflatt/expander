@@ -124,14 +124,11 @@
   (define phase (compile-context-phase cctx))
   (define normal-b (resolve+shift s phase))
   (define b
-    (cond
-     [(and (not normal-b)
-           (compile-context-compile-time-for-self cctx))
-      ;; Assume a forward reference
-      (make-module-binding (compile-context-compile-time-for-self cctx)
-                           phase
-                           (syntax-e s))]
-     [else normal-b]))
+    (or normal-b
+        ;; Assume a variable reference
+        (make-module-binding (compile-context-self cctx)
+                             phase
+                             (syntax-e s))))
   (define sym
     (cond
      [(local-binding? b)
@@ -155,14 +152,15 @@
         (define m-ns (namespace->module-namespace ns mod-name 0))
         ;; Expect each primitive to be bound:
         (module-binding-sym b)]
-       [(eq? mpi (compile-context-self cctx))
+       [(eq? mpi (compile-context-module-self cctx))
         ;; Direct reference to a variable defined in the same module:
         (define header (compile-context-header cctx))
         (hash-ref (header-binding-sym-to-define-sym header)
                   (module-binding-sym b))]
        [else
-        ;; Reference to a variable defined in another module; register
-        ;; as a linklet import
+        ;; Reference to a variable defined in another module, or to an
+        ;; environment (such as the top level) in compilation other
+        ;; than a module context; register as a linklet import
         (register-required-variable-use! (compile-context-header cctx)
                                          mpi
                                          (module-binding-phase b)

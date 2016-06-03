@@ -20,22 +20,22 @@
 
 ;; An `expand-context` has the rest of the information for an expansion 
 (struct expand-context root-expand-context (context    ; 'expression, 'module, or 'top-level
-                                       phase      ; current expansion phase; must match phase of `namespace`
-                                       namespace  ; namespace for modules and evaluation
-                                       env        ; environment for local bindings
-                                       scopes     ; list of scopes that should be pruned by `quote-syntax`
-                                       only-immediate? ; #t => stop at core forms
-                                       module-begin-k ; expander for `#%module-begin` in a 'module-begin context
-                                       need-eventually-defined ; phase(>=1) -> variables expanded before binding
-                                       stops      ; free-id-set
-                                       current-introduction-scopes ; scopes for current macro expansion
-                                       declared-submodule-names ; mutable hash table: symbol -> 'module or 'module*
-                                       lifts      ; #f or lift-context, which contains a list of lifteds
-                                       lift-envs  ; list of box of env for lifts to locals
-                                       module-lifts ; lifted modules
-                                       lifts-to-module ; more lifts: requires, provides, etc.
-                                       requires+provides ; enclosing module's requires and provides during `provide`
-                                       name))     ; #f or identifier to name the expression
+                                            phase      ; current expansion phase; must match phase of `namespace`
+                                            namespace  ; namespace for modules and evaluation
+                                            env        ; environment for local bindings
+                                            scopes     ; list of scopes that should be pruned by `quote-syntax`
+                                            only-immediate? ; #t => stop at core forms
+                                            module-begin-k ; expander for `#%module-begin` in a 'module-begin context
+                                            need-eventually-defined ; phase(>=1) -> variables expanded before binding
+                                            stops      ; free-id-set
+                                            current-introduction-scopes ; scopes for current macro expansion
+                                            declared-submodule-names ; mutable hash table: symbol -> 'module or 'module*
+                                            lifts      ; #f or lift-context, which contains a list of lifteds
+                                            lift-envs  ; list of box of env for lifts to locals
+                                            module-lifts ; lifted modules
+                                            lifts-to-module ; more lifts: requires, provides, etc.
+                                            requires+provides ; enclosing module's requires and provides during `provide`
+                                            name))     ; #f or identifier to name the expression
 
 (define (make-expand-context ns)
   (define root-ctx (namespace-root-expand-ctx ns))

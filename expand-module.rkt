@@ -724,7 +724,7 @@
     (eval-module
      (compile-module tmp-mod
                      (make-compile-context #:namespace m-ns
-                                           #:self enclosing-self
+                                           #:module-self enclosing-self
                                            #:root-module-name root-module-name)
                      #:self self
                      #:as-submodule? #t)
@@ -848,8 +848,7 @@
        (eval-top-from-compiled-top
         (compile-top body (make-compile-context
                            #:namespace m-ns
-                           #:phase phase
-                           #:compile-time-for-self self)
+                           #:phase phase)
                      #:serializable? #f)
         m-ns)])))
 
@@ -888,7 +887,7 @@
     (eval-module
      (compile-module submod 
                      (make-compile-context #:namespace ns
-                                           #:self self
+                                           #:module-self self
                                            #:root-module-name root-module-name)
                      #:as-submodule? #t)
      #:as-submodule? #t))

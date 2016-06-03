@@ -142,7 +142,7 @@
       (define mu (variable-use-module-use vu))
       (if (or (hash-ref ht mu #f)
               (eq? (module-use-module mu)
-                   (compile-context-compile-time-for-self cctx)))
+                   (compile-context-self cctx)))
           ht
           (hash-set ht mu (string->symbol
                            (format "~a_~a_~a"
@@ -165,7 +165,7 @@
    ;; Declarations (for non-module contexts)
    (for/list ([vu (in-list (header-require-vars-in-order header))]
               #:when (eq? (module-use-module (variable-use-module-use vu))
-                          (compile-context-compile-time-for-self cctx)))
+                          (compile-context-self cctx)))
      (define var-sym (hash-ref (header-require-var-to-import-sym header) vu))
      `(,var-sym ,(variable-use-sym vu)))))
 

@@ -26,11 +26,15 @@
 
 (define (variable-reference->module-path-index vr)
   (check 'variable-reference->module-path-index variable-reference? vr)
-  (namespace-module-name (variable-reference->namespace vr)))
+  (define mpi (namespace-mpi (variable-reference->namespace vr)))
+  (if (eq? mpi top-level-mpi)
+      #f
+      mpi))
 
 (define (variable-reference->resolved-module-path vr)
   (check 'variable-reference->resolved-module-path variable-reference? vr)
-  (module-path-index-resolve (variable-reference->module-path-index vr)))
+  (define mpi (variable-reference->module-path-index vr))
+  (and mpi (module-path-index-resolve mpi)))
 
 (define (variable-reference->module-source vr)
   (check 'variable-reference->module-source variable-reference? vr)

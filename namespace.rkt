@@ -18,9 +18,11 @@
          namespace->namespace-at-phase
          make-module-namespace
          namespace->module
-         namespace-module-name
+         namespace-mpi
          namespace-bulk-binding-registry
          raise-unknown-module-error
+         
+         top-level-mpi
          
          make-module
          declare-module!
@@ -43,10 +45,10 @@
          namespace->instance
          namespace-module-use->instance)
 
-(struct namespace (module-name         ; #f or module path index (that's already resolved)
-                   root-expand-ctx          ; module context for top-level expansion
+(struct namespace (mpi                 ; module path index (that's already resolved)
+                   root-expand-ctx     ; module context for top-level expansion
                    phase               ; phase (not phase level! not base phase!) of this namespace
-                   0-phase          ; phase of module's phase-level 0
+                   0-phase             ; phase of module's phase-level 0
                    phase-to-namespace  ; phase -> namespace for same module  [shared for the same module instance]
                    phase-level-to-definitions ; phase-level -> definitions [shared for the same module instance]
                    module-registry     ; module-registry of (resolved-module-path -> module) [shared among modules]
@@ -58,7 +60,7 @@
         #:property prop:custom-write
         (lambda (ns port mode)
           (write-string "#<namespace" port)
-          (define n (namespace-module-name ns))
+          (define n (namespace-mpi ns))
           (when n
             (fprintf port ":~.s" (format-resolved-module-path-name
                                   (resolved-module-path-name
@@ -86,6 +88,9 @@
                 cross-phase-persistent?
                 root-expand-ctx)) ; preserve module's expand-context for `module->namespace`
 
+(define top-level-mpi (make-self-module-path-index
+                       (make-resolved-module-path 'top-level)))
+
 (define (make-empty-namespace [share-from-ns #f]
                               #:root-expand-ctx [root-expand-ctx (make-root-expand-context)]
                               #:register? [register? #t])
@@ -93,7 +98,7 @@
                     (namespace-phase share-from-ns)
                     0))
   (define ns
-    (namespace #f
+    (namespace top-level-mpi
                root-expand-ctx
                phase
                phase
@@ -130,7 +135,7 @@
     (struct-copy namespace (make-empty-namespace ns
                                                  #:root-expand-ctx root-expand-ctx
                                                  #:register? #f)
-                 [module-name name-mpi]
+                 [mpi name-mpi]
                  [phase phase]
                  [0-phase phase]
                  [submodule-declarations (if for-submodule?
@@ -258,7 +263,7 @@
              (unless m
                (error "no module declared to instantiate:" name))
              (define m-ns (struct-copy namespace ns
-                                       [module-name (module-self m)]
+                                       [mpi (module-self m)]
                                        [root-expand-ctx (module-root-expand-ctx m)]
                                        [phase 0-phase]
                                        [0-phase 0-phase]
