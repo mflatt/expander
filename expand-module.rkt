@@ -510,8 +510,7 @@
           (define-values (exp-rhs vals)
             (expand+eval-for-syntaxes-binding (m 'rhs) ids
                                               (struct-copy expand-context partial-body-ctx
-                                                           [need-eventually-defined need-eventually-defined])
-                                              #:compile-time-for-self self))
+                                                           [need-eventually-defined need-eventually-defined])))
           ;; Install transformers in the namespace for expansion:
           (for ([sym (in-list syms)]
                 [val (in-list vals)]
@@ -825,11 +824,7 @@
       [(define-values)
        (define m (match-syntax body '(define-values (id ...) rhs)))
        (define ids (m 'id))
-       (define vals (eval-for-bindings ids (m 'rhs) phase m-ns
-                                       ;; In case we tentatively have to allow
-                                       ;; a reference to a variable defined in
-                                       ;; a later `begin-for-syntax`:
-                                       #:compile-time-for-self self))
+       (define vals (eval-for-bindings ids (m 'rhs) phase m-ns))
        (for ([id (in-list ids)]
              [val (in-list vals)])
          (define b (resolve id phase))
@@ -846,10 +841,9 @@
       [else
        ;; an expression
        (eval-top-from-compiled-top
-        (compile-top body (make-compile-context
-                           #:namespace m-ns
-                           #:phase phase)
-                     #:serializable? #f)
+        (compile-single body (make-compile-context
+                              #:namespace m-ns
+                              #:phase phase))
         m-ns)])))
 
 ;; ----------------------------------------

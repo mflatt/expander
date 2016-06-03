@@ -158,9 +158,9 @@
         (hash-ref (header-binding-sym-to-define-sym header)
                   (module-binding-sym b))]
        [else
-        ;; Reference to a variable defined in another module, or to an
-        ;; environment (such as the top level) in compilation other
-        ;; than a module context; register as a linklet import
+        ;; Reference to a variable defined in another module or in an
+        ;; environment (such as the top level) other than a module
+        ;; context; register as a linklet import
         (register-required-variable-use! (compile-context-header cctx)
                                          mpi
                                          (module-binding-phase b)
@@ -175,6 +175,6 @@
 (define (local-id->symbol id phase)
   (define b (resolve id phase))
   (unless (local-binding? b)
-    (error "bad binding:" id))
+    (error "bad binding:" id phase))
   (local-key->symbol (local-binding-key b)))
 

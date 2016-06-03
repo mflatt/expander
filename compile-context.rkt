@@ -15,7 +15,6 @@
                               #:phase [phase (namespace-phase namespace)]
                               #:self [self (namespace-mpi namespace)]
                               #:module-self [module-self #f]
-                              #:compile-time-for-self [compile-time-for-self #f]
                               #:root-module-name [root-module-name #f])
   (when (and module-self (not root-module-name))
     (error "internal error: module-self provided without root"))

@@ -7,82 +7,88 @@
          "compile-impl-id.rkt"
          "compile-instance.rkt"
          "compile-expr.rkt"
+         "compile-form.rkt"
          "compile-module.rkt")
 
 (provide make-compile-context
 
+         compile-single
          compile-top
          compiled-top?
          
          compile-module)
 
-;; Returns a linking directory with two linking units
+;; Returns a `compiled-top`
+(define (compile-single s cctx)
+  (compile-top s cctx #:serializable? #f))
+
+;; Returns a `compiled-top`
 (define (compile-top s cctx
                      #:serializable? [serializable? #t])
-  (define mpis (make-module-path-index-table))
-  (define header (make-header mpis))
   (define phase (compile-context-phase cctx))
-  (define compiled
-    (compile s (struct-copy compile-context cctx
-                            [header header])))
-  (define-values (link-module-uses imports def-decls)
-    (generate-links+imports header phase cctx))
+
+  (define mpis (make-module-path-index-table))
   
-  (define cu
-    (compile-linklet
-     `(linklet
-       #:import ([instance ,@instance-imports]
-                 [link (mpi-vector ,mpi-vector-id)
-                       (syntax-literals ,syntax-literals-id)
-                       (get-syntax-literal! ,get-syntax-literal!-id)]
-                 ,@imports)
-       #:export (,@def-decls
-                 [,body-thunk-id body-thunk])
-       (define-values (,body-thunk-id) (lambda () ,compiled)))))
+  (define-values (body-linklets
+                  min-phase
+                  max-phase
+                  phase-to-link-module-uses
+                  phase-to-link-module-uses-expr
+                  phase-to-syntax-literals)
+    (compile-forms (list s) cctx mpis
+                   #:embed-syntax-literals? #f
+                   #:phase-in-body-thunk phase))
   
   (define code
-    (cond
-     [serializable?
-      (define syntax-literals
-        (generate-syntax-literals! (header-syntax-literals header)
-                                   mpis
-                                   phase
-                                   (compile-context-self cctx)))
-      (define link-module-use-exprs
-        (serialize-module-uses link-module-uses mpis))
-      
-      (define link-cu
-        (compile-linklet
-         `(linklet
-           #:import ([deserialize ,@deserialize-imports])
-           #:export ([,mpi-vector-id mpi-vector]
-                     deserialized-syntax
-                     link-modules
-                     original-phase)
-           (define-values (,mpi-vector-id)
-             ,(generate-module-path-index-deserialize mpis))
-           (define-values (deserialized-syntax) 
-             (make-vector ,(add1 phase) #f))
-           (define-values (original-phase) ,phase)
-           (define-values (link-modules)
-             (list ,@link-module-use-exprs))
-           ,@syntax-literals)))
-      
-      (hash->linklet-directory
-       (hash #"top" cu
-             #"link" link-cu))]
-     [else
-      ;; Will combine the linking unit with non-serialized link info
-      (hash->linklet-directory
-       (hash #"top" cu))]))
+    (hash->linklet-directory
+     (cond
+      [serializable?
+       (define phase-to-syntax-literals-expr
+         (for/hash ([phase (in-range min-phase (add1 max-phase))])
+           (define syntax-literals (hash-ref phase-to-syntax-literals phase #f))
+           (values phase
+                   (if syntax-literals
+                       (generate-syntax-literals! syntax-literals
+                                                  mpis
+                                                  phase
+                                                  (compile-context-self cctx))
+                       `(quote #f)))))
+
+       (define link-cu
+         (compile-linklet
+          `(linklet
+            #:import ([deserialize ,@deserialize-imports])
+            #:export ([,mpi-vector-id mpi-vector]
+                      deserialized-syntax
+                      phase-to-link-modules
+                      min-phase
+                      max-phase)
+            (define-values (,mpi-vector-id)
+              ,(generate-module-path-index-deserialize mpis))
+            (define-values (deserialized-syntax) 
+              (make-vector ,(add1 phase) #f))
+            (define-values (original-phase) ,phase)
+            (define-values (max-phase) ,max-phase)
+            (define-values (phase-to-link-modules) ,phase-to-link-module-uses-expr)
+            (define deserialized-syntax
+              (vector ,(for/list ([phase (in-range min-phase (add1 max-phase))])
+                         (hash-ref  phase-to-syntax-literals-expr phase)))))))
+       
+       (hash-set body-linklets #"link" link-cu)]
+      [else
+       ;; Will combine the linking unit with non-serialized link info
+       body-linklets])))
   
   ;; If the compiled code is executed directly in its original phase,
   ;; we'll share the original values
   (compiled-top code
                 phase
-                link-module-uses
+                max-phase
+                phase-to-link-module-uses
                 (mpis-as-vector-getter mpis)
-                (syntax-literals-as-vector-getter (header-syntax-literals header))))
+                (for/hash ([(phase syntax-literals) (in-hash phase-to-syntax-literals)])
+                  (values phase
+                          (syntax-literals-as-vector-getter syntax-literals)))))
 
         ;; FIXME --- doesn't belong here
         #;

@@ -60,8 +60,9 @@
   (define-values (body-linklets
                   min-phase
                   max-phase
-                  phase-to-link-module-uses
-                  phase-to-link-module-uses-expr)
+                  phase-to-link-module-uses       ; not needed; we use the `-expr` variant
+                  phase-to-link-module-uses-expr
+                  phase-to-syntax-literals)       ; not needed, since already embedded in linklets
     (compile-forms bodys body-cctx mpis
                    #:compiled-expression-callback check-side-effects!
                    #:other-form-callback (lambda (body phase)

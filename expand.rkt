@@ -527,8 +527,7 @@
 ;; Expand and evaluate `s` as a compile-time expression, ensuring that
 ;; the number of returned values matches the number of target
 ;; identifiers; return the expanded form as well as its values
-(define (expand+eval-for-syntaxes-binding rhs ids ctx
-                                          #:compile-time-for-self [compile-time-for-self #f])
+(define (expand+eval-for-syntaxes-binding rhs ids ctx)
   (define exp-rhs (expand-transformer rhs (as-named-context ctx ids)))
   (define phase (add1 (expand-context-phase ctx)))
   (values exp-rhs
@@ -537,8 +536,7 @@
                              phase
                              (namespace->namespace-at-phase
                               (expand-context-namespace ctx)
-                              phase)
-                             #:compile-time-for-self compile-time-for-self)))
+                              phase))))
 
 ;; Expand and evaluate `s` as a compile-time expression, returning
 ;; only the compile-time values
@@ -550,13 +548,10 @@
 ;; Expand and evaluate `s` as an expression in the given phase;
 ;; ensuring that the number of returned values matches the number of
 ;; target identifiers; return the values
-(define (eval-for-bindings ids s phase ns
-                           #:compile-time-for-self [compile-time-for-self #f])
-  (define compiled (compile-top s (make-compile-context
-                                   #:namespace ns
-                                   #:phase phase
-                                   #:compile-time-for-self compile-time-for-self)
-                                #:serializable? #f))
+(define (eval-for-bindings ids s phase ns)
+  (define compiled (compile-single s (make-compile-context
+                                      #:namespace ns
+                                      #:phase phase)))
   (define vals
     (call-with-values (lambda () (eval-top-from-compiled-top compiled ns))
       list))

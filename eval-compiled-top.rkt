@@ -23,12 +23,13 @@
   (define cd (compiled-top-linklet-directory ct))
   (define h (eval-linklets (linklet-directory->hash cd)))
   (define link-instance
-    (and (not (compiled-top-link-module-uses ct))
+    (and (not (compiled-top-phase-to-link-module-uses ct))
          (instantiate-linklet (hash-ref h #"link")
                               (list deserialize-instance))))
   (define phase (namespace-phase ns))
   (define imports
-    (for/list ([mu (or (compiled-top-link-module-uses ct)
+    (for/list ([mu (or (hash-ref (or (compiled-top-phase-to-link-module-uses ct) #hasheqv())
+                                 (compiled-top-phase ct))
                        (instance-variable-value link-instance 'link-modules))])
       (namespace-module-use->instance ns mu #:phase-shift (phase- phase (module-use-phase mu)))))
   
@@ -39,16 +40,16 @@
   (define inst (make-instance-instance
                 #:namespace ns
                 #:phase-shift phase-shift
-                #:self #f ; FIXME
+                #:self (namespace-mpi ns)
                 #:bulk-binding-registry (namespace-bulk-binding-registry ns)
                 #:set-transformer! (lambda (name val)
                                      (namespace-set-transformer! ns phase-shift name val))))
 
   (define i
-    (instantiate-linklet (hash-ref h #"top")
-                         (list* inst
-                                (or link-instance
+    (instantiate-linklet (hash-ref h (encode-linklet-directory-key phase))
+                         (list* (or link-instance
                                     (compiled-top-make-link-instance ct phase-shift))
+                                inst
                                 imports)
                          ;; Instantiation merges with the namespace's current instance:
                          (namespace->instance ns (namespace-phase ns))))
@@ -61,7 +62,9 @@
   (set-instance-variable-value! link-instance 'mpi-vector
                                 ((compiled-top-get-mpis ct)))
   (set-instance-variable-value! link-instance 'syntax-literals
-                                ((compiled-top-get-syntax-literals ct) phase-shift))
+                                ((hash-ref (compiled-top-phase-to-get-syntax-literals ct)
+                                           (compiled-top-phase ct))
+                                 phase-shift))
   (set-instance-variable-value! link-instance 'get-syntax-literal!
                                 (lambda (pos)
                                   (error "internal error: missing syntax literal?" pos)))

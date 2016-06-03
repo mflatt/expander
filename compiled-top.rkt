@@ -8,6 +8,7 @@
 
 (struct compiled-top (linklet-directory
                       phase
-                      link-module-uses
+                      max-phase
+                      phase-to-link-module-uses
                       get-mpis
-                      get-syntax-literals))
+                      phase-to-get-syntax-literals))
