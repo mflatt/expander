@@ -80,37 +80,26 @@
         (m x))))))
 
 "distinct generated variables"
-#;
 (eval-expression
  #:check '(2 1)
- '(letrec-syntaxes+values
-   ([(gen) (lambda (stx)
-             (let-values ([(vals) (syntax-e (car (cdr (syntax-e stx))))]
-                          [(binds) (syntax-e (car (cdr (cdr (syntax-e stx)))))]
-                          [(refs) (syntax-e (car (cdr (cdr (cdr (syntax-e stx))))))])
-               (datum->syntax
-                #f
-                (if (null? vals)
-                    (list (quote-syntax bind) binds refs)
-                    (list (quote-syntax gen)
-                          (cdr vals)
-                          (cons (list (list (quote-syntax x))
-                                      (car vals))
-                                binds)
-                          (cons (quote-syntax x)
-                                refs))))))]
-    [(bind) (lambda (stx)
-              (let-values ([(binds) (car (cdr (syntax-e stx)))]
-                           [(refs) (car (cdr (cdr (syntax-e stx))))])
-                (datum->syntax
-                 (quote-syntax here)
-                 (list (quote-syntax let-values)
-                       binds
-                       (cons (quote-syntax list)
-                             refs)))))])
-   ()
-   (gen (1 2) () ())))
-
+ (add-let
+  `(let-syntax ([gen2 (lambda (stx)
+                        (datum->syntax
+                         (list (quote-syntax let)
+                               (list (list (car (cdr (syntax-e stx)))
+                                           (car (cdr (cdr (syntax-e stx)))))
+                                     (list (quote-syntax x)
+                                           (car (cdr (cdr (cdr (syntax-e stx)))))))
+                               (list (quote-syntax list)
+                                     (quote-syntax x)
+                                     (car (cdr (syntax-e stx)))))))])
+    (let-syntax ([gen1 (lambda (stx)
+                         (datum->syntax
+                          (list (quote-syntax gen2)
+                                (quote-syntax x)
+                                (car (cdr (syntax-e stx)))
+                                (car (cdr (cdr (syntax-e stx)))))))])
+      (gen1 1 2)))))
 
 "non-transformer binding misuse"
 (with-handlers ([exn:fail? (lambda (exn)
