@@ -36,30 +36,30 @@
                   phase-to-link-module-uses-expr
                   phase-to-syntax-literals)
     (compile-forms (list s) cctx mpis
-                   #:embed-syntax-literals? #f
                    #:phase-in-body-thunk phase))
+  
+  (define syntax-literalss
+    (for/list ([phase (in-range min-phase (add1 max-phase))])
+      (or (hash-ref phase-to-syntax-literals phase #f)
+          empty-syntax-literals)))
   
   (define code
     (hash->linklet-directory
      (cond
       [serializable?
-       (define phase-to-syntax-literals-expr
-         (for/hash ([phase (in-range min-phase (add1 max-phase))])
-           (define syntax-literals (hash-ref phase-to-syntax-literals phase #f))
-           (values phase
-                   (if syntax-literals
-                       (generate-syntax-literals! syntax-literals
-                                                  mpis
-                                                  phase
-                                                  (compile-context-self cctx))
-                       `(quote #f)))))
+       (define syntax-literalss-expr
+         (generate-eager-syntax-literals! 
+          syntax-literalss
+          mpis
+          phase
+          (compile-context-self cctx)))
 
        (define link-cu
          (compile-linklet
           `(linklet
             #:import ([deserialize ,@deserialize-imports])
             #:export ([,mpi-vector-id mpi-vector]
-                      deserialized-syntax
+                      syntax-literals
                       phase-to-link-modules
                       min-phase
                       max-phase)
@@ -70,9 +70,7 @@
             (define-values (original-phase) ,phase)
             (define-values (max-phase) ,max-phase)
             (define-values (phase-to-link-modules) ,phase-to-link-module-uses-expr)
-            (define deserialized-syntax
-              (vector ,(for/list ([phase (in-range min-phase (add1 max-phase))])
-                         (hash-ref  phase-to-syntax-literals-expr phase)))))))
+            (define syntax-literalss ,syntax-literalss-expr))))
        
        (hash-set body-linklets #"link" link-cu)]
       [else
@@ -85,10 +83,8 @@
                 phase
                 max-phase
                 phase-to-link-module-uses
-                (mpis-as-vector-getter mpis)
-                (for/hash ([(phase syntax-literals) (in-hash phase-to-syntax-literals)])
-                  (values phase
-                          (syntax-literals-as-vector-getter syntax-literals)))))
+                (mpis-as-vector mpis)
+                (syntax-literals-as-vectors syntax-literalss phase)))
 
         ;; FIXME --- doesn't belong here
         #;

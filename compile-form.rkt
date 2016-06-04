@@ -4,6 +4,8 @@
          "match.rkt"
          "phase.rkt"
          "core.rkt"
+         "namespace.rkt"
+         "root-expand-context.rkt"
          "module-path.rkt"
          "module-use.rkt"
          "serialize.rkt"
@@ -22,7 +24,6 @@
 ;; Compiles a module body or sequence of top-level forms, returning a
 ;; linklet directory to cover all phases covered by the forms
 (define (compile-forms bodys cctx mpis
-                       #:embed-syntax-literals? [embed-syntax-literals? #t] ; changes the linking protocol
                        #:phase-in-body-thunk [phase-in-body-thunk #f] ; phase, if any, to export `body-thunk`
                        #:compiled-expression-callback [compiled-expression-callback void]
                        #:other-form-callback [other-form-callback void])
@@ -72,7 +73,8 @@
       (case (core-form-sym body phase)
         [(define-values)
          (define m (match-syntax body '(define-values (id ...) rhs)))
-         (define binding-syms (def-ids-to-binding-syms (m 'id) phase self))
+         (define ids (m 'id))
+         (define binding-syms (def-ids-to-binding-syms ids phase self))
          (define def-syms
            (cond
             [(compile-context-module-self cctx)
@@ -100,10 +102,19 @@
            ;; Not in a module, generate a set of assignments
            (define gen-syms (for/list ([binding-sym (in-list binding-syms)])
                               (select-fresh binding-sym header)))
-           (add-body! phase `(let-values ([,gen-syms ,rhs])
-                              ,@(for/list ([def-sym (in-list def-syms)]
-                                           [gen-sym (in-list gen-syms)])
-                                  `(set! ,def-sym ,gen-sym))))])]
+           (add-body! phase
+                      `(let-values ([,gen-syms ,rhs])
+                        ;; Top-level variables are treated as "this variable must exist"
+                        ;; declarations at the linklet level, and (re-)defining the
+                        ;; variable just mutates it.
+                        ,@(for/list ([def-sym (in-list def-syms)]
+                                     [gen-sym (in-list gen-syms)])
+                            `(set! ,def-sym ,gen-sym))))
+           (add-body! phase (compile-top-level-bind
+                             ids binding-syms def-syms
+                             (struct-copy compile-context cctx
+                                          [phase phase]
+                                          [header header])))])]
         [(define-syntaxes)
          (define m (match-syntax body '(define-syntaxes (id ...) rhs)))
          (define binding-syms (def-ids-to-binding-syms (m 'id) phase self))
@@ -157,6 +168,7 @@
     (for/hash ([phase (in-list phases-in-order)])
       (define bodys (hash-ref phase-to-body phase))
       (define li (hash-ref phase-to-link-info phase))
+      (define embed-syntax-literals? (compile-context-lazy-syntax-literals? cctx))
       (define syntax-literals (and embed-syntax-literals?
                                    (header-syntax-literals (hash-ref phase-to-header phase))))
       (define binding-sym-to-define-sym
@@ -175,10 +187,10 @@
                             [declaration (mpi-vector ,mpi-vector-id)
                                          (deserialized-syntax ,deserialized-syntax-id)])
                           ;; For top-level forms, import values that may or may not have
-                          ;; been serialized and deserialized
-                          `([link (mpi-vector ,mpi-vector-id)
-                                  (syntax-literals ,syntax-literals-id)
-                                  (get-syntax-literal! ,get-syntax-literal!-id)]))
+                          ;; been serialized and (eagerly) deserialized
+                          `([top-level (top-level-bind! ,top-level-bind!-id)]
+                            [link (mpi-vector ,mpi-vector-id)
+                                  (syntax-literalss ,syntax-literalss-id)]))
                     [instance ,@instance-imports]
                     ,@(link-info-imports li))
           #:export (,@(link-info-def-decls li)
@@ -190,7 +202,7 @@
                           `([,body-thunk-id body-thunk])
                           null))
           ,@(if embed-syntax-literals?
-                (generate-syntax-literals! syntax-literals mpis phase self)
+                (generate-lazy-syntax-literals! syntax-literals mpis phase self)
                 null)
           ,@(if (eqv? phase phase-in-body-thunk)
                 `[(define-values (,body-thunk-id)
@@ -218,3 +230,31 @@
           phase-to-link-module-uses
           phase-to-link-module-uses-expr
           phase-to-syntax-literals))
+
+;; ----------------------------------------
+
+;; Evaluating a top-level definition has a secondary effect: it
+;; adjusts the binding of defined identifiers. This mingling of
+;; evaluation and expansion is the main weirdness of the top
+;; level.
+(define (compile-top-level-bind ids binding-syms def-syms cctx)
+  (define phase (compile-context-phase cctx))
+  (define self (compile-context-self cctx))
+  (define header (compile-context-header cctx))
+  (define mpis (header-module-path-indexes header))
+  ;; The binding that we install at run time should not include
+  ;; the emporary binding scope that the expander added:
+  (define top-level-bind-scope (root-expand-context-top-level-bind-scope
+                                (namespace-root-expand-ctx
+                                 (compile-context-namespace cctx))))
+  ;; For installing a binding:
+  (define self-expr (add-module-path-index! mpis self))
+  ;; Generate calls to `top-level-bind!`:
+  `(begin
+    ,@(for/list ([id (in-list ids)]
+                 [binding-sym (in-list binding-syms)])
+        (define id-stx
+          (compile-quote-syntax (remove-scope id top-level-bind-scope)
+                                phase
+                                cctx))
+        `(,top-level-bind!-id ,id-stx ,self-expr ,phase ,phase-shift-id ',binding-sym))))

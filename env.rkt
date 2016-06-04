@@ -67,10 +67,12 @@
   (cond
    [(module-binding? b)
     (define at-phase (- phase (module-binding-phase b)))
-    (define m (namespace->module-namespace ns
-                                           (module-path-index-resolve
-                                            (module-binding-module b))
-                                           at-phase))
+    (define m (if (top-level-module-path-index? (module-binding-module b))
+                  ns
+                  (namespace->module-namespace ns
+                                               (module-path-index-resolve
+                                                (module-binding-module b))
+                                               at-phase)))
     (unless m
       (error "namespace mismatch: cannot locate module"
              (module-binding-module b)

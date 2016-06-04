@@ -80,13 +80,15 @@
   (define b (resolve+shift id phase))
   (cond
    [(module-binding? b)
-     (list (module-binding-module b)
-           (module-binding-sym b)
-           (module-binding-nominal-module b)
-           (module-binding-nominal-sym b)
-           (module-binding-phase b)
-           (module-binding-nominal-require-phase b)
-           (module-binding-nominal-phase b))]
+    (if (top-level-module-path-index? (module-binding-module b))
+        (module-binding-sym b)
+        (list (module-binding-module b)
+              (module-binding-sym b)
+              (module-binding-nominal-module b)
+              (module-binding-nominal-sym b)
+              (module-binding-phase b)
+              (module-binding-nominal-require-phase b)
+              (module-binding-nominal-phase b)))]
    [(local-binding? b)
     'lexical]
    [else #f]))

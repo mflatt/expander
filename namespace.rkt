@@ -22,8 +22,6 @@
          namespace-bulk-binding-registry
          raise-unknown-module-error
          
-         top-level-mpi
-         
          make-module
          declare-module!
          module-self
@@ -88,9 +86,6 @@
                 cross-phase-persistent?
                 root-expand-ctx)) ; preserve module's expand-context for `module->namespace`
 
-(define top-level-mpi (make-self-module-path-index
-                       (make-resolved-module-path 'top-level)))
-
 (define (make-empty-namespace [share-from-ns #f]
                               #:root-expand-ctx [root-expand-ctx (make-root-expand-context)]
                               #:register? [register? #t])
@@ -98,7 +93,7 @@
                     (namespace-phase share-from-ns)
                     0))
   (define ns
-    (namespace top-level-mpi
+    (namespace top-level-module-path-index
                root-expand-ctx
                phase
                phase

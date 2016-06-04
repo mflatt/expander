@@ -11,8 +11,10 @@
          make-header
          
          add-syntax-literal!
-         generate-syntax-literals!
-         syntax-literals-as-vector-getter
+         generate-eager-syntax-literals!
+         generate-lazy-syntax-literals!
+         syntax-literals-as-vectors
+         empty-syntax-literals
          empty-syntax-literals?
          
          local-key->symbol
@@ -54,10 +56,15 @@
   (set-box! b (cons q (unbox b)))
   pos)
 
+(define empty-syntax-literals '#&())
+
 (define (empty-syntax-literals? syntax-literals)
   (null? (unbox syntax-literals)))
 
-(define (generate-syntax-literals! syntax-literals-box mpis phase self)
+;; Generate on-demand deserialization (shared across instances) and
+;; shifting (not shared) for a particular phase of syntax literals;
+;; the result defines `syntax-literals-id` and `get-syntax-literals!-id`
+(define (generate-lazy-syntax-literals! syntax-literals-box mpis phase self)
   (define syntax-literals (unbox syntax-literals-box))
   (define len (length syntax-literals))
   (cond
@@ -85,14 +92,43 @@
                 (vector-set! ,syntax-literals-id pos stx)
                 stx))))))]))
 
-(define (syntax-literals-as-vector-getter syntax-literals-box)
-  (define syntax-literals (unbox syntax-literals-box))
-  (define vec (list->vector (reverse syntax-literals)))
-  (lambda (phase-shift)
-    (if (zero? phase-shift)
-        vec
-        (for/vector #:length (vector-length vec) ([s (in-vector vec)])
-                    (syntax-shift-phase-level s phase-shift)))))
+;; Generate immediate deserializartion and shifting of a set of syntax
+;; objects across multiple phases; the result is an expression for a
+;; vector (indexed by original phase) of vectors (indexes by
+;; syntax-literal position)
+(define (generate-eager-syntax-literals! syntax-literals-boxes mpis base-phase self)
+  (define syntax-literalss (map unbox syntax-literals-boxes))
+  `(let ([stxss ,(generate-deserialize (append
+                                        ;; Pad result vector get to the base phase:
+                                        (for/list ([i (in-range base-phase)]) #f)
+                                        ;; Reverse syntax literals per phase
+                                        (map reverse syntax-literalss))
+                                       mpis)])
+    (list->vector
+     (map (lambda (stxs)
+            (list->vector
+             (map (lambda (stx)
+                    (syntax-module-path-index-shift
+                     (syntax-shift-phase-level
+                      stx
+                      ,phase-shift-id)
+                     ,(add-module-path-index! mpis self)
+                     ,self-id
+                     ,bulk-binding-registry-id))
+                  stxs)))
+          stxss))))
+
+;; Genereate a vector for a set of syntax objects across multiple
+;; phases; the result is a vector of vectors like the one generated and
+;; expression from `generate-eager-syntax-literals!`, where no shifts
+;; are needed
+(define (syntax-literals-as-vectors syntax-literals-boxes base-phase)
+  (list->vector
+   (append
+    ;; Padding
+    (for/list ([i (in-range base-phase)]) #f)
+    ;; Vectors
+    (map list->vector (map reverse (map unbox syntax-literals-boxes))))))
 
 ;; ----------------------------------------
 

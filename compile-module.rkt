@@ -44,7 +44,8 @@
                                  [phase 0]
                                  [self self]
                                  [module-self self]
-                                 [root-module-name root-module-name]))  
+                                 [root-module-name root-module-name]
+                                 [lazy-syntax-literals? #t]))
   
   (define cross-phase-persistent? #f)
   

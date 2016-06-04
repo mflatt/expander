@@ -5,7 +5,8 @@
          "module-use.rkt"
          "linklet.rkt"
          "serialize.rkt"
-         "compile-instance.rkt")
+         "compile-instance.rkt"
+         "top-level-instance.rkt")
 
 ;; Run a reprsentation of top-level code as produced by `compile-top`;
 ;; see "compile.rkt"
@@ -44,11 +45,12 @@
                 #:bulk-binding-registry (namespace-bulk-binding-registry ns)
                 #:set-transformer! (lambda (name val)
                                      (namespace-set-transformer! ns phase-shift name val))))
-
+  
   (define i
     (instantiate-linklet (hash-ref h (encode-linklet-directory-key phase))
-                         (list* (or link-instance
-                                    (compiled-top-make-link-instance ct phase-shift))
+                         (list* top-level-instance
+                                (or link-instance
+                                    (compiled-top-make-link-instance ct))
                                 inst
                                 imports)
                          ;; Instantiation merges with the namespace's current instance:
@@ -57,17 +59,12 @@
   ((instance-variable-value i 'body-thunk)))
   
 
-(define (compiled-top-make-link-instance ct phase-shift)
+(define (compiled-top-make-link-instance ct)
   (define link-instance (make-instance 'top))
   (set-instance-variable-value! link-instance 'mpi-vector
-                                ((compiled-top-get-mpis ct)))
-  (set-instance-variable-value! link-instance 'syntax-literals
-                                ((hash-ref (compiled-top-phase-to-get-syntax-literals ct)
-                                           (compiled-top-phase ct))
-                                 phase-shift))
-  (set-instance-variable-value! link-instance 'get-syntax-literal!
-                                (lambda (pos)
-                                  (error "internal error: missing syntax literal?" pos)))
+                                (compiled-top-mpis ct))
+  (set-instance-variable-value! link-instance 'syntax-literalss
+                                (compiled-top-syntax-literalss ct))
   link-instance)
 
 ;; ----------------------------------------

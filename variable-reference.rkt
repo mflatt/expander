@@ -27,7 +27,7 @@
 (define (variable-reference->module-path-index vr)
   (check 'variable-reference->module-path-index variable-reference? vr)
   (define mpi (namespace-mpi (variable-reference->namespace vr)))
-  (if (eq? mpi top-level-mpi)
+  (if (top-level-module-path-index? mpi)
       #f
       mpi))
 

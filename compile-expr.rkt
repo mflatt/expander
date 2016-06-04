@@ -13,7 +13,8 @@
          "compile-header.rkt"
          "compile-impl-id.rkt")
 
-(provide compile)
+(provide compile
+         compile-quote-syntax)
 
 ;; Convert an expanded syntax object to an expression that is represented
 ;; by a plain S-expression. The expression is compiled for a particular
@@ -73,12 +74,7 @@
          `(quote ,(syntax->datum (m 'datum)))]
         [(quote-syntax)
          (define m (match-syntax s '(quote datum)))
-         (define q (m 'datum))
-         (define pos (add-syntax-literal! (compile-context-header cctx) q))
-         `(let-values ([(stx) (vector-ref ,syntax-literals-id ,pos)])
-           (if stx
-               stx
-               (,get-syntax-literal!-id ,pos)))]
+         (compile-quote-syntax (m 'datum) phase cctx)]
         [(#%variable-reference)
          (define id-m (try-match-syntax s '(#%variable-reference id)))
          (define top-m (and (not id-m)
@@ -178,3 +174,14 @@
     (error "bad binding:" id phase))
   (local-key->symbol (local-binding-key b)))
 
+
+(define (compile-quote-syntax q phase cctx)
+  (define pos (add-syntax-literal! (compile-context-header cctx) q))
+  (cond
+   [(compile-context-lazy-syntax-literals? cctx)
+    `(let-values ([(stx) (vector-ref ,syntax-literals-id ,pos)])
+      (if stx
+          stx
+          (,get-syntax-literal!-id ',pos)))]
+   [else
+    `(vector-ref (vector-ref ,syntax-literalss-id ',phase) ',pos)]))

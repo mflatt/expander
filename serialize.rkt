@@ -16,7 +16,7 @@
 (provide make-module-path-index-table
          add-module-path-index!
          generate-module-path-index-deserialize
-         mpis-as-vector-getter
+         mpis-as-vector
          mpi-vector-id
          
          generate-deserialize
@@ -67,6 +67,8 @@
       (define-values (path base) (module-path-index-split mpi))
       `[(,(mpi-id i))
         ,(cond
+          [(top-level-module-path-index? mpi)
+           `(deserialize-module-path-index)]
           [(not path)
            `(deserialize-module-path-index ',(or (resolved-module-path-name
                                                   (module-path-index-resolved mpi))
@@ -79,11 +81,11 @@
    `(vector ,@(for/list ([i (in-range (hash-count rev-mpis))])
                 (mpi-id (hash-ref gen-order (hash-ref rev-mpis i)))))))
 
-(define (mpis-as-vector-getter mpis)
+(define (mpis-as-vector mpis)
   (define vec (make-vector (hash-count mpis) #f))
   (for ([(mpi pos) (in-hash mpis)])
     (vector-set! vec pos mpi))
-  (lambda () vec))
+  vec)
 
 ;; ----------------------------------------
   

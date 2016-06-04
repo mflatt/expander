@@ -17,7 +17,10 @@
          make-generic-self-module-path-index
          module-path-index-shift
          module-path-index-resolved ; returns #f if not yet resolved
-         
+
+         top-level-module-path-index
+         top-level-module-path-index?
+
          resolve-module-path
          current-module-name-resolver
          build-module-name
@@ -101,6 +104,8 @@
         (lambda (r port mode)
           (write-string "#<module-path-index" port)
           (cond
+           [(top-level-module-path-index? r)
+            (fprintf port ":top-level")]
            [(module-path-index-path r)
             (fprintf port ":~.s" (let loop ([r r])
                                    (cond
@@ -124,9 +129,10 @@
 ;; Serialization of a module path index is handled specially, because they
 ;; must be shared across phases of a module
 (define deserialize-module-path-index
-  (case-lambda 
+  (case-lambda
     [(path base) (module-path-index-join path base)]
-    [(name) (make-self-module-path-index (make-resolved-module-path name))]))
+    [(name) (make-self-module-path-index (make-resolved-module-path name))]
+    [() top-level-module-path-index]))
 
 (define (module-path-index-resolve mpi [load? #f])
   (check 'module-path-index-resolve module-path-index? mpi)
@@ -253,6 +259,14 @@
 
 (define (shift-cache-set! cache v r)
   (hash-set! cache v r))
+
+;; A constant module path index to represent the top level
+(define top-level-module-path-index
+  (make-self-module-path-index
+   (make-resolved-module-path 'top-level)))
+
+(define (top-level-module-path-index? mpi)
+  (eq? top-level-module-path-index mpi))
 
 ;; ----------------------------------------
 

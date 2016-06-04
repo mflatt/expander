@@ -10,5 +10,5 @@
                       phase
                       max-phase
                       phase-to-link-module-uses
-                      get-mpis
-                      phase-to-get-syntax-literals))
+                      mpis
+                      syntax-literalss))

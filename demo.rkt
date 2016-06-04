@@ -571,6 +571,7 @@
 (eval-expression '(top-f) #:check 'y-at-top)
 (eval-expression '(define-values (top-y) 'changed-y-at-top))
 (eval-expression '(top-f) #:check 'changed-y-at-top)
+(eval-expression '(identifier-binding (quote-syntax top-x)) #:check 'top-x)
 
 ;; ----------------------------------------
 
