@@ -15,6 +15,7 @@
                              top-level-bind-scope  ; #f or a scope to use for top-level bindings during expansion
                              all-scopes-stx  ; all scopes from enclosing binding context; for `syntax-local-get-shadower`
                              use-site-scopes ; #f or boxed list: scopes that should be pruned from binders
+                             defined-syms    ; phase -> sym -> id; symbols picked for bindings
                              frame-id        ; #f or a gensym to identify a binding frame
                              counter         ; box of an integer; used for generating names deterministically
                              )) ; after adding a field, update `copy-module-context` in "expand-context.rkt"
@@ -32,6 +33,7 @@
                        (new-scope 'module) ; top-level-bind-scope
                        (or all-scopes-stx
                            (add-scopes empty-syntax module-scopes))
-                       (box null) ; use-site-scopes
-                       (gensym)   ; frame-id
-                       (box 0)))  ; counter
+                       (box null)      ; use-site-scopes
+                       (make-hasheqv)  ; defined-syms
+                       (gensym)        ; frame-id
+                       (box 0)))       ; counter

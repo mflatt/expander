@@ -24,10 +24,10 @@
   (values exp-e
           (eval c ns)))
 
-(define (eval-expression e #:check [check-val #f]
+(define (eval-expression e #:check [check-val 'no-value-to-check]
                          #:namespace [ns demo-ns])
   (define-values (c v) (compile+eval-expression e #:namespace ns))
-  (when check-val
+  (unless (eq? check-val 'no-value-to-check)
     (unless (equal? v check-val)
       (error "check failed:" v "vs." check-val)))
   v)
@@ -571,7 +571,18 @@
 (eval-expression '(top-f) #:check 'y-at-top)
 (eval-expression '(define-values (top-y) 'changed-y-at-top))
 (eval-expression '(top-f) #:check 'changed-y-at-top)
-(eval-expression '(identifier-binding (quote-syntax top-x)) #:check 'top-x)
+(eval-expression '(define-syntaxes (top-m) (lambda (stx)
+                                             (datum->syntax
+                                              #f
+                                              (list (quote-syntax quote)
+                                                    (car (cdr (syntax-e stx))))))))
+(eval-expression '(top-m 8) #:check 8)
+(eval-expression '(define-syntaxes (top-def-top-x)
+                   (lambda (stx)
+                     (quote-syntax
+                      (define-syntaxes (top-x) 'macro-introduced-top-x)))))
+(eval-expression '(top-def-top-x))
+(eval-expression 'top-x #:check 'x-at-top)
 
 ;; ----------------------------------------
 

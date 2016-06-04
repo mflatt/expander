@@ -14,6 +14,7 @@
          "expand.rkt"
          "expand-require.rkt"
          "expand-provide.rkt"
+         "expand-def-id.rkt"
          "compile.rkt"
          "eval-compiled-top.rkt"
          "eval-compiled-module.rkt"
@@ -117,7 +118,7 @@
    (define requires+provides (make-requires+provides self))
 
    ;; Table of symbols picked for each binding in this module:
-   (define defined-syms (make-hasheqv)) ; phase -> sym ->id
+   (define defined-syms (root-expand-context-defined-syms root-ctx)) ; phase -> sym -> id
 
    ;; Initial require
    (cond
@@ -495,18 +496,20 @@
           (define m (match-syntax exp-body '(define-values (id ...) rhs)))
           (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
           (check-ids-unbound ids phase requires+provides #:in exp-body)
-          (define syms (select-defined-syms-and-bind ids defined-syms self phase frame-id
-                                                     module-scopes
-                                                     requires+provides))
+          (define syms (select-defined-syms-and-bind! ids defined-syms 
+                                                      self phase module-scopes
+                                                      #:frame-id frame-id
+                                                      #:requires+provides requires+provides))
           (cons exp-body
                 (loop tail? (cdr bodys)))]
          [(define-syntaxes)
           (define m (match-syntax exp-body '(define-syntaxes (id ...) rhs)))
           (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
           (check-ids-unbound ids phase requires+provides #:in exp-body)
-          (define syms (select-defined-syms-and-bind ids defined-syms self phase frame-id
-                                                     module-scopes
-                                                     requires+provides))
+          (define syms (select-defined-syms-and-bind! ids defined-syms
+                                                      self phase module-scopes
+                                                      #:frame-id frame-id
+                                                      #:requires+provides requires+provides))
           ;; Expand and evaluate RHS:
           (define-values (exp-rhs vals)
             (expand+eval-for-syntaxes-binding (m 'rhs) ids
@@ -570,9 +573,10 @@
   (lambda (ids rhs phase)
     (define scoped-ids (for/list ([id (in-list ids)])
                          (add-scope id inside-scope)))
-    (select-defined-syms-and-bind scoped-ids defined-syms self phase frame-id
-                                  module-scopes
-                                  requires+provides)
+    (select-defined-syms-and-bind! scoped-ids defined-syms
+                                   self phase module-scopes
+                                   #:frame-id frame-id
+                                   #:requires+provides requires+provides)
     (values scoped-ids
             (add-scope (datum->syntax
                         #f
@@ -784,36 +788,6 @@
 (define (check-ids-unbound ids phase requires+provides #:in s)
   (for ([id (in-list ids)])
     (check-not-defined requires+provides id phase #:in s)))
-
-(define (select-defined-syms-and-bind ids defined-syms self phase frame-id
-                                      module-scopes
-                                      requires+provides)
-  (define defined-syms-at-phase
-    (or (hash-ref defined-syms phase #f) (let ([ht (make-hasheq)])
-                                           (hash-set! defined-syms phase ht)
-                                           ht)))
-  (for/list ([id (in-list ids)])
-    (define sym (syntax-e id))
-    (define defined-sym
-      (if (and (not (hash-ref defined-syms-at-phase sym #f))
-               ;; Only use `sym` directly if there are no
-               ;; extra scopes on the binding form
-               (no-extra-scopes? id module-scopes phase))
-          sym
-          (let loop ([pos 1])
-            (define s (string->unreadable-symbol (format "~a.~a" sym pos)))
-            (if (hash-ref defined-syms-at-phase s #f)
-                (loop (add1 pos))
-                s))))
-    (hash-set! defined-syms-at-phase defined-sym id)
-    (define b (make-module-binding self phase defined-sym #:frame-id frame-id))
-    (remove-required-id! requires+provides id phase)
-    (add-binding! id b phase)
-    (add-defined-or-required-id! requires+provides id phase b)
-    defined-sym))
-
-(define (no-extra-scopes? id module-scopes phase)
-  (bound-identifier=? id (add-scopes id module-scopes) phase))
 
 ;; ----------------------------------------
 

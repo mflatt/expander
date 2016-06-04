@@ -7,7 +7,8 @@
          "require+provide.rkt"
          "expand.rkt"
          "expand-context.rkt"
-         "expand-require.rkt")
+         "expand-require.rkt"
+         "expand-def-id.rkt")
 
 (add-core-form!
  'define-values
@@ -15,18 +16,8 @@
    (unless (eq? (expand-context-context ctx) 'top-level)
      (error "not allowed in an expression position:" s))
    (define m (match-syntax s '(define-values (id ...) rhs)))
-   (define ids (for/list ([id (m 'id)])
-                 (define new-id
-                   (add-scope id (root-expand-context-top-level-bind-scope ctx)))
-                 (add-binding! new-id
-                               (make-module-binding (namespace-mpi (expand-context-namespace ctx))
-                                                    (expand-context-phase ctx)
-                                                    ;; FIXME:
-                                                    (syntax-e id))
-                               (expand-context-phase ctx))
-                 new-id))
-   (define exp-rhs (expand (m 'rhs)
-                           (as-named-context ctx ids)))
+   (define ids (as-top-level-bindings (m 'id) ctx))
+   (define exp-rhs (expand (m 'rhs) (as-named-context ctx ids)))
    (rebuild
     s
     `(,(m 'define-values) ,ids ,exp-rhs))))
@@ -34,7 +25,28 @@
 (add-core-form!
  'define-syntaxes
  (lambda (s ctx)
-   (error "not allowed in an expression position:" s)))
+   (unless (eq? (expand-context-context ctx) 'top-level)
+     (error "not allowed in an expression position:" s))
+   (define m (match-syntax s '(define-syntaxes (id ...) rhs)))
+   (define ids (as-top-level-bindings (m 'id) ctx))
+   (define exp-rhs (expand-transformer (m 'rhs) (as-named-context ctx ids)))
+   (rebuild
+    s
+    `(,(m 'define-syntaxes) ,ids ,exp-rhs))))
+
+(define (as-top-level-bindings ids ctx)
+  (define top-level-bind-scope (root-expand-context-top-level-bind-scope ctx))
+  (define tl-ids
+    (for/list ([id (in-list ids)])
+      (add-scope (remove-use-site-scopes id ctx)
+                 top-level-bind-scope)))
+  (select-defined-syms-and-bind! tl-ids (root-expand-context-defined-syms ctx)
+                                 (namespace-mpi (expand-context-namespace ctx))
+                                 (expand-context-phase ctx)
+                                 (root-expand-context-module-scopes ctx)
+                                 #:frame-id (root-expand-context-frame-id ctx)
+                                 #:top-level-bind-scope top-level-bind-scope)
+  tl-ids)
 
 (add-core-form!
  'begin-for-syntax

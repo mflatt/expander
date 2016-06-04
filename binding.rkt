@@ -81,7 +81,7 @@
   (cond
    [(module-binding? b)
     (if (top-level-module-path-index? (module-binding-module b))
-        (module-binding-sym b)
+        #f ; => top level, indistinguishable from unbound in this legacy API
         (list (module-binding-module b)
               (module-binding-sym b)
               (module-binding-nominal-module b)

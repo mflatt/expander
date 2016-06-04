@@ -111,13 +111,14 @@
                                      [gen-sym (in-list gen-syms)])
                             `(set! ,def-sym ,gen-sym))))
            (add-body! phase (compile-top-level-bind
-                             ids binding-syms def-syms
+                             ids binding-syms
                              (struct-copy compile-context cctx
                                           [phase phase]
                                           [header header])))])]
         [(define-syntaxes)
          (define m (match-syntax body '(define-syntaxes (id ...) rhs)))
-         (define binding-syms (def-ids-to-binding-syms (m 'id) phase self))
+         (define ids (m 'id))
+         (define binding-syms (def-ids-to-binding-syms ids phase self))
          (define next-header (find-or-create-header! (add1 phase)))
          (define gen-syms (for/list ([binding-sym (in-list binding-syms)])
                             (select-fresh binding-sym next-header)))
@@ -130,7 +131,13 @@
                                    ,@(for/list ([binding-sym (in-list binding-syms)]
                                                 [gen-sym (in-list gen-syms)])
                                        `(,set-transformer!-id ',binding-sym ,gen-sym))
-                                   (void)))]
+                                   (void)))
+         (unless (compile-context-module-self cctx)
+           (add-body! phase (compile-top-level-bind
+                             ids binding-syms
+                             (struct-copy compile-context cctx
+                                          [phase phase]
+                                          [header header]))))]
         [(begin-for-syntax)
          (define m (match-syntax body `(begin-for-syntax e ...)))
          (loop! (m 'e) (add1 phase) (find-or-create-header! (add1 phase)))]
@@ -237,7 +244,7 @@
 ;; adjusts the binding of defined identifiers. This mingling of
 ;; evaluation and expansion is the main weirdness of the top
 ;; level.
-(define (compile-top-level-bind ids binding-syms def-syms cctx)
+(define (compile-top-level-bind ids binding-syms cctx)
   (define phase (compile-context-phase cctx))
   (define self (compile-context-self cctx))
   (define header (compile-context-header cctx))

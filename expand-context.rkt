@@ -46,6 +46,7 @@
                   (root-expand-context-top-level-bind-scope root-ctx)
                   (root-expand-context-all-scopes-stx root-ctx)
                   (root-expand-context-use-site-scopes root-ctx)
+                  (root-expand-context-defined-syms root-ctx)
                   (root-expand-context-frame-id root-ctx)
                   (root-expand-context-counter root-ctx)
                   'top-level
@@ -75,6 +76,7 @@
                [top-level-bind-scope #:parent root-expand-context (root-expand-context-top-level-bind-scope root-ctx)]
                [all-scopes-stx #:parent root-expand-context (root-expand-context-all-scopes-stx root-ctx)]
                [use-site-scopes #:parent root-expand-context (root-expand-context-use-site-scopes root-ctx)]
+               [defined-syms #:parent root-expand-context (root-expand-context-defined-syms root-ctx)]
                [frame-id #:parent root-expand-context (root-expand-context-frame-id root-ctx)]
                [counter #:parent root-expand-context (root-expand-context-counter root-ctx)]))
 
