@@ -12,6 +12,7 @@
 (struct root-expand-context (module-scopes   ; list of scopes for enclosing module or top level; includes next two fields
                              module-push-scope ; a multi-scope to start a fallback layer; the module's outside edge
                              post-expansion-scope  ; scope to add to every expansion; #f if none; often module's inside edge
+                             top-level-bind-scope  ; #f or a scope to use for top-level bindings during expansion
                              all-scopes-stx  ; all scopes from enclosing binding context; for `syntax-local-get-shadower`
                              use-site-scopes ; #f or boxed list: scopes that should be pruned from binders
                              frame-id        ; #f or a gensym to identify a binding frame
@@ -28,6 +29,7 @@
   (root-expand-context module-scopes
                        module-push-scope
                        post-expansion-scope
+                       (new-scope 'module) ; top-level-bind-scope
                        (or all-scopes-stx
                            (add-scopes empty-syntax module-scopes))
                        (box null) ; use-site-scopes

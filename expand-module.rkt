@@ -106,6 +106,7 @@
    
    ;; Initial context for all body expansions:
    (define ctx (struct-copy expand-context (copy-root-expand-context init-ctx root-ctx)
+                            [allow-unbound? #f]
                             [namespace m-ns]
                             [phase phase]))
    

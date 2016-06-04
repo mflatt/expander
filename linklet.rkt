@@ -117,22 +117,28 @@
   (unless (eq? '#:export (list-ref c 3)) (error "bad linklet syntax" c))
   (define exports (list-ref c 4))
   (define bodys (list-tail c 5))
-  (define box-bindings
-    `(,@(for*/list ([inst-imports (in-list imports)]
-                    [inst (in-value (car inst-imports))]
-                    [name (in-list (cdr inst-imports))])
-          (define ext (if (symbol? name) name (car name)))
-          (define int (if (symbol? name) name (cadr name)))
-          `[(,int) (instance-variable-box ,inst ',ext #f)])
-      ,@(for/list ([name (in-list exports)])
-          (define int (if (symbol? name) name (car name)))
-          (define ext (if (symbol? name) name (cadr name)))
-          `[(,int) (instance-variable-box self-inst ',ext #t)])))
-  (define box-syms (apply seteq (map caar box-bindings)))
+  (define import-box-bindings
+    (for*/list ([inst-imports (in-list imports)]
+                [inst (in-value (car inst-imports))]
+                [name (in-list (cdr inst-imports))])
+      (define ext (if (symbol? name) name (car name)))
+      (define int (if (symbol? name) name (cadr name)))
+      `[(,int) (instance-variable-box ,inst ',ext #f)]))
+  (define export-box-bindings
+    (for/list ([name (in-list exports)])
+      (define int (if (symbol? name) name (car name)))
+      (define ext (if (symbol? name) name (cadr name)))
+      `[(,int) (instance-variable-box self-inst ',ext #t)]))
+  (define box-bindings (append import-box-bindings export-box-bindings))
+  (define import-box-syms (apply seteq (map caar import-box-bindings)))
+  (define box-syms (set-union import-box-syms
+                              (apply seteq (map caar export-box-bindings))))
   (define (desugar e)
     (cond
      [(symbol? e) (if (set-member? box-syms e)
-                      `(unbox ,e)
+                      (if (set-member? import-box-syms e)
+                          `(unbox ,e)
+                          `(check-not-unsafe-undefined (unbox ,e) ',e))
                       e)]
      [(pair? e)
       (case (car e)

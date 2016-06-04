@@ -561,6 +561,17 @@
       (m x))))
  #:check 2)
 
+"top-level definitions"
+(eval-expression '(define-values (top-x) 'x-at-top))
+(eval-expression 'top-x #:check 'x-at-top)
+(check-error (eval-expression 'top-y) #rx"undefined")
+(eval-expression '(define-values (top-f) (lambda () top-y)))
+(check-error (eval-expression '(top-f)) #rx"undefined")
+(eval-expression '(define-values (top-y) 'y-at-top))
+(eval-expression '(top-f) #:check 'y-at-top)
+(eval-expression '(define-values (top-y) 'changed-y-at-top))
+(eval-expression '(top-f) #:check 'changed-y-at-top)
+
 ;; ----------------------------------------
 
 (define (eval-module-declaration mod #:namespace [ns demo-ns])

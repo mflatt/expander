@@ -27,6 +27,7 @@
                                             only-immediate? ; #t => stop at core forms
                                             module-begin-k ; expander for `#%module-begin` in a 'module-begin context
                                             need-eventually-defined ; phase(>=1) -> variables expanded before binding
+                                            allow-unbound? ; allow reference to unbound identifiers as variables
                                             stops      ; free-id-set
                                             current-introduction-scopes ; scopes for current macro expansion
                                             declared-submodule-names ; mutable hash table: symbol -> 'module or 'module*
@@ -42,6 +43,7 @@
   (expand-context (root-expand-context-module-scopes root-ctx)
                   (root-expand-context-module-push-scope root-ctx)
                   (root-expand-context-post-expansion-scope root-ctx)
+                  (root-expand-context-top-level-bind-scope root-ctx)
                   (root-expand-context-all-scopes-stx root-ctx)
                   (root-expand-context-use-site-scopes root-ctx)
                   (root-expand-context-frame-id root-ctx)
@@ -54,6 +56,7 @@
                   #f   ; only-immediate?
                   #f   ; module-begin-k
                   #f   ; need-eventually-defined
+                  #t   ; allow-unbound?
                   empty-free-id-set
                   null ; current-introduction-scopes
                   #hasheq() ; declared-submodule-names
@@ -69,6 +72,7 @@
                [module-scopes #:parent root-expand-context (root-expand-context-module-scopes root-ctx)]
                [module-push-scope #:parent root-expand-context (root-expand-context-module-push-scope root-ctx)]
                [post-expansion-scope #:parent root-expand-context (root-expand-context-post-expansion-scope root-ctx)]
+               [top-level-bind-scope #:parent root-expand-context (root-expand-context-top-level-bind-scope root-ctx)]
                [all-scopes-stx #:parent root-expand-context (root-expand-context-all-scopes-stx root-ctx)]
                [use-site-scopes #:parent root-expand-context (root-expand-context-use-site-scopes root-ctx)]
                [frame-id #:parent root-expand-context (root-expand-context-frame-id root-ctx)]

@@ -2,6 +2,8 @@
 (require "scope.rkt"
          "core.rkt"
          "match.rkt"
+         "module-binding.rkt"
+         "namespace.rkt"
          "require+provide.rkt"
          "expand.rkt"
          "expand-context.rkt"
@@ -10,7 +12,24 @@
 (add-core-form!
  'define-values
  (lambda (s ctx)
-   (error "not allowed in an expression position:" s)))
+   (unless (eq? (expand-context-context ctx) 'top-level)
+     (error "not allowed in an expression position:" s))
+   (define m (match-syntax s '(define-values (id ...) rhs)))
+   (define ids (for/list ([id (m 'id)])
+                 (define new-id
+                   (add-scope id (root-expand-context-top-level-bind-scope ctx)))
+                 (add-binding! new-id
+                               (make-module-binding (namespace-mpi (expand-context-namespace ctx))
+                                                    (expand-context-phase ctx)
+                                                    ;; FIXME:
+                                                    (syntax-e id))
+                               (expand-context-phase ctx))
+                 new-id))
+   (define exp-rhs (expand (m 'rhs)
+                           (as-named-context ctx ids)))
+   (rebuild
+    s
+    `(,(m 'define-values) ,ids ,exp-rhs))))
 
 (add-core-form!
  'define-syntaxes

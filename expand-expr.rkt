@@ -331,10 +331,18 @@
     [(register-eventual-variable!? id ctx)
      id]
     [else
-     (error "unbound identifier:" (m 'id)
-            (syntax-debug-info (m 'id)
-                               (expand-context-phase ctx)
-                               #t))])))
+     (define tl-id (add-scope id (root-expand-context-top-level-bind-scope ctx)))
+     (cond
+      [(resolve tl-id (expand-context-phase ctx))
+       ;; Expand to a reference to a top-level variable
+       tl-id]
+      [(expand-context-allow-unbound? ctx)
+       id]
+      [else
+       (error "unbound identifier:" (m 'id)
+              (syntax-debug-info (m 'id)
+                                 (expand-context-phase ctx)
+                                 #t))])])))
 
 (add-core-form!
  'set!

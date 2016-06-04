@@ -83,7 +83,7 @@
             [else
              ;; Outside of a module, look up name to `set!`
              (for/list ([binding-sym (in-list binding-syms)])
-               (register-required-variable-use! (compile-context-header cctx)
+               (register-required-variable-use! header
                                                 (compile-context-self cctx)
                                                 phase
                                                 binding-sym))]))
