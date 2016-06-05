@@ -553,7 +553,7 @@
                                       #:namespace ns
                                       #:phase phase)))
   (define vals
-    (call-with-values (lambda () (eval-top-from-compiled-top compiled ns))
+    (call-with-values (lambda () (eval-top compiled ns))
       list))
   (unless (= (length vals) (length ids))
     (error "wrong number of results (" (length vals) "vs." (length ids) ")"

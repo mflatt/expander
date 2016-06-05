@@ -84,7 +84,8 @@
             (let-values ([(stx)
                           (syntax-module-path-index-shift
                            (syntax-shift-phase-level
-                            (vector-ref (vector-ref ,deserialized-syntax-id ,phase) pos) ,phase-shift-id)
+                            (vector-ref (vector-ref ,deserialized-syntax-id ,phase) pos)
+                            ,phase-shift-id)
                            ,(add-module-path-index! mpis self)
                            ,self-id
                            ,bulk-binding-registry-id)])

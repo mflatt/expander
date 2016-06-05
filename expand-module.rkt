@@ -815,7 +815,7 @@
        (void)]
       [else
        ;; an expression
-       (eval-top-from-compiled-top
+       (eval-top
         (compile-single body (make-compile-context
                               #:namespace m-ns
                               #:phase phase))

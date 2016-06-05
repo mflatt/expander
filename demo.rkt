@@ -32,6 +32,14 @@
       (error "check failed:" v "vs." check-val)))
   v)
 
+(define (eval-expression/interleaved e #:check [check-val 'no-value-to-check]
+                                     #:namespace [ns demo-ns])
+  (define v (eval e ns))
+  (unless (eq? check-val 'no-value-to-check)
+    (unless (equal? v check-val)
+      (error "check failed:" v "vs." check-val)))
+  v)
+
 (define-syntax-rule (check-print expr out ...)
   (check-thunk-print (lambda () expr) out ...))
 
@@ -580,9 +588,15 @@
 (eval-expression '(define-syntaxes (top-def-top-x)
                    (lambda (stx)
                      (quote-syntax
-                      (define-syntaxes (top-x) 'macro-introduced-top-x)))))
-(eval-expression '(top-def-top-x))
+                      (begin
+                        (define-values (top-x) 'macro-introduced-top-x)
+                        top-x)))))
+(eval-expression/interleaved '(top-def-top-x) #:check 'macro-introduced-top-x)
 (eval-expression 'top-x #:check 'x-at-top)
+(eval-expression '(begin ; check compilation of multiple top-level forms
+                   (define-values (top-z) 'z-at-top)
+                   top-z)
+                 #:check 'z-at-top)
 
 ;; ----------------------------------------
 

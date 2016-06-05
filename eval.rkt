@@ -8,11 +8,13 @@
          "namespace.rkt"
          "core.rkt"
          "phase.rkt"
+         "match.rkt"
          "require+provide.rkt"
          "expand-context.rkt"
          (rename-in "expand.rkt" [expand expand-in-context])
          "expand-require.rkt"
          "compile.rkt"
+         "compiled-in-memory.rkt"
          "eval-compiled-top.rkt"
          "eval-compiled-module.rkt"
          "module-path.rkt"
@@ -24,7 +26,7 @@
          compile
          expand
          namespace-syntax-introduce
-         
+
          namespace-require
          namespace-module-identifier
          dynamic-require)
@@ -34,50 +36,121 @@
 (define (eval s [ns (current-namespace)] [compile compile])
   (parameterize ([current-bulk-binding-fallback-registry
                   (namespace-bulk-binding-registry ns)])
-    (define c (cond
-               [(or (compiled-top? s)
-                    (linklet-directory? s))
-                s]
-               [(and (syntax? s)
-                     (or (compiled-top? (syntax-e s))
-                         (linklet-directory? (syntax-e s))))
-                (syntax-e s)]
-               [else
-                (compile s ns)]))
     (cond
-     [(compiled-top? c)
-      (eval-top-from-compiled-top c ns)]
+     [(or (compiled-in-memory? s)
+          (linklet-directory? s))
+      (eval-compiled s ns)]
+     [(and (syntax? s)
+           (or (compiled-in-memory? (syntax-e s))
+               (linklet-directory? (syntax-e s))))
+      (eval-compiled (syntax-e s) ns)]
      [else
-      (define h (linklet-directory->hash c))
-      (cond
-       [(hash-ref h #"" #f)
-        (eval-module c #:namespace ns)]
-       [else
-        (eval-top-from-linklet-directory c ns)])])))
+      (per-top-level s ns 
+                     #:single (lambda (s ns)
+                                (eval-compiled (compile s ns) ns)))])))
+
+(define (eval-compiled c ns)
+  (define ld (if (compiled-in-memory? c)
+                 (compiled-in-memory-linklet-directory c)
+                 c))
+  (define h (linklet-directory->hash ld))
+  (cond
+   [(hash-ref h #".decl" #f)
+    (eval-module c #:namespace ns)]
+   [else
+    (eval-top c ns)]))
 
 ;; This `compile` is suitable as a compile handler that will be called
 ;; by the `compile` and `compile-syntax` of '#%kernel
-(define (compile given-s [ns (current-namespace)] [expand expand])
-  (define s (expand given-s ns))
-  (case (core-form-sym s (namespace-phase ns))
+(define (compile s [ns (current-namespace)] [expand expand])
+  (define cs
+    (parameterize ([current-bulk-binding-fallback-registry
+                  (namespace-bulk-binding-registry ns)])
+      (per-top-level s ns
+                     #:single (lambda (s ns) (list (compile-single s ns expand)))
+                     #:combine append)))
+  (if (= 1 (length cs))
+      (car cs)
+      (compiled-tops->compiled-top cs)))
+
+(define (compile-single s ns expand)
+  (define exp-s (expand s ns))
+  (case (core-form-sym exp-s (namespace-phase ns))
     [(module)
-     (compile-module s (make-compile-context #:namespace ns))]
+     (compile-module exp-s (make-compile-context #:namespace ns))]
     [else
-     (compile-top s (make-compile-context #:namespace ns))]))
+     (compile-top exp-s (make-compile-context #:namespace ns))]))
 
 ;; This `expand` is suitable as an expand handler (if such a thing
 ;; existed) to be called by `expand` and `expand-syntax`.
-(define (expand given-s [ns (current-namespace)])
-  (define s (maybe-intro given-s ns))
+(define (expand s [ns (current-namespace)])
   (parameterize ([current-bulk-binding-fallback-registry
                   (namespace-bulk-binding-registry ns)])
-    (expand-in-context s (make-expand-context ns))))
+    (per-top-level s ns
+                   #:single expand-single
+                   #:combine cons
+                   #:wrap (lambda (form-id s r)
+                            (datum->syntax s
+                                           (cons form-id r)
+                                           s
+                                           s)))))
+
+(define (expand-single s ns)
+  (expand-in-context s (make-expand-context ns)))
 
 ;; Add scopes to `s` if it's not syntax:
 (define (maybe-intro s ns)
   (if (syntax? s)
       s
       (namespace-syntax-introduce (datum->syntax #f s) ns)))
+
+;; Top-level compilation and evaluation, which involves partial
+;; expansion to detect `begin` and `begin-for-syntax` to interleave
+;; expansions
+(define (per-top-level given-s ns
+                       #:single single
+                       #:combine [combine #f]
+                       #:wrap [wrap #f])
+  (define s (maybe-intro given-s ns))
+  (define ctx (make-expand-context ns))
+  (define phase (namespace-phase ns))
+  (let loop ([s s] [phase phase] [ns ns])
+    (define exp-s
+      (expand-in-context s (struct-copy expand-context ctx
+                                        [only-immediate? #t]
+                                        [phase phase]
+                                        [namespace ns])))
+    (case (core-form-sym exp-s phase)
+      [(begin)
+       (define m (match-syntax exp-s '(begin e ...)))
+       ;; Map `loop` over the `e`s, but in the case of `eval`,
+       ;; tail-call for last one:
+       (define (begin-loop es)
+         (cond
+          [(null? es) (if combine null (void))]
+          [(and (not combine) (null? (cdr es)))
+           (loop (car es) phase ns)]
+          [else
+           (define a (loop (car es) phase ns))
+           (if combine
+               (combine a (begin-loop (cdr es)))
+               (begin-loop (cdr es)))]))
+       (if wrap
+           (wrap (m 'begin) exp-s (begin-loop (m 'e)))
+           (begin-loop (m 'e)))]
+      [(begin-for-syntax)
+       (define m (match-syntax exp-s '(begin-for-syntax e ...)))
+       (define next-phase (add1 phase))
+       (define next-ns (namespace->namespace-at-phase ns next-phase))
+       (define l
+         (for/list ([s (in-list (m 'e))])
+           (loop s next-phase next-ns)))
+       (cond
+        [wrap (wrap (m 'begin-for-syntax) exp-s l)]
+        [combine l]
+        [else (void)])]
+      [else
+       (single exp-s ns)])))
 
 (define (namespace-syntax-introduce s [ns (current-namespace)])
   (check 'namespace-syntax-introduce syntax? s)

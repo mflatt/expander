@@ -15,12 +15,13 @@
          "compile-impl-id.rkt"
          "compile-def-id.rkt"
          "compile-instance.rkt"
-         "compile-form.rkt")
+         "compile-form.rkt"
+         "compiled-in-memory.rkt")
 
 (provide compile-module)
 
-;; Compiles module to a set of linklets that is returned as a linklet
-;; directory
+;; Compiles module to a set of linklets that is returned as a
+;; `compiled-in-memory`
 (define (compile-module s cctx
                         #:self [given-self #f]
                         #:as-submodule? [as-submodule? #f])
@@ -61,9 +62,9 @@
   (define-values (body-linklets
                   min-phase
                   max-phase
-                  phase-to-link-module-uses       ; not needed; we use the `-expr` variant
+                  phase-to-link-module-uses
                   phase-to-link-module-uses-expr
-                  phase-to-syntax-literals)       ; not needed, since already embedded in linklets
+                  syntax-literalss)
     (compile-forms bodys body-cctx mpis
                    #:compiled-expression-callback check-side-effects!
                    #:other-form-callback (lambda (body phase)
@@ -74,7 +75,7 @@
                                                 (when (eq? (syntax-e kw) '#:cross-phase-persistent)
                                                   (set! cross-phase-persistent? #t)))]))))
 
-  ;; Compile submodules; each list is (cons linklet-directory-key linklet-directory)
+  ;; Compile submodules; each list is (cons linklet-directory-key compiled-in-memory)
   (define pre-submodules (compile-submodules 'module
                                              #:bodys bodys
                                              #:as-submodule? as-submodule?
@@ -83,6 +84,9 @@
                                               #:bodys bodys
                                               #:as-submodule? as-submodule?
                                               #:cctx body-cctx))
+  
+  (define (get-submodule-linklet-directory p)
+    (compiled-in-memory-linklet-directory (cdr p)))
 
   ;; Generate module-declaration info, which includes linking
   ;; information for each phase
@@ -100,13 +104,15 @@
       (define-values (phase-to-link-modules) ,phase-to-link-module-uses-expr)
       (define-values (pre-submodules) ',(map car pre-submodules))
       (define-values (post-submodules) ',(map car post-submodules))))
-
+  
   ;; Assemble the declaration linking unit, which is instanted
   ;; once for a module declaration and shared among instances
   (define declaration-linklet
     (compile-linklet
      `(linklet
-       #:import ([deserialize ,@deserialize-imports])
+       #:import ([deserialize ,@deserialize-imports]
+                 [data (mpi-vector ,mpi-vector-id)
+                       deserialized-syntax])
        #:export (self-mpi
                  default-name
                  root-module-name
@@ -119,20 +125,44 @@
                  max-phase
                  phase-to-link-modules
                  pre-submodules
-                 post-submodules
-                 [,mpi-vector-id mpi-vector]
+                 post-submodules)
+       ,@declaration-body)))
+  
+  ;; The data linklet houses serialized data for use by the
+  ;; declaration and module-body linklets. In the case of syntax
+  ;; objects, it provides a shared vector for all instances, while
+  ;; the unmarshaling of data is left to each body.
+  (define data-linklet
+    (compile-linklet
+     `(linklet
+       #:import ([deserialize ,@deserialize-imports])
+       #:export ([,mpi-vector-id mpi-vector]
                  deserialized-syntax)
        (define-values (,mpi-vector-id)
          ,(generate-module-path-index-deserialize mpis))
        (define-values (deserialized-syntax)
-         (make-vector ,(add1 max-phase) #f))
-       ,@declaration-body)))
+         (make-vector ,(add1 max-phase) #f)))))
 
   ;; Combine everything in a linklet directosy
-  (hash->linklet-directory
-   (for/fold ([ht (hash-set body-linklets #"" declaration-linklet)])
-             ([sm (in-list (append pre-submodules post-submodules))])
-     (hash-set ht (encode-linklet-directory-key (car sm)) (cdr sm)))))
+  (define ld
+    (hash->linklet-directory
+     (for/fold ([ht (hash-set (hash-set body-linklets #".decl" declaration-linklet)
+                              #".data"
+                              data-linklet)])
+               ([sm (in-list (append pre-submodules post-submodules))])
+       (hash-set ht
+                 (encode-linklet-directory-key (car sm))
+                 (compiled-in-memory-linklet-directory (cdr sm))))))
+ 
+  ;; Save mpis and syntax for direct evaluation, instead of unmarshaling:
+  (compiled-in-memory ld
+                      0
+                      max-phase
+                      phase-to-link-module-uses
+                      (mpis-as-vector mpis)
+                      (syntax-literals-as-vectors syntax-literalss 0)
+                      (map cdr pre-submodules)
+                      (map cdr post-submodules)))
 
 ;; ----------------------------------------
 

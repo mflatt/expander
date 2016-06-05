@@ -6,29 +6,46 @@
          "serialize.rkt"
          "linklet.rkt"
          "compile-instance.rkt"
-         (only-in "eval-compiled-top.rkt" eval-linklets))
+         (only-in "eval-compiled-top.rkt" eval-linklets)
+         "compiled-in-memory.rkt")
 
 (provide eval-module)
 
-(define (eval-module cd
+(define (eval-module c
                      #:namespace [ns (current-namespace)]
                      #:as-submodule? [as-submodule? #f])
-  (define h (eval-linklets (linklet-directory->hash cd)))
+  (define ld (if (compiled-in-memory? c)
+                 (compiled-in-memory-linklet-directory c)
+                 c))
+  (define h (eval-linklets (linklet-directory->hash ld)))
+
+  (define data-instance
+    (if (compiled-in-memory? c)
+        (make-data-instance-from-compiled-in-memory c)
+        (instantiate-linklet (hash-ref h #".data")
+                             (list deserialize-instance))))
+
   (define declaration-instance
-    (instantiate-linklet (hash-ref h #"")
-                         (list deserialize-instance)))
+    (instantiate-linklet (hash-ref h #".decl")
+                         (list deserialize-instance
+                               data-instance)))
   
   (define (decl key)
     (instance-variable-value declaration-instance key))
   
-  (define (declare-submodules names)
-    (for ([name (in-list names)])
-      (define sm-cd (hash-ref h (encode-linklet-directory-key name)))
-      (unless sm-cd (error "missing submodule declaration:" name))
-      (eval-module sm-cd #:namespace ns)))
+  (define (declare-submodules names pre?)
+    (if (compiled-in-memory? c)
+        (for ([c (in-list (if pre?
+                              (compiled-in-memory-pre-compiled-in-memorys c)
+                              (compiled-in-memory-post-compiled-in-memorys c)))])
+          (eval-module c #:namespace ns))
+        (for ([name (in-list names)])
+          (define sm-cd (hash-ref h (encode-linklet-directory-key name)))
+          (unless sm-cd (error "missing submodule declaration:" name))
+          (eval-module sm-cd #:namespace ns))))
   
   (unless as-submodule?
-    (declare-submodules (decl 'pre-submodules)))
+    (declare-submodules (decl 'pre-submodules) #t))
   
   (define root-module-name (instance-variable-value declaration-instance 'root-module-name))
   
@@ -59,7 +76,7 @@
                                 #:set-transformer! (lambda (name val)
                                                      (namespace-set-transformer! ns (sub1 phase-level) name val))))
                              (instantiate-linklet cu (list* deserialize-instance
-                                                            declaration-instance
+                                                            data-instance
                                                             inst
                                                             imports)
                                                   (namespace->instance ns phase-level))))
@@ -72,4 +89,14 @@
                    #:as-submodule? as-submodule?)
 
   (unless as-submodule?
-    (declare-submodules (decl 'post-submodules))))
+    (declare-submodules (decl 'post-submodules) #f)))
+
+;; ----------------------------------------
+
+(define (make-data-instance-from-compiled-in-memory cim)
+  (define data-instance (make-instance 'data))
+  (set-instance-variable-value! data-instance 'mpi-vector
+                                (compiled-in-memory-mpis cim))
+  (set-instance-variable-value! data-instance 'deserialized-syntax
+                                (compiled-in-memory-syntax-literalss cim))
+  data-instance)

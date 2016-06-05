@@ -140,8 +140,11 @@
                         (loop (hash-ref h (encode-linklet-directory-key (cadr name)))
                               (cdr name)))))
         ;; Instantiate the declaration linklet
-        (define decl (instantiate-linklet (eval-linklet (hash-ref h #""))
+        (define data-instance (instantiate-linklet (eval-linklet (hash-ref h #".data"))
                                                    (list deserialize-instance)))
+        (define decl (instantiate-linklet (eval-linklet (hash-ref h #".decl"))
+                                          (list deserialize-instance
+                                                data-instance)))
         ;; Make a `compiled-module` structure to represent the compilaed module
         ;; and all its linklets (but not its submodules, although they're in `h`)
         (define comp-mod (compiled-module decl h))

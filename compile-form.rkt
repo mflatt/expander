@@ -191,8 +191,8 @@
                           `([deserialize ,@(if (empty-syntax-literals? syntax-literals)
                                                null
                                                deserialize-imports)]
-                            [declaration (mpi-vector ,mpi-vector-id)
-                                         (deserialized-syntax ,deserialized-syntax-id)])
+                            [data (mpi-vector ,mpi-vector-id)
+                                  (deserialized-syntax ,deserialized-syntax-id)])
                           ;; For top-level forms, import values that may or may not have
                           ;; been serialized and (eagerly) deserialized
                           `([top-level (top-level-bind! ,top-level-bind!-id)]
@@ -227,16 +227,19 @@
                 (list phase `(list ,@(serialize-module-uses (hash-ref phase-to-link-module-uses phase)
                                                             mpis)))))))
   
-  (define phase-to-syntax-literals
-    (for/hash ([(phase header) (in-hash phase-to-header)])
-      (values phase (header-syntax-literals header))))
-  
+  (define syntax-literalss
+    (for/list ([phase (in-range phase (add1 max-phase))])
+      (define h (hash-ref phase-to-header phase #f))
+      (if h
+          (header-syntax-literals h)
+          empty-syntax-literals)))
+
   (values body-linklets   ; main compilation result
           min-phase
           max-phase
           phase-to-link-module-uses
           phase-to-link-module-uses-expr
-          phase-to-syntax-literals))
+          syntax-literalss))
 
 ;; ----------------------------------------
 
