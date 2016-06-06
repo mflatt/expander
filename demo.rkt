@@ -79,27 +79,37 @@
       (let ([x 'x-3])
         (m x))))))
 
-"distinct generated variables"
+"distinct generated variables via introduction scope"
+;; Essentially the same as
+;;   (define-syntax-rule (gen2 _ x1 x2 v1 v2)
+;;    (let ([x1 v1]
+;;           [v2 v2])
+;;       (list x1 x2)))
+;;   (define-syntax-rule (gen1 next . rest)
+;;     (next gen2 x . rest)) ; <- `x` twice in final expansion
+;;   (gen1 gen1 1 2)
+;; to check that the two introduced instances of `x` are
+;; not `bound-identifier=?`
 (eval-expression
- #:check '(2 1)
+ #:check '(1 2)
  (add-let
   `(let-syntax ([gen2 (lambda (stx)
                         (datum->syntax
                          (list (quote-syntax let)
-                               (list (list (car (cdr (syntax-e stx)))
-                                           (car (cdr (cdr (syntax-e stx)))))
-                                     (list (quote-syntax x)
-                                           (car (cdr (cdr (cdr (syntax-e stx)))))))
+                               (list (list (car (cdr (cdr (syntax-e stx))))
+                                           (car (cdr (cdr (cdr (cdr (syntax-e stx)))))))
+                                     (list (car (cdr (cdr (cdr (syntax-e stx)))))
+                                           (car (cdr (cdr (cdr (cdr (cdr (syntax-e stx)))))))))
                                (list (quote-syntax list)
-                                     (quote-syntax x)
-                                     (car (cdr (syntax-e stx)))))))])
+                                     (car (cdr (cdr (syntax-e stx))))
+                                     (car (cdr (cdr (cdr (syntax-e stx)))))))))])
     (let-syntax ([gen1 (lambda (stx)
                          (datum->syntax
-                          (list (quote-syntax gen2)
-                                (quote-syntax x)
-                                (car (cdr (syntax-e stx)))
-                                (car (cdr (cdr (syntax-e stx)))))))])
-      (gen1 1 2)))))
+                          (cons (car (cdr (syntax-e stx)))
+                                (cons (quote-syntax gen2)
+                                      (cons (quote-syntax x)
+                                            (cdr (cdr (syntax-e stx))))))))])
+      (gen1 gen1 1 2)))))
 
 "non-transformer binding misuse"
 (with-handlers ([exn:fail? (lambda (exn)
