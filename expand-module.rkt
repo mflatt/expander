@@ -196,7 +196,7 @@
                                                [declared-submodule-names declared-submodule-names]
                                                [lifts (make-lift-context ; FIXME: share single instance for same phase?
                                                        (make-wrap-as-definition self frame-id
-                                                                                inside-scope new-module-scopes
+                                                                                inside-scope initial-require-s
                                                                                 defined-syms requires+provides))]
                                                [module-lifts (make-module-lift-context #t)]
                                                [lifts-to-module
@@ -217,7 +217,7 @@
                                    #:frame-id frame-id
                                    #:requires-and-provides requires+provides
                                    #:need-eventually-defined need-eventually-defined
-                                   #:module-scopes new-module-scopes
+                                   #:all-scopes-stx initial-require-s
                                    #:defined-syms defined-syms
                                    #:declared-keywords declared-keywords
                                    #:declared-submodule-names declared-submodule-names
@@ -450,7 +450,7 @@
                                 #:frame-id frame-id
                                 #:requires-and-provides requires+provides
                                 #:need-eventually-defined need-eventually-defined
-                                #:module-scopes module-scopes
+                                #:all-scopes-stx all-scopes-stx
                                 #:defined-syms defined-syms
                                 #:declared-keywords declared-keywords
                                 #:declared-submodule-names declared-submodule-names
@@ -497,17 +497,18 @@
           (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
           (check-ids-unbound ids phase requires+provides #:in exp-body)
           (define syms (select-defined-syms-and-bind! ids defined-syms 
-                                                      self phase module-scopes
+                                                      self phase all-scopes-stx
                                                       #:frame-id frame-id
                                                       #:requires+provides requires+provides))
-          (cons exp-body
+          (cons (rebuild exp-body
+                         `(,(m 'define-values) ,ids ,(m 'rhs)))
                 (loop tail? (cdr bodys)))]
          [(define-syntaxes)
           (define m (match-syntax exp-body '(define-syntaxes (id ...) rhs)))
           (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
           (check-ids-unbound ids phase requires+provides #:in exp-body)
           (define syms (select-defined-syms-and-bind! ids defined-syms
-                                                      self phase module-scopes
+                                                      self phase all-scopes-stx
                                                       #:frame-id frame-id
                                                       #:requires+provides requires+provides))
           ;; Expand and evaluate RHS:
@@ -568,13 +569,13 @@
 
 ;; Convert lifted identifiers plus expression to a `define-values` form:
 (define (make-wrap-as-definition self frame-id
-                                 inside-scope module-scopes
+                                 inside-scope all-scopes-stx
                                  defined-syms requires+provides)
   (lambda (ids rhs phase)
     (define scoped-ids (for/list ([id (in-list ids)])
                          (add-scope id inside-scope)))
     (select-defined-syms-and-bind! scoped-ids defined-syms
-                                   self phase module-scopes
+                                   self phase all-scopes-stx
                                    #:frame-id frame-id
                                    #:requires+provides requires+provides)
     (values scoped-ids

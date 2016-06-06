@@ -29,7 +29,7 @@
 ;; scope.
 
 (define (select-defined-syms-and-bind! ids defined-syms
-                                       self phase module-scopes
+                                       self phase all-scopes-stx
                                        #:frame-id frame-id
                                        #:top-level-bind-scope [top-level-bind-scope #f]
                                        #:requires+provides [requires+provides #f])
@@ -43,7 +43,7 @@
       (if (and (not (defined-as-other? (hash-ref defined-syms-at-phase sym #f) id phase top-level-bind-scope))
                ;; Only use `sym` directly if there are no
                ;; extra scopes on the binding form
-               (no-extra-scopes? id module-scopes top-level-bind-scope phase))
+               (no-extra-scopes? id all-scopes-stx top-level-bind-scope phase))
           sym
           (let loop ([pos 1])
             (define s (string->unreadable-symbol (format "~a.~a" sym pos)))
@@ -59,8 +59,8 @@
       (add-defined-or-required-id! requires+provides id phase b))
     defined-sym))
 
-(define (no-extra-scopes? id module-scopes top-level-bind-scope phase)
-  (define m-id (add-scopes (datum->syntax #f (syntax-e id)) module-scopes))
+(define (no-extra-scopes? id all-scopes-stx top-level-bind-scope phase)
+  (define m-id (datum->syntax all-scopes-stx (syntax-e id)))
   (or (bound-identifier=? id m-id phase)
       (and top-level-bind-scope
            (bound-identifier=? id (add-scope m-id top-level-bind-scope) phase))))

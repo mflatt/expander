@@ -43,7 +43,7 @@
   (select-defined-syms-and-bind! tl-ids (root-expand-context-defined-syms ctx)
                                  (namespace-mpi (expand-context-namespace ctx))
                                  (expand-context-phase ctx)
-                                 (root-expand-context-module-scopes ctx)
+                                 (root-expand-context-all-scopes-stx ctx)
                                  #:frame-id (root-expand-context-frame-id ctx)
                                  #:top-level-bind-scope top-level-bind-scope)
   tl-ids)
