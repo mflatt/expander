@@ -143,7 +143,12 @@
          (loop! (m 'e) (add1 phase) (find-or-create-header! (add1 phase)))]
         [(#%require #%provide #%declare module module*)
          ;; Must be handled separately, if allowed at all
-         (other-form-callback body phase)]
+         (define e (other-form-callback body (struct-copy compile-context cctx
+                                                          [phase phase]
+                                                          [header header])))
+         (when e
+           (compiled-expression-callback e #f phase)
+           (add-body! phase e))]
         [else
          (define e (compile body
                             (struct-copy compile-context cctx
@@ -195,7 +200,8 @@
                                   (deserialized-syntax ,deserialized-syntax-id)])
                           ;; For top-level forms, import values that may or may not have
                           ;; been serialized and (eagerly) deserialized
-                          `([top-level (top-level-bind! ,top-level-bind!-id)]
+                          `([top-level (top-level-bind! ,top-level-bind!-id)
+                                       (top-level-require! ,top-level-require!-id)]
                             [link (mpi-vector ,mpi-vector-id)
                                   (syntax-literalss ,syntax-literalss-id)]))
                     [instance ,@instance-imports]
@@ -253,7 +259,7 @@
   (define header (compile-context-header cctx))
   (define mpis (header-module-path-indexes header))
   ;; The binding that we install at run time should not include
-  ;; the emporary binding scope that the expander added:
+  ;; the temporary binding scope that the expander added:
   (define top-level-bind-scope (root-expand-context-top-level-bind-scope
                                 (namespace-root-expand-ctx
                                  (compile-context-namespace cctx))))

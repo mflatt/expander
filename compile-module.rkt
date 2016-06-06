@@ -67,13 +67,15 @@
                   syntax-literalss)
     (compile-forms bodys body-cctx mpis
                    #:compiled-expression-callback check-side-effects!
-                   #:other-form-callback (lambda (body phase)
-                                           (case (core-form-sym body phase)
+                   #:other-form-callback (lambda (body cctx)
+                                           (case (core-form-sym body (compile-context-phase cctx))
                                              [(#%declare)
                                               (define m (match-syntax body '(#%declare kw ...)))
                                               (for ([kw (in-list (m 'kw))])
                                                 (when (eq? (syntax-e kw) '#:cross-phase-persistent)
-                                                  (set! cross-phase-persistent? #t)))]))))
+                                                  (set! cross-phase-persistent? #t)))
+                                              #f]
+                                             [else #f]))))
 
   ;; Compile submodules; each list is (cons linklet-directory-key compiled-in-memory)
   (define pre-submodules (compile-submodules 'module

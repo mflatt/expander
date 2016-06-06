@@ -41,7 +41,6 @@
 (define (make-expand-context ns)
   (define root-ctx (namespace-root-expand-ctx ns))
   (expand-context (root-expand-context-module-scopes root-ctx)
-                  (root-expand-context-module-push-scope root-ctx)
                   (root-expand-context-post-expansion-scope root-ctx)
                   (root-expand-context-top-level-bind-scope root-ctx)
                   (root-expand-context-all-scopes-stx root-ctx)
@@ -71,7 +70,6 @@
 (define (copy-root-expand-context ctx root-ctx)
   (struct-copy expand-context ctx
                [module-scopes #:parent root-expand-context (root-expand-context-module-scopes root-ctx)]
-               [module-push-scope #:parent root-expand-context (root-expand-context-module-push-scope root-ctx)]
                [post-expansion-scope #:parent root-expand-context (root-expand-context-post-expansion-scope root-ctx)]
                [top-level-bind-scope #:parent root-expand-context (root-expand-context-top-level-bind-scope root-ctx)]
                [all-scopes-stx #:parent root-expand-context (root-expand-context-all-scopes-stx root-ctx)]

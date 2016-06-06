@@ -31,7 +31,9 @@
          resolve
 
          bound-identifier=?
-         
+
+         top-level-common-scope
+
          deserialize-scope
          deserialize-scope-fill!
          deserialize-representative-scope
@@ -68,8 +70,9 @@
         (lambda (s ser state)
           (unless (set-member? (serialize-state-reachable-scopes state) s)
             (error "internal error: found supposedly unreachable scope"))
-          `(deserialize-scope
-            ,(ser (scope-kind s))))
+          (if (eq? s top-level-common-scope)
+              `(deserialize-scope)
+              `(deserialize-scope ,(ser (scope-kind s)))))
         #:property prop:serialize-fill!
         (lambda (id s ser state)
           (if (and (empty-bindings? (scope-bindings s))
@@ -93,8 +96,11 @@
                                          reach
                                          register-trigger))))
 
-(define (deserialize-scope kind)
-  (scope (new-deserialize-scope-id!) kind (make-bindings) (make-bulk-bindings)))
+(define deserialize-scope
+  (case-lambda
+    [() top-level-common-scope]
+    [(kind)
+     (scope (new-deserialize-scope-id!) kind (make-bindings) (make-bulk-bindings))]))
 
 (define (deserialize-scope-fill! s bindings bulk-bindings)
   (set-scope-bindings! s bindings)
@@ -247,6 +253,9 @@
 
 (define (empty-bulk-bindings? bbs)
   (null? bbs))
+
+;; A shared "outside-edge" scope for all top-level contexts
+(define top-level-common-scope (scope 0 'module (make-bindings) (make-bulk-bindings)))
 
 (define (new-scope kind)
   (scope (new-scope-id!) kind (make-bindings) (make-bulk-bindings)))

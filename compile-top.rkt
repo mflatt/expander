@@ -1,6 +1,10 @@
 #lang racket/base
 (require "serialize.rkt"
          "linklet.rkt"
+         "core.rkt"
+         "scope.rkt"
+         "namespace.rkt"
+         "root-expand-context.rkt"
          "compiled-in-memory.rkt"
          "compile-context.rkt"
          "compile-header.rkt"
@@ -36,8 +40,9 @@
                   phase-to-link-module-uses-expr
                   syntax-literalss)
     (compile-forms (list s) cctx mpis
-                   #:phase-in-body-thunk phase))
-  
+                   #:phase-in-body-thunk phase
+                   #:other-form-callback compile-top-level-require))
+
   (define code
     (hash->linklet-directory
      (cond
@@ -83,6 +88,20 @@
                       null
                       null))
 
+(define (compile-top-level-require s cctx)
+  (define phase (compile-context-phase cctx))
+  (case (core-form-sym s phase)
+    [(#%require)
+     (define form-stx
+       (compile-quote-syntax
+        (remove-scopes s (root-expand-context-module-scopes
+                          (namespace-root-expand-ctx
+                           (compile-context-namespace cctx))))
+        phase
+        cctx))
+     `(,top-level-require!-id ,form-stx ,ns-id)]
+    [else #f]))
+
 ;; ----------------------------------------
 
 ;; Encode a sequence of compiled top-level forms by creating a
@@ -118,16 +137,3 @@
                        c))
              #".multi"
              (hash->linklet-directory #hash()))))
-
-
-        ;; FIXME --- doesn't belong here
-        #;
-        [(#%require)
-         (define m (match-syntax s '(#%require req ...)))
-         ;; Running the compiled code will trigger expander work ---
-         ;; which is strange, and that reflects how a top-level
-         ;; `#%require` is strange
-         `(,(lambda ()
-              (define ns (compile-context-namespace cctx))
-              (parse-and-perform-requires! #:run? #t (m 'req) #f ns phase 
-                                           (make-requires+provides #f))))]

@@ -625,7 +625,7 @@
                            (print def:x) (newline)))
 
 (check-print
- (namespace-require ''m2 demo-ns)
+ (eval-expression '(#%require 'm2))
  1
  10
  1)

@@ -89,7 +89,7 @@
                      #:initial-scopes (if keep-enclosing-scope-at-phase
                                           (root-expand-context-module-scopes init-ctx)
                                           null)
-                     #:module-push-scope outside-scope
+                     #:outside-scope outside-scope
                      #:post-expansion-scope inside-scope
                      #:all-scopes-stx initial-require-s))
    

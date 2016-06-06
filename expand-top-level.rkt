@@ -59,10 +59,10 @@
    (unless (eq? (expand-context-context ctx) 'top-level)
      (error "allowed only in a module or the top level:" s))
    (define m (match-syntax s '(#%require req ...)))
-   (define sc (new-scope)) ; to hide bindings
+   (define sc (new-scope 'macro)) ; to hide bindings
    ;; Check the `#%require` form syntax and trigger compile-time
    ;; instanations
-   (parse-and-perform-requires! (for ([req (in-list (m 'req))])
+   (parse-and-perform-requires! (for/list ([req (in-list (m 'req))])
                                   (add-scope req sc))
                                 #f ; no enclosing module
                                 (expand-context-namespace ctx)
