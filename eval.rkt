@@ -62,24 +62,27 @@
 
 ;; This `compile` is suitable as a compile handler that will be called
 ;; by the `compile` and `compile-syntax` of '#%kernel
-(define (compile s [ns (current-namespace)] [expand expand])
+(define (compile s [ns (current-namespace)] [expand expand]
+                 #:serializable? [serializable? #f])
   (define cs
     (parameterize ([current-bulk-binding-fallback-registry
                   (namespace-bulk-binding-registry ns)])
       (per-top-level s ns
-                     #:single (lambda (s ns) (list (compile-single s ns expand)))
+                     #:single (lambda (s ns) (list (compile-single s ns expand
+                                                              serializable?)))
                      #:combine append)))
   (if (= 1 (length cs))
       (car cs)
       (compiled-tops->compiled-top cs)))
 
-(define (compile-single s ns expand)
+(define (compile-single s ns expand serializable?)
   (define exp-s (expand s ns))
   (case (core-form-sym exp-s (namespace-phase ns))
     [(module)
      (compile-module exp-s (make-compile-context #:namespace ns))]
     [else
-     (compile-top exp-s (make-compile-context #:namespace ns))]))
+     (compile-top exp-s (make-compile-context #:namespace ns)
+                  #:serializable? serializable?)]))
 
 ;; This `expand` is suitable as an expand handler (if such a thing
 ;; existed) to be called by `expand` and `expand-syntax`.

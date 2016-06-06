@@ -1,14 +1,47 @@
 #lang racket/base
-(require "serialize.rkt"
-         "linklet.rkt"
-         "compiled-in-memory.rkt"
-         "compile-context.rkt"
-         "compile-header.rkt"
-         "compile-impl-id.rkt"
-         "compile-instance.rkt"
-         "compile-expr.rkt"
-         "compile-form.rkt"
+(require "compile-context.rkt"
+         "compile-top.rkt"
          "compile-module.rkt")
+
+;; Compilation uses one of two protocols, which differ in the shapes
+;; of linklets that they generate:
+;;
+;; * Top-level forms or stand-alone expressions (such as the
+;;   right-hand side of a `define-syntaxes` form within a module,
+;;   which must be compiled to continue expanding the module) are
+;;   compiled using one protocol.
+;;
+;;   In the case of top-level forms, a sequence of forms that affect
+;;   binding or transformers must be compiled separately --- normally
+;;   via `per-top-level` in "eval.rkt". The separarately compiled
+;;   forms can them be combined into a single compilation record.
+;;
+;;   The generated linklets for a single form include one linklet for
+;;   potentially marshaled module path indices and syntax objects,
+;;   plus one linklet per relevant phase. Multi-form combinations
+;;   group the linklet sets for individual compilations in nested
+;;   linklet directories.
+;;
+;; * Modules are compiled to a slightly different protocol. Like the
+;;   top-level protocol, the resulting set of linklets includes on
+;;   linklet per phase plus one linklet for housing potentially
+;;   marshaled data. An additional linklet reports metadata about the
+;;   modules, such as its requires, provides, and submodule names.
+;;   Submodules are represented by nested linklet directories.
+;;
+;;   Besides the extra metadata module, the handling of syntax-object
+;;   unmarshaling is a little different for modules than top-level
+;;   forms. Each phase has its own unmarshaling code, and the shared
+;;   linklet to house the data is filled on demand with syntax objects
+;;   by the per-phase linklets.
+;;
+;; Whichever protocol is used, the result is wrapped in a
+;; `compiled-in-memory` structure, which retains original module path
+;; indices and syntax objects. If the compiled code is evaluated
+;; directory, then the retained values are used instead of running
+;; unmarshaling code in generated linklets. That's both faster an
+;; preserves some expected sharing. When a `compile-in-memory`
+;; structure is written, it writes the same as a linklet directory.
 
 (provide make-compile-context
 
@@ -17,117 +50,3 @@
          compiled-tops->compiled-top
 
          compile-module)
-
-;; Returns a `compiled-in-memory`
-(define (compile-single s cctx)
-  (compile-top s cctx #:serializable? #f))
-
-;; Returns a `compiled-in-memory`
-(define (compile-top s cctx
-                     #:serializable? [serializable? #t])
-  (define phase (compile-context-phase cctx))
-
-  (define mpis (make-module-path-index-table))
-  
-  (define-values (body-linklets
-                  min-phase
-                  max-phase
-                  phase-to-link-module-uses
-                  phase-to-link-module-uses-expr
-                  syntax-literalss)
-    (compile-forms (list s) cctx mpis
-                   #:phase-in-body-thunk phase))
-  
-  (define code
-    (hash->linklet-directory
-     (cond
-      [serializable?
-       (define syntax-literalss-expr
-         (generate-eager-syntax-literals! 
-          syntax-literalss
-          mpis
-          phase
-          (compile-context-self cctx)))
-
-       (define link-cu
-         (compile-linklet
-          `(linklet
-            #:import ([deserialize ,@deserialize-imports])
-            #:export ([,mpi-vector-id mpi-vector]
-                      syntax-literals
-                      phase-to-link-modules
-                      min-phase
-                      max-phase)
-            (define-values (,mpi-vector-id)
-              ,(generate-module-path-index-deserialize mpis))
-            (define-values (deserialized-syntax) 
-              (make-vector ,(add1 phase) #f))
-            (define-values (original-phase) ,phase)
-            (define-values (max-phase) ,max-phase)
-            (define-values (phase-to-link-modules) ,phase-to-link-module-uses-expr)
-            (define syntax-literalss ,syntax-literalss-expr))))
-       
-       (hash-set body-linklets #".link" link-cu)]
-      [else
-       ;; Will combine the linking unit with non-serialized link info
-       body-linklets])))
-  
-  ;; If the compiled code is executed directly in its original phase,
-  ;; we'll share the original values
-  (compiled-in-memory code
-                      phase
-                      max-phase
-                      phase-to-link-module-uses
-                      (mpis-as-vector mpis)
-                      (syntax-literals-as-vectors syntax-literalss phase)
-                      null
-                      null))
-
-;; ----------------------------------------
-
-;; Encode a sequence of compiled top-level forms by creating a
-;; linklet directory with labels #"0", #"1", etc. Keep all the
-;; existing compile-in-memory records as "pre" record, too.
-(define (compiled-tops->compiled-top cims)
-  (compiled-in-memory (hash->linklet-directory
-                       (hash-set (for/hash ([cim (in-list cims)]
-                                            [i (in-naturals)])
-                                   (values (encode-linklet-directory-key i)
-                                           (compiled-in-memory-linklet-directory cim)))
-                                 ;; The #".multi" key acts as a tag to indicate
-                                 ;; that it's multiple top-level forms in sequence
-                                 #".multi"
-                                 (hash->linklet-directory #hash())))
-                      0
-                      0
-                      #hasheqv()
-                      #()
-                      #()
-                      cims
-                      null))
-
-;; ----------------------------------------
-
-;; Encode a list of top-level compile into a linklet dirctory,
-;; preserving the order
-(define (compiles->linket-directory cs)
-  (hash->linklet-directory
-   (hash-set (for/hash ([c (in-list cs)]
-                        [i (in-naturals)])
-               (values (encode-linklet-directory-key i)
-                       c))
-             #".multi"
-             (hash->linklet-directory #hash()))))
-
-
-        ;; FIXME --- doesn't belong here
-        #;
-        [(#%require)
-         (define m (match-syntax s '(#%require req ...)))
-         ;; Running the compiled code will trigger expander work ---
-         ;; which is strange, and that reflects how a top-level
-         ;; `#%require` is strange
-         `(,(lambda ()
-              (define ns (compile-context-namespace cctx))
-              (parse-and-perform-requires! #:run? #t (m 'req) #f ns phase 
-                                           (make-requires+provides #f))))]

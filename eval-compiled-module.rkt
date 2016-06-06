@@ -9,6 +9,9 @@
          (only-in "eval-compiled-top.rkt" eval-linklets)
          "compiled-in-memory.rkt")
 
+;; Run a reprsentation of top-level code as produced by `compile-module`;
+;; see "compile.rkt" and "compile-module.rkt"
+
 (provide eval-module)
 
 (define (eval-module c

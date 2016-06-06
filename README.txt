@@ -5,7 +5,7 @@ See "demo.rkt" for examples.
 TODO:
  bug fix for local definition contexts (MB's example)
  set load handler
- top level
+ top level fallbacks
  lazy module instantiation
  origin tracking
  taints

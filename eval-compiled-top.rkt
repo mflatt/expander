@@ -9,7 +9,7 @@
          "top-level-instance.rkt")
 
 ;; Run a reprsentation of top-level code as produced by `compile-top`;
-;; see "compile.rkt"
+;; see "compile.rkt" and "compile-top.rkt"
 
 (provide eval-top
          eval-linklets)

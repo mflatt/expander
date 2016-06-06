@@ -634,7 +634,7 @@
 
 (define default-compile-handler
   ;; Constrained to a single argument:
-  (lambda (s immediate-eval?) (compile s)))
+  (lambda (s immediate-eval?) (compile s #:serializable? (not immediate-eval?))))
 
 (define (boot)
   (seal)
