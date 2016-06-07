@@ -41,13 +41,11 @@
 ;; ----------------------------------------
 
 (define (free-identifier=? a b a-phase b-phase)
-  (define ab (resolve+shift a a-phase))
-  (define bb (resolve+shift b b-phase))
+  (define ab (resolve+shift a a-phase #:unbound-sym? #t))
+  (define bb (resolve+shift b b-phase #:unbound-sym? #t))
   (cond
-   [(or (not ab) (not bb))
-    (and (not ab)
-         (not bb)
-         (eq? (syntax-e a) (syntax-e b)))]
+   [(or (symbol? ab) (symbol? bb))
+    (eq? ab bb)]
    [else
     (same-binding? ab bb)]))
 
@@ -147,6 +145,7 @@
 (define (resolve+shift s phase
                        #:exactly? [exactly? #f]
                        #:immediate? [immediate? exactly?]
+                       #:unbound-sym? [unbound-sym? #f]
                        ;; For resolving bulk bindings in `free-identifier=?` chains:
                        #:bulk-binding-registry [bulk-binding-registry #f]
                        #:extra-shifts [extra-shifts null])
@@ -161,7 +160,8 @@
                                #:bulk-binding-registry (or bulk-binding-registry
                                                            (syntax-bulk-binding-registry s))
                                #:extra-shifts (append extra-shifts (syntax-mpi-shifts s))
-                               #:exactly? exactly?)
+                               #:exactly? exactly?
+                               #:unbound-sym? unbound-sym?)
                 immediate-b))
   (cond
    [(module-binding? b)
@@ -173,6 +173,8 @@
       (module-binding-update b
                              #:module (apply-syntax-shifts (module-binding-module b) mpi-shifts)
                              #:nominal-module (apply-syntax-shifts (module-binding-nominal-module b) mpi-shifts))])]
+   [(and (not b) unbound-sym?)
+    (syntax-e s)]
    [else b]))
 
 ;; Apply accumulated module path index shifts
