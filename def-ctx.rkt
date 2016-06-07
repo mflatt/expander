@@ -35,6 +35,8 @@
   (define ctx (get-current-expand-context 'syntax-local-make-definition-context))
   (define frame-id (or (root-expand-context-frame-id ctx) (gensym)))
   (define sc (new-scope 'intdef))
+  (define def-ctx-scopes (expand-context-def-ctx-scopes ctx))
+  (when def-ctx-scopes (set-box! def-ctx-scopes (cons sc (unbox def-ctx-scopes))))
   (internal-definition-context frame-id sc add-scope? (box null)))
 
 ;; syntax-local-bind-syntaxes

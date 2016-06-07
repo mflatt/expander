@@ -24,6 +24,7 @@
                                             namespace  ; namespace for modules and evaluation
                                             env        ; environment for local bindings
                                             scopes     ; list of scopes that should be pruned by `quote-syntax`
+                                            def-ctx-scopes ; #f or box of list of scopes; transformer-created def-ctxes
                                             only-immediate? ; #t => stop at core forms
                                             module-begin-k ; expander for `#%module-begin` in a 'module-begin context
                                             need-eventually-defined ; phase(>=1) -> variables expanded before binding
@@ -35,7 +36,7 @@
                                             lift-envs  ; list of box of env for lifts to locals
                                             module-lifts ; lifted modules
                                             lifts-to-module ; more lifts: requires, provides, etc.
-                                            requires+provides ; enclosing module's requires and provides during `provide`
+                                            requires+provides ; enclosing module's requires+provides during `provide`
                                             name))     ; #f or identifier to name the expression
 
 (define (make-expand-context ns)
@@ -53,6 +54,7 @@
                   ns
                   empty-env
                   null ; scopes
+                  #f   ; def-ctx-scopes
                   #f   ; only-immediate?
                   #f   ; module-begin-k
                   #f   ; need-eventually-defined

@@ -7,6 +7,7 @@
          "syntax-error.rkt"
          "namespace.rkt"
          "binding.rkt"
+         "free-id-set.rkt"
          "require+provide.rkt"
          "module-path.rkt"
          "lift-context.rkt"
@@ -39,6 +40,8 @@
  (lambda (s ctx)
    (unless (eq? (expand-context-context ctx) 'module-begin)
      (raise-syntax-error #f "not in a module-definition context" s))
+   (unless (expand-context-module-begin-k ctx)
+     (raise-syntax-error #f "not currently transforming a module" s))
    ;; This `#%module-begin` must be in a `module`; the
    ;; `module-begin-k` function continues that module's
    ;; expansion
@@ -287,15 +290,19 @@
                                             #:enclosing enclosing-self)))
      
      (define fully-expanded-bodys
-       (expand-post-submodules fully-expanded-bodys-except-post-submodules
-                               #:declare-enclosing declare-enclosing-module
-                               #:original s
-                               #:phase phase
-                               #:self self
-                               #:requires-and-provides requires+provides
-                               #:enclosing-is-cross-phase-persistent? is-cross-phase-persistent?
-                               #:declared-submodule-names declared-submodule-names
-                               #:ctx ctx))
+       (cond
+        [(stop-at-module*? ctx)
+         fully-expanded-bodys-except-post-submodules]
+        [else
+         (expand-post-submodules fully-expanded-bodys-except-post-submodules
+                                 #:declare-enclosing declare-enclosing-module
+                                 #:original s
+                                 #:phase phase
+                                 #:self self
+                                 #:requires-and-provides requires+provides
+                                 #:enclosing-is-cross-phase-persistent? is-cross-phase-persistent?
+                                 #:declared-submodule-names declared-submodule-names
+                                 #:ctx ctx)]))
      
      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
      ;; Finish
@@ -310,22 +317,23 @@
    
    ;; The preceding function performs the expansion; here's where we
    ;; trigger it
+   
+   (define mb-ctx
+     (struct-copy expand-context ctx
+                  [context 'module-begin]
+                  [module-begin-k module-begin-k]))
       
    ;; Add `#%module-begin` around the body if it's not already present
    (define mb
      (ensure-module-begin bodys 
                           #:initial-require-s initial-require-s
                           #:m-ns m-ns
-                          #:ctx ctx 
+                          #:ctx mb-ctx
                           #:phase phase
                           #:s s))
    
    ;; Expand the body
-   (define expanded-mb
-     (expand mb
-             (struct-copy expand-context ctx
-                          [context 'module-begin]
-                          [module-begin-k module-begin-k])))
+   (define expanded-mb (expand mb mb-ctx))
 
    ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    ;; Assemble the `module` result
@@ -786,6 +794,12 @@
         [else
          (cons (car bodys)
                (loop (cdr bodys) phase))])])))
+
+(define (stop-at-module*? ctx)
+  (free-id-set-member? (expand-context-stops ctx)
+                       (expand-context-phase ctx)
+                       (syntax-shift-phase-level (datum->syntax core-stx 'module*)
+                                                 (expand-context-phase ctx))))
 
 ;; ----------------------------------------
 

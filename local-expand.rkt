@@ -109,6 +109,11 @@
                                   (and (and same-kind?
                                             (memq context '(module top-level))
                                             (root-expand-context-post-expansion-scope ctx)))]
+                                 [scopes
+                                  (append (if (expand-context-def-ctx-scopes ctx)
+                                              (unbox (expand-context-def-ctx-scopes ctx))
+                                              null)
+                                          (expand-context-scopes ctx))]
                                  [only-immediate? (not stop-ids)]
                                  [stops (free-id-set phase (or all-stop-ids null))]
                                  [current-introduction-scopes null]

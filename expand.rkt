@@ -152,7 +152,15 @@
         ((core-form-expander t) s ctx))]
    [(transformer? t)
     ;; Apply transformer and expand again
-    (expand (apply-transformer (transformer->procedure t) s id ctx binding) ctx
+    (define def-ctx-scopes (box null))
+    (define t-ctx (struct-copy expand-context ctx [def-ctx-scopes def-ctx-scopes]))
+    (define exp-s (apply-transformer (transformer->procedure t) s id t-ctx binding))
+    (define re-ctx (if (null? (unbox def-ctx-scopes))
+                       ctx
+                       (struct-copy expand-context ctx
+                                    [scopes (append (unbox def-ctx-scopes)
+                                                    (expand-context-scopes ctx))])))
+    (expand exp-s re-ctx
             #:alternate-id (and (rename-transformer? t)
                                 (rename-transformer-target t)))]
    [(variable? t)
