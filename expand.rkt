@@ -17,6 +17,7 @@
          "lift-context.rkt"
          "already-expanded.rkt"
          "liberal-def-ctx.rkt"
+         "rename-trans.rkt"
          "debug.rkt"
          "reference-record.rkt")
 
@@ -37,24 +38,28 @@
 
 ;; ----------------------------------------
 
-(define (expand s ctx)
+(define (expand s ctx
+                ;; Aplying a rename transformer substitutes
+                ;; an id without changing `s`
+                #:alternate-id [alternate-id #f])
   (cond
    [(identifier? s)
+    (define id (or alternate-id s))
     (guard-stop
-     s ctx s
-     (define binding (resolve+shift s (expand-context-phase ctx)
+     id ctx s
+     (define binding (resolve+shift id (expand-context-phase ctx)
                                     #:immediate? #t))
      (cond
       [(not binding)
        ;; The implicit `#%top` form handles unbound identifiers
-       (expand-implicit '#%top s ctx s)]
+       (expand-implicit '#%top (substitute-alternate-id s alternate-id) ctx s)]
       [else
        ;; Variable or form as identifier macro
-       (dispatch (lookup binding ctx s) s s ctx binding)]))]
+       (dispatch (lookup binding ctx s) s id ctx binding)]))]
    [(and (pair? (syntax-e s))
          (identifier? (car (syntax-e s))))
     ;; An "application" form that starts with an identifier
-    (define id (car (syntax-e s)))
+    (define id (or alternate-id (car (syntax-e s))))
     (guard-stop
      id ctx s
      (define binding (resolve+shift id (expand-context-phase ctx)
@@ -62,14 +67,14 @@
      (cond
       [(not binding)
        ;; The `#%app` binding might do something with unbound ids
-       (expand-implicit '#%app s ctx id)]
+       (expand-implicit '#%app (substitute-alternate-id s alternate-id) ctx id)]
       [else
        ;; Find out whether it's bound as a variable, syntax, or core form
        (define t (lookup binding ctx id))
        (cond
         [(variable? t)
          ;; Not as syntax or core form, so use implicit `#%app`
-         (expand-implicit '#%app s ctx id)]
+         (expand-implicit '#%app (substitute-alternate-id s alternate-id) ctx id)]
         [else
          ;; Syntax or core form as "application"
          (dispatch t s id ctx binding)])]))]
@@ -147,7 +152,9 @@
         ((core-form-expander t) s ctx))]
    [(transformer? t)
     ;; Apply transformer and expand again
-    (expand (apply-transformer (transformer->procedure t) s id ctx binding) ctx)]
+    (expand (apply-transformer (transformer->procedure t) s id ctx binding) ctx
+            #:alternate-id (and (rename-transformer? t)
+                                (rename-transformer-target t)))]
    [(variable? t)
     ;; A reference to a variable expands to itself --- but if the
     ;; binding's frame has a reference record, then register the
@@ -230,6 +237,18 @@
     s]
    [else
     otherwise ...]))
+
+
+(define (substitute-alternate-id s alternate-id)
+  (cond
+   [(not alternate-id) s]
+   [(identifier? s) alternate-id]
+   (datum->syntax
+    s
+    (cons alternate-id
+          (cdr (syntax-e s)))
+    s
+    s)))
 
 ;; ----------------------------------------
 

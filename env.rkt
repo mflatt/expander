@@ -45,15 +45,7 @@
 (define (transformer->procedure t)
   (cond
    [(set!-transformer? t) (set!-transformer-procedure t)]
-   [(rename-transformer? t) (lambda (s)
-                              (if (identifier? s)
-                                  (rename-transformer-target t)
-                                  (datum->syntax
-                                   s
-                                   (cons (rename-transformer-target t)
-                                         (cdr (syntax-e s)))
-                                   s
-                                   s)))]
+   [(rename-transformer? t) (lambda (s) s)] ; "expansion" handled via #:alternate-id
    [else t]))
 
 ;; A subset of compile-time values are primitive forms
