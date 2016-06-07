@@ -1,6 +1,7 @@
 #lang racket/base
 (require "syntax.rkt"
-         "scope.rkt")
+         "scope.rkt"
+         "syntax-error.rkt")
 
 (provide match-syntax
          try-match-syntax)
@@ -9,13 +10,13 @@
 ;; The result of matching is a function that takes a symbol and
 ;; returns its match.
 (define (match-syntax orig-s pattern
-                      #:error [error error])
+                      #:error [raise-syntax-error raise-syntax-error])
   (define (match s pattern)
     (cond
      [(symbol? pattern)
       (when (regexp-match? #rx"^id(:|$)" (symbol->string pattern))
         (unless (identifier? s)
-          (error "not an identifier:" s)))
+          (raise-syntax-error #f "not an identifier" orig-s s)))
       (list (list pattern s))]
      [(syntax? s) (match (syntax-e s) pattern)]
      [(and (list? pattern)
@@ -26,7 +27,7 @@
       (cond
        [(null? flat-s)
         (when (eq? '...+ (cadr pattern))
-          (error "bad syntax:" orig-s))
+          (raise-syntax-error #f "bad syntax" orig-s))
         (make-empty-vars pattern)]
        [(list? flat-s)
         (define a-lists
@@ -37,23 +38,24 @@
                  (list (caar slice)
                        (map cadr slice)))
                a-lists)]
-       [else (error "bad syntax:" orig-s)])]
+       [else (raise-syntax-error #f "bad syntax" orig-s)])]
      [(pair? pattern)
       (cond
        [(pair? s)
         (append (match (car s) (car pattern))
                 (match (cdr s) (cdr pattern)))]
-       [else (error "bad syntax:" orig-s)])]
+       [else (raise-syntax-error #f "bad syntax" orig-s)])]
      [(null? pattern)
       (cond
        [(null? s) null]
-       [else (error "bad syntax:" orig-s)])]
-     [(and (or (keyword? pattern)
-               (boolean? pattern))
-           (eq? pattern s))
-      null]
+       [else (raise-syntax-error #f "bad syntax" orig-s)])]
+     [(or (keyword? pattern)
+          (boolean? pattern))
+      (if (eq? pattern s)
+          null
+          (raise-syntax-error #f "bad syntax" orig-s))]
      [else
-      (error "bad pattern")]))
+      (error "bad pattern:" pattern)]))
   (define a-list (match orig-s pattern))
   (lambda (sym)
     (define a (assq sym a-list))

@@ -5,6 +5,7 @@
          "phase.rkt"
          "scope.rkt"
          "binding.rkt"
+         "syntax-error.rkt"
          "namespace.rkt"
          "match.rkt"
          "require+provide.rkt"
@@ -21,7 +22,7 @@
 
 (define layers '(raw raw/no-just-meta phaseless path))
 
-(define (parse-and-perform-requires! reqs self m-ns phase-shift
+(define (parse-and-perform-requires! reqs orig-s self m-ns phase-shift
                                      requires+provides
                                      #:run? [run? #f]
                                      #:declared-submodule-names [declared-submodule-names #hasheq()])
@@ -34,7 +35,7 @@
     (for ([req (in-list reqs)])
       (define (check-nested want-layer)
         (unless (member want-layer (member layer layers))
-          (error "invalid nesting:" req)))
+          (raise-syntax-error #f "invalid nesting" orig-s req)))
       (define fm (and (pair? (syntax-e req))
                       (identifier? (car (syntax-e req)))
                       (syntax-e (car (syntax-e req)))))
@@ -44,7 +45,7 @@
          (define m (match-syntax req '(for-meta phase-level spec ...)))
          (define p (syntax-e (m 'phase-level)))
          (unless (phase? p)
-           (error "bad phase:" req))
+           (raise-syntax-error #f "bad phase" orig-s req))
          (loop (m 'spec) 
                (or top-req req)
                (phase+ phase-shift p)
@@ -83,7 +84,7 @@
          (define m (match-syntax req '(just-meta phase-level spec ...)))
          (define p (syntax-e (m 'phase-level)))
          (unless (phase? p)
-           (error "bad phase:" req))
+           (raise-syntax-error #f "bad phase" orig-s req))
          (loop (m 'spec)
                (or top-req req)
                phase-shift
@@ -138,8 +139,8 @@
         [else
          (define mp (syntax->datum req))
          (unless (module-path? mp)
-           (error "bad require spec:" req))
-         (perform-require! mp self
+           (error #f "bad require spec" orig-s req))
+         (perform-require! mp #f self
                            (or req top-req) m-ns phase-shift just-meta adjust
                            requires+provides
                            #:run? run?
@@ -154,14 +155,14 @@
 (define (perform-initial-require! mod-path self
                                   in-stx m-ns
                                   requires+provides)
-  (perform-require! mod-path self
+  (perform-require! mod-path #f self
                     in-stx m-ns 0 'all #f
                     requires+provides
                     #:can-shadow? #t))
 
 ;; ----------------------------------------
 
-(define (perform-require! mod-path self
+(define (perform-require! mod-path orig-s self
                           in-stx m-ns phase-shift just-meta adjust
                           requires+provides
                           #:run? [run? #f]
@@ -240,7 +241,7 @@
              (not (= (set-count need-syms) (hash-count done-syms))))
     (for ([sym (in-set need-syms)])
       (unless (hash-ref done-syms sym #f)
-        (error "not in nested spec:" sym)))))
+        (raise-syntax-error #f "not in nested spec" orig-s sym)))))
 
 ;; ----------------------------------------
 

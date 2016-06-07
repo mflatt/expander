@@ -60,6 +60,7 @@
                                (list (add-scopes (datum->syntax #f req)
                                                  (root-expand-context-module-scopes
                                                   (namespace-root-expand-ctx ns))))
+                               #f
                                #f ns
                                (namespace-phase ns)
                                (make-requires+provides #f)))

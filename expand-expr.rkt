@@ -6,6 +6,7 @@
          "namespace.rkt"
          "binding.rkt"
          "env.rkt"
+         "syntax-error.rkt"
          "dup-check.rkt"
          "core.rkt"
          "expand-context.rkt"
@@ -22,8 +23,8 @@
   (define sc (new-scope 'local))
   (define phase (expand-context-phase ctx))
   ;; Parse and check formal arguments:
-  (define ids (parse-and-flatten-formals formals sc))
-  (check-no-duplicate-ids ids phase s)
+  (define ids (parse-and-flatten-formals formals sc s))
+  (check-no-duplicate-ids ids phase s #:what "argument name")
   ;; Bind each argument and generate a corresponding key for the
   ;; expand-time environment:
   (define counter (root-expand-context-counter ctx))
@@ -74,7 +75,7 @@
             (lambda-clause-expander s formals bodys ctx))
           (rebuild clause `[,exp-formals ,exp-body]))))))
 
-(define (parse-and-flatten-formals all-formals sc)
+(define (parse-and-flatten-formals all-formals sc s)
   (let loop ([formals all-formals])
     (cond
      [(identifier? formals) (list (add-scope formals sc))]
@@ -83,16 +84,16 @@
       (cond
        [(pair? p) (loop p)]
        [(null? p) null]
-       [else (error "not an identifier:" p)])]
+       [else (raise-syntax-error #f "not an identifier" s p)])]
      [(pair? formals)
       (unless (identifier? (car formals))
-        (error "not an identifier:" (car formals)))
+        (raise-syntax-error "not an identifier" s (car formals)))
       (cons (add-scope (car formals) sc)
             (loop (cdr formals)))]
      [(null? formals)
       null]
      [else
-      (error "bad argument sequence:" all-formals)])))
+      (raise-syntax-error "bad argument sequence" s all-formals)])))
 
 ;; ----------------------------------------
 
@@ -199,7 +200,7 @@
  (lambda (s ctx)
    (define m (match-syntax s '(#%datum . datum)))
    (when (keyword? (syntax-e (m 'datum)))
-     (error "keyword misused as an expression:" (m 'datum)))
+     (raise-syntax-error '#%datum "keyword misused as an expression" #f (m 'datum)))
    (define phase (expand-context-phase ctx))
    (rebuild
     s
@@ -339,10 +340,8 @@
       [(expand-context-allow-unbound? ctx)
        id]
       [else
-       (error "unbound identifier:" (m 'id)
-              (syntax-debug-info (m 'id)
-                                 (expand-context-phase ctx)
-                                 #t))])])))
+       (raise-syntax-error #f "unbound identifier" #f (m 'id) null
+                           (syntax-debug-info-string (m 'id) ctx))])])))
 
 (add-core-form!
  'set!
@@ -362,9 +361,10 @@
             id
             (expand (m 'rhs) (as-expression-context ctx))))]
     [(not binding)
-     (error "no binding for assignment:" s)]
+     (raise-syntax-error #f "unbound identifier" s id null
+                         (syntax-debug-info-string id ctx))]
     [(set!-transformer? t)
-     (expand (apply-transformer (transformer->procedure t) s ctx binding) ctx)]
+     (expand (apply-transformer (transformer->procedure t) s id ctx binding) ctx)]
     [(rename-transformer? t)
      (expand (datum->syntax s
                             (list (m 'set!)
@@ -373,7 +373,8 @@
                             s
                             s)
              ctx)]
-    [else (error "cannot assign to syntax:" s)])))
+    [else
+     (raise-syntax-error #f "cannot mutate syntax identifier" s id)])))
 
 (add-core-form!
  '#%variable-reference
@@ -385,10 +386,11 @@
                         (not top-m)
                         (match-syntax s '(#%variable-reference))))
    (when (or id-m top-m)
-     (define binding (resolve+shift ((or id-m top-m) 'id) (expand-context-phase ctx)))
+     (define id ((or id-m top-m) 'id))
+     (define binding (resolve+shift id (expand-context-phase ctx)))
      (unless binding
-       (error "no binding for variable reference:" s)))
-   
+       (raise-syntax-error #f "unbound identifier" s id null
+                           (syntax-debug-info-string id ctx))))
    s))
 
 (add-core-form!

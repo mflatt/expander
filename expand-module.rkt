@@ -4,6 +4,7 @@
          "scope.rkt"
          "match.rkt"
          "phase.rkt"
+         "syntax-error.rkt"
          "namespace.rkt"
          "binding.rkt"
          "require+provide.rkt"
@@ -25,19 +26,19 @@
  'module
  (lambda (s ctx)
    (unless (eq? (expand-context-context ctx) 'top-level)
-     (error "allowed only at the top level:" s))
+     (raise-syntax-error #f "allowed only at the top level" s))
    (expand-module s ctx #f)))
 
 (add-core-form!
  'module*
  (lambda (s ctx)
-   (error "illegal use (not in a module top-level):" s)))
+   (raise-syntax-error #f "illegal use (not in a module top-level)" s)))
 
 (add-core-form!
  '#%module-begin
  (lambda (s ctx)
    (unless (eq? (expand-context-context ctx) 'module-begin)
-     (error "not in a module-definition context:" s))
+     (raise-syntax-error #f "not in a module-definition context" s))
    ;; This `#%module-begin` must be in a `module`; the
    ;; `module-begin-k` function continues that module's
    ;; expansion
@@ -50,7 +51,7 @@
  '#%declare
  (lambda (s ctx)
    ;; The `#%module-begin` expander handles `#%declare`
-   (error "not in module body:" s)))
+   (raise-syntax-error #f "not allowed outside of a module body" s)))
 
 ;; ----------------------------------------
 
@@ -63,7 +64,7 @@
    (define initial-require (syntax->datum (m 'initial-require)))
    (unless (or keep-enclosing-scope-at-phase
                (module-path? initial-require))
-     (error "not a module path:" (m 'initial-require)))
+     (raise-syntax-error #f "not a module path" s (m 'initial-require)))
    
    ;; All module bodies start at phase 0
    (define phase 0)
@@ -264,8 +265,8 @@
      (define is-cross-phase-persistent? (hash-ref declared-keywords '#:cross-phase-persistent #f))
      (when is-cross-phase-persistent?
        (unless (requires+provides-can-cross-phase-persistent? requires+provides)
-         (error "cannot be cross-phase persistent due to required modules"
-                (hash-ref declared-keywords '#:cross-phase-persistent)))
+         (raise-syntax-error #f "cannot be cross-phase persistent due to required modules" s
+                             (hash-ref declared-keywords '#:cross-phase-persistent)))
        (check-cross-phase-persistent-form fully-expanded-bodys-except-post-submodules))
 
      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -388,13 +389,14 @@
   (define mb-id (datum->syntax initial-require-s '#%module-begin))
   ;; If `mb-id` is not bound, we'd like to give a clear error message
   (unless (resolve mb-id phase)
-    (error "no #%module-begin binding in the module's language" s))
+    (raise-syntax-error #f "no #%module-begin binding in the module's language" s))
   (define mb (rebuild
               s
               `(,mb-id ,@bodys)))
   (define partly-expanded-mb (expand mb mb-ctx))
   (unless (eq? '#%module-begin (core-form-sym partly-expanded-mb phase))
-    (error "expansion of #%module-begin is not a #%plain-module-begin form" partly-expanded-mb))
+    (raise-syntax-error #f "expansion of #%module-begin is not a #%plain-module-begin form" s
+                        partly-expanded-mb))
   partly-expanded-mb)
   
 ;; ----------------------------------------
@@ -528,7 +530,7 @@
          [(#%require)
           (define ready-body (remove-use-site-scopes exp-body partial-body-ctx))
           (define m (match-syntax ready-body '(#%require req ...)))
-          (parse-and-perform-requires! (m 'req) self
+          (parse-and-perform-requires! (m 'req) exp-body self
                                        m-ns phase
                                        requires+provides
                                        #:declared-submodule-names declared-submodule-names)
@@ -554,11 +556,11 @@
           (define m (match-syntax exp-body '(#%declare kw ...)))
           (for ([kw (in-list (m 'kw))])
             (unless (keyword? (syntax-e kw))
-              (error "expected a keyword in `#%declare`:" kw))
+              (raise-syntax-error #f "expected a keyword" exp-body kw))
             (unless (memq (syntax-e kw) '(#:cross-phase-persistent #:empty-namespace))
-              (error "not an allowed declaration keyword:" kw))
+              (raise-syntax-error #f "not an allowed declaration keyword" exp-body kw))
             (when (hash-ref declared-keywords (syntax-e kw) #f)
-              (error "keyword declared multiple times:" kw))
+              (raise-syntax-error #f "keyword declared multiple times" exp-body kw))
             (hash-set! declared-keywords (syntax-e kw) kw))
           (cons exp-body
                 (loop tail? (cdr bodys)))]
@@ -658,7 +660,7 @@
                    (module-binding? b)
                    (eq? (module-binding-sym b) (syntax-e id))
                    (equal? (module-binding-module b) self))
-        (error "reference to an unbound identifier:" id)))))
+        (raise-syntax-error #f "reference to an unbound identifier" id)))))
 
 ;; ----------------------------------------
 
@@ -833,7 +835,7 @@
   (define m (match-syntax s '(module name . _)))
   (define name (syntax-e (m 'name)))
   (when (hash-ref declared-submodule-names name #f)
-    (error "submodule already declared with the same name:" name m))
+    (raise-syntax-error #f "submodule already declared with the same name" s name))
   (hash-set! declared-submodule-names name (syntax-e (m 'module)))
 
   (define submod
@@ -881,7 +883,7 @@
                                    #:declared-submodule-names declared-submodule-names)
   (lambda (s phase)
     (define m (match-syntax s '(#%require req)))
-    (parse-and-perform-requires! (list (m 'req)) self
+    (parse-and-perform-requires! (list (m 'req)) s self
                                  m-ns phase
                                  requires+provides
                                  #:declared-submodule-names declared-submodule-names)))

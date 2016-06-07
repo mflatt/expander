@@ -1,8 +1,5 @@
 #lang racket/base
 (require "set.rkt"
-         (except-in "syntax.rkt"
-                    syntax->datum
-                    datum->syntax)
          "srcloc.rkt"
          "phase.rkt"
          (except-in "scope.rkt"
@@ -23,6 +20,7 @@
          "local-expand.rkt"
          "taint.rkt"
          "checked-syntax.rkt"
+         "syntax-error.rkt"
          "module-path.rkt"
          "variable-reference.rkt")
 
@@ -66,6 +64,12 @@
                       syntax-disarm
                       syntax-rearm
                       syntax-taint
+                      
+                      raise-syntax-error
+                      exn:fail:syntax
+                      make-exn:fail:syntax
+                      exn:fail:syntax?
+                      exn:fail:syntax-exprs
                       
                       syntax-transforming?
                       syntax-transforming-with-lifts?

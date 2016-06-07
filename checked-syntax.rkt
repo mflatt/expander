@@ -21,6 +21,7 @@
 
 (provide syntax?
          syntax-e
+         syntax-property
          syntax->datum
          datum->syntax
          syntax->list

@@ -6,6 +6,7 @@
          "namespace.rkt"
          "binding.rkt"
          "env.rkt"
+         "syntax-error.rkt"
          "free-id-set.rkt"
          "dup-check.rkt"
          "compile.rkt"
@@ -46,10 +47,10 @@
      (cond
       [(not binding)
        ;; The implicit `#%top` form handles unbound identifiers
-       (expand-implicit '#%top s ctx)]
+       (expand-implicit '#%top s ctx s)]
       [else
        ;; Variable or form as identifier macro
-       (dispatch (lookup binding ctx s) s ctx binding)]))]
+       (dispatch (lookup binding ctx s) s s ctx binding)]))]
    [(and (pair? (syntax-e s))
          (identifier? (car (syntax-e s))))
     ;; An "application" form that starts with an identifier
@@ -61,39 +62,40 @@
      (cond
       [(not binding)
        ;; The `#%app` binding might do something with unbound ids
-       (expand-implicit '#%app s ctx)]
+       (expand-implicit '#%app s ctx id)]
       [else
        ;; Find out whether it's bound as a variable, syntax, or core form
        (define t (lookup binding ctx id))
        (cond
         [(variable? t)
          ;; Not as syntax or core form, so use implicit `#%app`
-         (expand-implicit '#%app s ctx)]
+         (expand-implicit '#%app s ctx id)]
         [else
          ;; Syntax or core form as "application"
-         (dispatch t s ctx binding)])]))]
+         (dispatch t s id ctx binding)])]))]
    [(or (pair? (syntax-e s))
         (null? (syntax-e s)))
     ;; An "application" form that doesn't start with an identifier, so
     ;; use implicit `#%app`
-    (expand-implicit '#%app s ctx)]
+    (expand-implicit '#%app s ctx #f)]
    [(already-expanded? (syntax-e s))
     ;; An expression that is already fully expanded via `local-expand-expression`
     (define ae (syntax-e s))
     (unless (bound-identifier=? (root-expand-context-all-scopes-stx ctx)
                                 (already-expanded-all-scopes-stx ae)
                                 (expand-context-phase ctx))
-      (error (string-append "expanded syntax not in its original lexical context"
-                            " (extra bindings or scopes in the current context):")
-             (already-expanded-s ae)))
+      (raise-syntax-error #f
+                          (string-append "expanded syntax not in its original lexical context;\n"
+                                         " extra bindings or scopes in the current context")
+                          (already-expanded-s ae)))
     (already-expanded-s ae)]
    [else
     ;; Anything other than an identifier or parens triggers the
     ;; implicit `#%datum` form
-    (expand-implicit '#%datum s ctx)]))
+    (expand-implicit '#%datum s ctx #f)]))
 
 ;; Handle an implicit: `#%app`, `#%top`, or `#%datum`
-(define (expand-implicit sym s ctx)
+(define (expand-implicit sym s ctx trigger-id)
   (define id (datum->syntax s sym))
   (guard-stop
    id ctx s
@@ -107,28 +109,37 @@
     [(core-form? t)
      (if (expand-context-only-immediate? ctx)
          s
-         (dispatch t (datum->syntax s (cons sym s) s) ctx b))]
+         (dispatch t (datum->syntax s (cons sym s) s) id ctx b))]
     [(transformer? t)
-     (dispatch t (datum->syntax s (cons sym s) s) ctx b)]
+     (dispatch t (datum->syntax s (cons sym s) s) id ctx b)]
     [else
      (define phase (expand-context-phase ctx))
-     (error (format "~a ~a~a:"
-                    (if b
-                        "binding is not a transformer for"
-                        "no binding for")
-                    sym
-                    (case phase
-                      [(0) ""]
-                      [(1) " in the transformer phase"]
-                      [else (format " at phase ~a" phase)]))
-            s
-            (syntax-debug-info id (expand-context-phase ctx) #t))])))
+     (define what
+       (case sym
+         [(#%app) "function application"]
+         [(#%datum) "literal data"]
+         [(#%top)
+          (if (expand-context-allow-unbound? ctx)
+              "reference to a top-level identifier"
+              "reference to an unbound identifier")]))
+     (define unbound? (and trigger-id (resolve trigger-id phase)))
+     (raise-syntax-error #f
+                         (format (if unbound?
+                                     "unbound identifier;\n also, no~a transformer is bound~a"
+                                     (string-append what " is not allowed;\n no~a syntax transformer is bound~a"))
+                                 what
+                                 (case phase
+                                   [(0) ""]
+                                   [(1) " in the transformer phase"]
+                                   [else (format " at phase ~a" phase)]))
+                         (and unbound? trigger-id) (and (not unbound?) s)
+                         (if unbound? (syntax-debug-info-string trigger-id ctx) ""))])))
 
 ;; Expand `s` given that the value `t` of the relevant binding,
 ;; where `t` is either a core form, a macro transformer, some
 ;; other compile-time value (which is an error), or a token
 ;; indincating that the binding is a run-time variable
-(define (dispatch t s ctx binding)
+(define (dispatch t s id ctx binding)
   (cond
    [(core-form? t)
     (if (expand-context-only-immediate? ctx)
@@ -136,7 +147,7 @@
         ((core-form-expander t) s ctx))]
    [(transformer? t)
     ;; Apply transformer and expand again
-    (expand (apply-transformer (transformer->procedure t) s ctx binding) ctx)]
+    (expand (apply-transformer (transformer->procedure t) s id ctx binding) ctx)]
    [(variable? t)
     ;; A reference to a variable expands to itself --- but if the
     ;; binding's frame has a reference record, then register the
@@ -148,11 +159,11 @@
     s]
    [else
     ;; Some other compile-time value:
-    (error "illegal use of syntax:" t)]))
+    (raise-syntax-error #f "illegal use of syntax" t)]))
 
 ;; Given a macro transformer `t`, apply it --- adding appropriate
 ;; scopes to represent the expansion step
-(define (apply-transformer t s ctx binding)
+(define (apply-transformer t s id ctx binding)
   (define intro-scope (new-scope 'macro))
   (define intro-s (add-scope s intro-scope))
   ;; In a definition context, we need use-site scopes
@@ -168,7 +179,9 @@
                                                            (add1 (expand-context-phase ctx)))])
                           (t use-s)))
   (unless (syntax? transformed-s)
-    (error "transformer produced non-syntax:" transformed-s))
+    (raise-argument-error (syntax-e id)
+                          "received value from syntax expander was not syntax"
+                          "received" transformed-s))
   (define result-s (flip-scope transformed-s intro-scope))
   ;; In a definition contex, we need to add the inside-edge scope to
   ;; any expansion result
@@ -353,7 +366,7 @@
                                done-bodys
                                s)
   (when (null? done-bodys)
-    (error "no body forms:" s))
+    (raise-syntax-error #f "empty form is not allowed" s))
   ;; To reference core forms at the current expansion phase:
   (define s-core-stx
     (syntax-shift-phase-level core-stx (expand-context-phase body-ctx)))

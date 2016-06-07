@@ -1,6 +1,7 @@
 #lang racket/base
 (require "syntax.rkt"
-         "scope.rkt")
+         "scope.rkt"
+         "syntax-error.rkt")
 
 (provide make-check-no-duplicate-table
          check-no-duplicate-ids)
@@ -11,14 +12,15 @@
 ;; used for further checking.
 ;; The `ids` argument can be a single identifier, a list, a list of
 ;; lists, etc.
-(define (check-no-duplicate-ids ids phase s [ht (make-check-no-duplicate-table)])
+(define (check-no-duplicate-ids ids phase s [ht (make-check-no-duplicate-table)]
+                                #:what [what "binding name"])
   (let loop ([v ids] [ht ht])
     (cond
      [(identifier? v)
       (define l (hash-ref ht (syntax-e v) null))
       (for ([id (in-list l)])
         (when (bound-identifier=? id v phase)
-          (error "duplicate binding:" v)))
+          (raise-syntax-error #f (string-append "duplicate " what) s v)))
       (hash-set ht (syntax-e v) (cons v l))]
      [(pair? v)
       (loop (cdr v) (loop (car v) ht))]

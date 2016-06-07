@@ -31,6 +31,7 @@
                                         ns))))))
    (parse-and-perform-requires! #:run? #t
                                 reqs
+                                #f ; no syntax errors should happen
                                 #f ; no enclosing module
                                 ns
                                 (namespace-phase ns)
