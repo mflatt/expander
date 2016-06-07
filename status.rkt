@@ -2,5 +2,7 @@
 
 (provide log-status)
 
+(define stderr (current-error-port))
+
 (define (log-status fmt . args)
-  (apply fprintf (current-error-port) (string-append fmt "\n") args))
+  (apply fprintf stderr (string-append fmt "\n") args))

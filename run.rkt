@@ -22,6 +22,7 @@
 (define cache-save-only #f)
 (define cache-skip-first? #f)
 (define time-expand? #f)
+(define quiet-load? #f)
 (define boot-module (path->complete-path "main.rkt"))
 (define load-file #f)
 (command-line
@@ -38,6 +39,8 @@
   (set! cache-skip-first? #t)]
  [("-s" "--s-expr") "Compile to S-expression instead of bytecode"
   (linklet-compile-to-s-expr #t)]
+ [("-q" "--quiet") "Quiet load status"
+  (set! quiet-load? #t)]
  [("--time") "Time re-expansion"
   (set! time-expand? #t)]
  #:once-any
@@ -75,13 +78,16 @@
                            (get-cached-compiled cache path
                                                 (lambda ()
                                                   (when cache-dir
-                                                    (log-status "cached ~s" path)))))
+                                                    (unless quiet-load?
+                                                      (log-status "cached ~s" path))))))
                       => eval]
                      [else
-                      (log-status "compile ~s" path)
+                      (unless quiet-load?
+                        (log-status "compile ~s" path))
                       (set! cache-skip-first? #f)
                       (with-handlers ([exn:fail? (lambda (exn)
-                                                   (log-status "...during ~s..." path)
+                                                   (unless quiet-load?
+                                                     (log-status "...during ~s..." path))
                                                    (raise exn))])
                         (define s
                           (call-with-input-file*
