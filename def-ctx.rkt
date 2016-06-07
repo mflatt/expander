@@ -79,7 +79,7 @@
 (define (internal-definition-context-binding-identifiers intdef)
   (unless (internal-definition-context? intdef)
     (raise-argument-error 'internal-definition-context-binding-identifiers "internal-definition-context?" intdef))
-  (for/list ([env-mixin (in-list (internal-definition-context-env-mixins intdef))])
+  (for/list ([env-mixin (in-list (unbox (internal-definition-context-env-mixins intdef)))])
     (env-mixin-id env-mixin)))
 
 ;; internal-definition-context-introduce
