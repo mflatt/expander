@@ -18,6 +18,7 @@
          "already-expanded.rkt"
          "liberal-def-ctx.rkt"
          "rename-trans.rkt"
+         "allowed-context.rkt"
          "debug.rkt"
          "reference-record.rkt")
 
@@ -151,18 +152,17 @@
         s
         ((core-form-expander t) s ctx))]
    [(transformer? t)
-    ;; Apply transformer and expand again
-    (define def-ctx-scopes (box null))
-    (define t-ctx (struct-copy expand-context ctx [def-ctx-scopes def-ctx-scopes]))
-    (define exp-s (apply-transformer (transformer->procedure t) s id t-ctx binding))
-    (define re-ctx (if (null? (unbox def-ctx-scopes))
-                       ctx
-                       (struct-copy expand-context ctx
-                                    [scopes (append (unbox def-ctx-scopes)
-                                                    (expand-context-scopes ctx))])))
-    (expand exp-s re-ctx
-            #:alternate-id (and (rename-transformer? t)
-                                (rename-transformer-target t)))]
+    (cond
+     [(not-in-this-expand-context? t ctx)
+      (expand (avoid-current-expand-context (substitute-alternate-id s id) t ctx)
+              ctx)]
+     [else
+      ;; Apply transformer and expand again
+      (define-values (exp-s re-ctx)
+        (apply-transformer (transformer->procedure t) s id ctx binding))
+      (expand exp-s re-ctx
+              #:alternate-id (and (rename-transformer? t)
+                                  (rename-transformer-target t)))])]
    [(variable? t)
     ;; A reference to a variable expands to itself --- but if the
     ;; binding's frame has a reference record, then register the
@@ -171,7 +171,7 @@
                (local-binding? binding)
                (reference-record? (binding-frame-id binding)))
       (reference-record-used! (binding-frame-id binding) (local-binding-key binding)))
-    s]
+    id]
    [else
     ;; Some other compile-time value:
     (raise-syntax-error #f "illegal use of syntax" t)]))
@@ -184,10 +184,13 @@
   ;; In a definition context, we need use-site scopes
   (define-values (use-s use-scopes) (maybe-add-use-site-scope intro-s ctx binding))
   ;; Call the transformer; the current expansion context may be needed
-  ;; for `syntax-local-....` functions
+  ;; for `syntax-local-....` functions, and we may accumulate scopes from
+  ;; definition contexts created by the transformer
+  (define def-ctx-scopes (box null))
   (define m-ctx (struct-copy expand-context ctx
                              [current-introduction-scopes (cons intro-scope
-                                                                use-scopes)]))
+                                                                use-scopes)]
+                             [def-ctx-scopes def-ctx-scopes]))
   (define transformed-s (parameterize ([current-expand-context m-ctx]
                                        [current-namespace (namespace->namespace-at-phase
                                                            (expand-context-namespace ctx)
@@ -198,9 +201,17 @@
                           "received value from syntax expander was not syntax"
                           "received" transformed-s))
   (define result-s (flip-scope transformed-s intro-scope))
-  ;; In a definition contex, we need to add the inside-edge scope to
-  ;; any expansion result
-  (maybe-add-post-expansion-scope result-s ctx))
+  (values
+   ;; In a definition context, we need to add the inside-edge scope to
+   ;; any expansion result
+   (maybe-add-post-expansion-scope result-s ctx)
+   ;; Move any accumulated definition-context scopes to the `scopes`
+   ;; list for further expansion:
+   (if (null? (unbox def-ctx-scopes))
+       ctx
+       (struct-copy expand-context ctx
+                    [scopes (append (unbox def-ctx-scopes)
+                                    (expand-context-scopes ctx))]))))
 
 (define (maybe-add-use-site-scope s ctx binding)
   (cond

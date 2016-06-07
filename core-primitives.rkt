@@ -22,7 +22,8 @@
          "checked-syntax.rkt"
          "syntax-error.rkt"
          "module-path.rkt"
-         "variable-reference.rkt")
+         "variable-reference.rkt"
+         "allowed-context.rkt")
 
 (provide primitive-ids)
 
@@ -132,6 +133,8 @@
                       prop:liberal-define-context
                       liberal-define-context?
                       
+                      prop:expansion-contexts
+
                       resolved-module-path?
                       make-resolved-module-path
                       resolved-module-path-name

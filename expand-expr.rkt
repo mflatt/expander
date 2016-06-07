@@ -10,6 +10,7 @@
          "dup-check.rkt"
          "core.rkt"
          "expand-context.rkt"
+         "allowed-context.rkt"
          "expand.rkt"
          "set-bang-trans.rkt"
          "rename-trans.rkt"
@@ -363,34 +364,49 @@
  (lambda (s ctx)
    (define m (match-syntax s '(set! id rhs)))
    (define id (m 'id))
-   (define binding (resolve+shift id (expand-context-phase ctx)
-                                  #:immediate? #t))
-   (define t (and binding (lookup binding ctx s)))
-   (cond
-    [(or (variable? t)
-         (and (not binding)
-              (or (register-eventual-variable!? id ctx)
-                  (expand-context-allow-unbound? ctx))))
-     (rebuild
-      s
-      (list (m 'set!)
-            id
-            (expand (m 'rhs) (as-expression-context ctx))))]
-    [(not binding)
-     (raise-syntax-error #f "unbound identifier" s id null
-                         (syntax-debug-info-string id ctx))]
-    [(set!-transformer? t)
-     (expand (apply-transformer (transformer->procedure t) s id ctx binding) ctx)]
-    [(rename-transformer? t)
-     (expand (datum->syntax s
-                            (list (m 'set!)
-                                  (rename-transformer-target t)
-                                  (m 'rhs))
-                            s
-                            s)
-             ctx)]
-    [else
-     (raise-syntax-error #f "cannot mutate syntax identifier" s id)])))
+   (let rename-loop ([id id] [from-rename? #f])
+     (define binding (resolve+shift id (expand-context-phase ctx)
+                                    #:immediate? #t))
+     (define t (and binding (lookup binding ctx s)))
+     (cond
+      [(or (variable? t)
+           (and (not binding)
+                (or (register-eventual-variable!? id ctx)
+                    (expand-context-allow-unbound? ctx))))
+       (rebuild
+        s
+        (list (m 'set!)
+              id
+              (expand (m 'rhs) (as-expression-context ctx))))]
+      [(not binding)
+       (raise-syntax-error #f "unbound identifier" s id null
+                           (syntax-debug-info-string id ctx))]
+      [(set!-transformer? t)
+       (cond
+        [(not-in-this-expand-context? t ctx)
+         (expand (avoid-current-expand-context (substitute-set!-rename s m id from-rename?) t ctx)
+                 ctx)]
+        [else
+         (define-values (exp-s re-ctx)
+           (apply-transformer (transformer->procedure t) s id ctx binding))
+         (expand exp-s re-ctx)])]
+      [(rename-transformer? t)
+       (cond
+        [(not-in-this-expand-context? t ctx)
+         (expand (avoid-current-expand-context (substitute-set!-rename s m id from-rename? t) t ctx)
+                 ctx)]
+        [else (rename-loop (rename-transformer-target t) #t)])]
+      [else
+       (raise-syntax-error #f "cannot mutate syntax identifier" s id)]))))
+
+(define (substitute-set!-rename s m id from-rename? [t #f])
+  (cond
+   [(or t from-rename?)
+    (define new-id (if t
+                       (rename-transformer-target t)
+                       id))
+    (datum->syntax s (list (m 'set!) new-id (m 'rhs)) s s)]
+   [else s]))
 
 (add-core-form!
  '#%variable-reference
