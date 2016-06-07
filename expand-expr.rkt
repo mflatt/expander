@@ -420,3 +420,15 @@
      [else (rebuild
             s
             `(,(m '#%expression) ,exp-e))])))
+
+;; ----------------------------------------
+
+;; Historically in '#%kernel, should be moved out
+(add-core-form!
+ 'unquote
+ (lambda (s ctx)
+   (raise-syntax-error #f "not in quasiquote" s)))
+(add-core-form!
+ 'unquote-splicing
+ (lambda (s ctx)
+   (raise-syntax-error #f "not in quasiquote" s)))

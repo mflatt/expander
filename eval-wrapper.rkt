@@ -20,7 +20,7 @@
     ((current-eval) (intro s ns))))
 
 (define (eval-syntax s [ns (current-namespace)])
-  (check 'eval syntax? ns)
+  (check 'eval syntax? s)
   (check 'eval namespace? ns)
   (parameterize ([current-namespace ns])
     ((current-eval) s)))
@@ -30,10 +30,10 @@
 
 (define (compile-syntax s)
   (check 'compile syntax? s)
-  ((current-compile) (intro s) #f))
+  ((current-compile) (intro s)))
 
 (define (expand s)
-  (direct:expand (intro s) #f))
+  (direct:expand (intro s)))
 
 (define (expand-syntax s)
   (check 'expand syntax? s)
