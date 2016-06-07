@@ -122,17 +122,17 @@
           (if (expand-context-allow-unbound? ctx)
               "reference to a top-level identifier"
               "reference to an unbound identifier")]))
-     (define unbound? (and trigger-id (resolve trigger-id phase)))
+     (define unbound? (and trigger-id (not (resolve trigger-id phase))))
      (raise-syntax-error #f
                          (format (if unbound?
-                                     "unbound identifier;\n also, no~a transformer is bound~a"
-                                     (string-append what " is not allowed;\n no~a syntax transformer is bound~a"))
-                                 what
+                                     "unbound identifier;\n also, no ~a transformer is bound~a"
+                                     (string-append what " is not allowed;\n no ~a syntax transformer is bound~a"))
+                                 sym
                                  (case phase
                                    [(0) ""]
                                    [(1) " in the transformer phase"]
                                    [else (format " at phase ~a" phase)]))
-                         (and unbound? trigger-id) (and (not unbound?) s)
+                         (and unbound? trigger-id) (and (not unbound?) s) null
                          (if unbound? (syntax-debug-info-string trigger-id ctx) ""))])))
 
 ;; Expand `s` given that the value `t` of the relevant binding,

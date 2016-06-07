@@ -21,7 +21,7 @@
 
 (define (make-root-expand-context #:initial-scopes [initial-scopes null]
                                   #:outside-scope [outside-scope top-level-common-scope]
-                                  #:post-expansion-scope [post-expansion-scope (new-multi-scope)]
+                                  #:post-expansion-scope [post-expansion-scope (new-multi-scope 'top-level)]
                                   #:all-scopes-stx [all-scopes-stx #f])
   (define module-scopes (list* post-expansion-scope
                                outside-scope

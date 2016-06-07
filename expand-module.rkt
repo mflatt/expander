@@ -655,11 +655,12 @@
   ;; If `need-eventually-defined` is not empty, report an error
   (for ([(phase l) (in-hash need-eventually-defined)])
     (for ([id (in-list l)])
-      (define b (resolve id phase))
+      (define b (resolve+shift id phase))
+      ;; FIXME: check that the binding is for a variable
       (unless (and b
                    (module-binding? b)
                    (eq? (module-binding-sym b) (syntax-e id))
-                   (equal? (module-binding-module b) self))
+                   (eq? (module-binding-module b) self))
         (raise-syntax-error #f "reference to an unbound identifier" id)))))
 
 ;; ----------------------------------------

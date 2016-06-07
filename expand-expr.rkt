@@ -199,13 +199,15 @@
  '#%datum
  (lambda (s ctx)
    (define m (match-syntax s '(#%datum . datum)))
-   (when (keyword? (syntax-e (m 'datum)))
-     (raise-syntax-error '#%datum "keyword misused as an expression" #f (m 'datum)))
+   (define datum (m 'datum))
+   (when (and (syntax? datum)
+              (keyword? (syntax-e datum)))
+     (raise-syntax-error '#%datum "keyword misused as an expression" #f datum))
    (define phase (expand-context-phase ctx))
    (rebuild
     s
     (list (datum->syntax (syntax-shift-phase-level core-stx phase) 'quote)
-          (m 'datum)))))
+          datum))))
 
 ;; Sensible `#%app` disallows empty combinations
 #|
@@ -328,20 +330,33 @@
  (lambda (s ctx)
    (define m (match-syntax s '(#%top . id)))
    (define id (m 'id))
+   (define b (resolve+shift id (expand-context-phase ctx)))
    (cond
+    [(and b
+          (module-binding? b)
+          (eq? (module-binding-module b) (namespace-mpi (expand-context-namespace ctx))))
+     ;; Allow `#%top` in a module or top-level where it refers to the same
+     ;; thing that the identifier by itself would refer to. In that case
+     ;; `#%top` can be stripped.
+     ;; FIXME: preserve an explicit `#%top` in the top level
+     id]
     [(register-eventual-variable!? id ctx)
+     ;; Must be in a module, and we'll check the binding later, so strip `#%top`:
      id]
     [else
-     (define tl-id (add-scope id (root-expand-context-top-level-bind-scope ctx)))
      (cond
-      [(resolve tl-id (expand-context-phase ctx))
-       ;; Expand to a reference to a top-level variable
-       tl-id]
-      [(expand-context-allow-unbound? ctx)
-       id]
-      [else
+      [(not (expand-context-allow-unbound? ctx))
+       ;; In a module, unbound or out of context:
        (raise-syntax-error #f "unbound identifier" #f (m 'id) null
-                           (syntax-debug-info-string (m 'id) ctx))])])))
+                           (syntax-debug-info-string (m 'id) ctx))]
+      [else
+       ;; At the top level:
+       (define tl-id (add-scope id (root-expand-context-top-level-bind-scope ctx)))
+       (cond
+        [(resolve tl-id (expand-context-phase ctx))
+         ;; Expand to a reference to a top-level variable
+         (datum->syntax s (cons (m '#%top) tl-id))]
+        [else s])])])))
 
 (add-core-form!
  'set!
@@ -354,7 +369,8 @@
    (cond
     [(or (variable? t)
          (and (not binding)
-              (register-eventual-variable!? id ctx)))
+              (or (register-eventual-variable!? id ctx)
+                  (expand-context-allow-unbound? ctx))))
      (rebuild
       s
       (list (m 'set!)

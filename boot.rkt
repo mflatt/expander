@@ -2,6 +2,7 @@
 (require '#%paramz
          racket/private/collect
          "checked-syntax.rkt"
+         "syntax-error.rkt"
          "srcloc.rkt"
          "namespace.rkt"
          "eval.rkt"
@@ -685,7 +686,12 @@
            (if (eof-object? s)
                (apply values vals)
                (loop
-                (call-with-values (lambda () ((current-eval) (add-top-interaction s))) list))))))])))
+                (call-with-continuation-prompt
+                 (lambda ()
+                   (call-with-values (lambda () ((current-eval) (add-top-interaction s))) list))
+                 (default-continuation-prompt-tag)
+                 (lambda args
+                   (apply abort-current-continuation (default-continuation-prompt-tag) args))))))))])))
 
 (define (boot)
   (seal)

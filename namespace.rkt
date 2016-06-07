@@ -44,7 +44,7 @@
          namespace->instance
          namespace-module-use->instance)
 
-(struct namespace (mpi                 ; module path index (that's already resolved)
+(struct namespace (mpi                 ; module path index (that's already resolved); instance-specific for a module
                    root-expand-ctx     ; module context for top-level expansion
                    phase               ; phase (not phase level! not base phase!) of this namespace
                    0-phase             ; phase of module's phase-level 0
@@ -259,7 +259,7 @@
              (unless m
                (error "no module declared to instantiate:" name))
              (define m-ns (struct-copy namespace ns
-                                       [mpi (module-self m)]
+                                       [mpi (make-self-module-path-index name)]
                                        [root-expand-ctx (module-root-expand-ctx m)]
                                        [phase 0-phase]
                                        [0-phase 0-phase]

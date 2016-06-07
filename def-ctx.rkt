@@ -90,8 +90,8 @@
     (raise-argument-error 'internal-definition-context-introduce "syntax?" s))
   (add-intdef-scopes s intdef
                      #:action (case mode
-                                [(add) add-scopes]
-                                [(remove) remove-scopes]
+                                [(add) add-scope]
+                                [(remove) remove-scope]
                                 [(flip) flip-scope]
                                 [else (raise-argument-error
                                        internal-definition-context-introduce

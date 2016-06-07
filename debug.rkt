@@ -3,7 +3,8 @@
          "syntax.rkt"
          "scope.rkt"
          (submod "scope.rkt" for-debug)
-         "binding.rkt")
+         "binding.rkt"
+         "module-binding.rkt")
 
 (provide syntax-debug-info)
 
@@ -42,12 +43,15 @@
                                             (subset? scs s-scs)))
                        (hash 'name (syntax-e s)
                              'context (scope-set->context scs)
+                             'match? (subset? scs s-scs)
                              (if (local-binding? b)
                                  'local
                                  'module)
                              (if (local-binding? b)
                                  (local-binding-key b)
-                                 b)))]
+                                 (vector (module-binding-sym b)
+                                         (module-binding-module b)
+                                         (module-binding-phase b)))))]
                     [else null]))
   (if (null? bindings)
       context-ht

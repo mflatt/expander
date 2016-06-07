@@ -1,5 +1,6 @@
 #lang racket/base
-(require "set.rkt")
+(require "set.rkt"
+         "built-in-symbol.rkt")
 
 ;; To support extraction of a bootstrapped version of the expander, we
 ;; need to be able to prune unused module content. Pruning is usefully
@@ -21,7 +22,12 @@
         [(make-struct-type)
          (and (ok-make-struct-type? e)
               5)]
-        [else #f])))
+        [else
+         (and (symbol? e)
+              (or (built-in-symbol? e)
+                  ;; FIXME: needed for "kernstruct.rkt"
+                  (eq? e 'exn:fail:syntax))
+              1)])))
   (not (and actual-results
             (or (not expected-results)
                 (= actual-results expected-results)))))

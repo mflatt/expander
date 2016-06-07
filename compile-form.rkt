@@ -109,7 +109,8 @@
                         ;; variable just mutates it.
                         ,@(for/list ([def-sym (in-list def-syms)]
                                      [gen-sym (in-list gen-syms)])
-                            `(set! ,def-sym ,gen-sym))))
+                            `(set! ,def-sym ,gen-sym))
+                        (void)))
            (add-body! phase (compile-top-level-bind
                              ids binding-syms
                              (struct-copy compile-context cctx
@@ -127,11 +128,17 @@
                                            [phase (add1 phase)]
                                            [header next-header])))
          (compiled-expression-callback rhs (length gen-syms) (add1 phase))
-         (add-body! (add1 phase) `(let-values ([,gen-syms ,rhs])
-                                   ,@(for/list ([binding-sym (in-list binding-syms)]
-                                                [gen-sym (in-list gen-syms)])
-                                       `(,set-transformer!-id ',binding-sym ,gen-sym))
-                                   (void)))
+         (define transformer-set!s (for/list ([binding-sym (in-list binding-syms)]
+                                              [gen-sym (in-list gen-syms)])
+                                     `(,set-transformer!-id ',binding-sym ,gen-sym)))
+         (cond
+          [(compile-context-module-self cctx)
+           (add-body! (add1 phase) `(let-values ([,gen-syms ,rhs])
+                                     ,@transformer-set!s
+                                     (void)))]
+          [else
+           (add-body! (add1 phase)
+                      (generate-top-level-define-syntaxes gen-syms rhs transformer-set!s))])
          (unless (compile-context-module-self cctx)
            (add-body! phase (compile-top-level-bind
                              ids binding-syms
@@ -274,3 +281,19 @@
                                 phase
                                 cctx))
         `(,top-level-bind!-id ,id-stx ,self-expr ,phase ,phase-shift-id ',binding-sym))))
+
+;; ----------------------------------------
+
+;; Handle the `define-syntaxes`-with-zero-results hack for the top level
+(define (generate-top-level-define-syntaxes gen-syms rhs transformer-set!s)
+  `(call-with-values
+    (lambda () ,rhs)
+    (case-lambda
+      [,gen-syms
+       ,@transformer-set!s
+       (void)]
+      [() (void)]
+      [args
+       ;; Provoke the wrong-number-of-arguments error:
+       (let-values ([,gen-syms (apply values args)])
+         (void))])))

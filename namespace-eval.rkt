@@ -3,6 +3,7 @@
          (only-in "binding.rkt" resolve+shift)
          "module-binding.rkt"
          "checked-syntax.rkt"
+         "syntax-error.rkt"
          (only-in "scope.rkt" add-scopes)
          "namespace.rkt"
          "core.rkt"
@@ -20,7 +21,8 @@
          namespace-require
          
          namespace-variable-value
-         namespace-set-variable-value!)
+         namespace-set-variable-value!
+         namespace-undefine-variable!)
 
 (define (namespace-syntax-introduce s [ns (current-namespace)])
   (check 'namespace-syntax-introduce syntax? s)
@@ -92,11 +94,12 @@
            (escape
             (or failure-thunk
                 (lambda ()
-                  (raise exn:fail:syntax 
-                         (format (string-append "namespace-variable-value: bound to syntax\n"
-                                                "  in: ~s")
-                                 sym)
-                         (current-continuation-marks))))))
+                  (raise (exn:fail:syntax 
+                          (format (string-append "namespace-variable-value: bound to syntax\n"
+                                                 "  in: ~s")
+                                  sym)
+                          (current-continuation-marks)
+                          null))))))
          (if (module-binding? b)
              (values (namespace->module-namespace ns
                                                   (module-binding-module b)

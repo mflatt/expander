@@ -84,6 +84,11 @@
          (if id
              `(#%variable-reference ,(compile-identifier id cctx))
              `(#%variable-reference))]
+        [(#%top)
+         (when (compile-context-module-self cctx)
+           (error "found `#%top` in a module body:" s))
+         (define m (match-syntax s '(#%top . id)))
+         (compile-identifier (m 'id) cctx #:top? #t)]
         [else
          (error "unrecognized core form:" core-sym)])]
      [(identifier? s)
@@ -116,7 +121,7 @@
                  `[,syms ,(compile rhs cctx)])
     ,(compile (m 'body) cctx)))
 
-(define (compile-identifier s cctx #:set-to [rhs #f])
+(define (compile-identifier s cctx #:set-to [rhs #f] #:top? [top? #f])
   (define phase (compile-context-phase cctx))
   (define normal-b (resolve+shift s phase))
   (define b
@@ -133,7 +138,9 @@
         (error "missing a binding after expansion:" s))
       sym]
      [(module-binding? b)
-      (define mpi (module-binding-module b))
+      (define mpi (if top?
+                      (compile-context-self cctx)
+                      (module-binding-module b)))
       (define mod-name (module-path-index-resolve mpi))
       (define ns (compile-context-namespace cctx))
       (define mod (namespace->module ns mod-name))

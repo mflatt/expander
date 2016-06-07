@@ -14,15 +14,15 @@
 (provide eval-top
          eval-linklets)
 
-(define (eval-top c ns)
+(define (eval-top c ns [eval-compiled eval-top])
   (define ld (if (compiled-in-memory? c)
                  (compiled-in-memory-linklet-directory c)
                  c))
   (if (hash-ref (linklet-directory->hash ld) #".multi" #f)
-      (eval-multiple-tops c ns)
+      (eval-multiple-tops c ns eval-compiled)
       (eval-single-top c ns)))
 
-(define (eval-multiple-tops c ns)
+(define (eval-multiple-tops c ns eval-compiled)
   (cond
    [(compiled-in-memory? c)
     (let loop ([cims (compiled-in-memory-pre-compiled-in-memorys c)])
@@ -30,9 +30,9 @@
        [(null? cims) void]
        [(null? (cdr cims))
         ;; Tail call:
-        (eval-top (car cims) ns)]
+        (eval-compiled (car cims) ns)]
        [else
-        (eval-top (car cims) ns)
+        (eval-compiled (car cims) ns)
         (loop (cdr cims))]))]
    [else
     (define ht (linklet-directory->hash c))
@@ -41,9 +41,9 @@
        [(null? keys) (void)]
        [(null? (cdr keys))
         ;; Tail call:
-        (eval-top (hash-ref ht (car keys)) ns)]
+        (eval-compiled (hash-ref ht (car keys)) ns)]
        [else
-        (eval-top (hash-ref ht (car keys)) ns)
+        (eval-compiled (hash-ref ht (car keys)) ns)
         (loop (cdr keys))]))]))
 
 (define (eval-single-top c ns)
@@ -74,26 +74,33 @@
                                                                      (module-use-phase mu)))))
      
      (define inst (make-instance-instance
-                  #:namespace ns
-                  #:phase-shift phase-shift
-                  #:self (namespace-mpi ns)
-                  #:bulk-binding-registry (namespace-bulk-binding-registry ns)
-                  #:set-transformer! (lambda (name val)
-                                       (namespace-set-transformer! ns
-                                                                   (phase+ (sub1 phase) phase-shift)
-                                                                   name
-                                                                   val))))
+                   #:namespace ns
+                   #:phase-shift phase-shift
+                   #:self (namespace-mpi ns)
+                   #:bulk-binding-registry (namespace-bulk-binding-registry ns)
+                   #:set-transformer! (lambda (name val)
+                                        (namespace-set-transformer! ns
+                                                                    (phase+ (sub1 phase) phase-shift)
+                                                                    name
+                                                                    val))))
+
+     (define linklet
+       (hash-ref h (encode-linklet-directory-key phase) #f))
      
-     (define i
-       (instantiate-linklet (hash-ref h (encode-linklet-directory-key phase))
-                            (list* top-level-instance
-                                   link-instance
-                                   inst
-                                   imports)
-                            ;; Instantiation merges with the namespace's current instance:
-                            (namespace->instance ns (namespace-phase ns))))
-     
-     (instance-variable-value i 'body-thunk))))
+     (cond
+      [linklet
+       (define i
+         (instantiate-linklet linklet
+                              (list* top-level-instance
+                                     link-instance
+                                     inst
+                                     imports)
+                              ;; Instantiation merges with the namespace's current instance:
+                              (namespace->instance ns (namespace-phase ns))))
+       (if (eqv? phase orig-phase)
+           (instance-variable-value i 'body-thunk)
+           void)]
+      [else void]))))
 
 (define (link-instance-from-compiled-in-memory cim)
   (define link-instance (make-instance 'link))

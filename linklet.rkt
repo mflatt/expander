@@ -245,7 +245,7 @@
 (define (eval-linklet linklet)
   (parameterize ([current-namespace cu-namespace]
                  [current-eval orig-eval]
-                   [current-compile orig-compile])
+                 [current-compile orig-compile])
     (eval (if (vector? linklet)
               ;; Normal mode: compiled to bytecode
               (vector-ref linklet 0)
