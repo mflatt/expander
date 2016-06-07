@@ -98,8 +98,8 @@
 
 (define (make-data-instance-from-compiled-in-memory cim)
   (define data-instance (make-instance 'data))
-  (set-instance-variable-value! data-instance 'mpi-vector
+  (instance-set-variable-value! data-instance 'mpi-vector
                                 (compiled-in-memory-mpis cim))
-  (set-instance-variable-value! data-instance 'deserialized-syntax
+  (instance-set-variable-value! data-instance 'deserialized-syntax
                                 (compiled-in-memory-syntax-literalss cim))
   data-instance)

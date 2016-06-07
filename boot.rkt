@@ -1,12 +1,14 @@
 #lang racket/base
 (require '#%paramz
          racket/private/collect
-         (only-in "syntax.rkt" syntax?)
          "checked-syntax.rkt"
          "srcloc.rkt"
          "namespace.rkt"
          "eval.rkt"
-         "module-path.rkt")
+         "namespace-eval.rkt"
+         "module-path.rkt"
+         "module-read.rkt"
+         "read-syntax.rkt")
 
 (provide boot
          seal
@@ -636,13 +638,63 @@
   ;; Constrained to a single argument:
   (lambda (s immediate-eval?) (compile s #:serializable? (not immediate-eval?))))
 
+(define default-load-handler
+  (lambda (path expected-mod)
+    (cond
+     [expected-mod
+      (define m-s
+        (call-with-input-file*
+         path
+         (lambda (i)
+           (port-count-lines! i)
+           (with-module-reading-parameterization
+               (lambda ()
+                 (define s (read-syntax (object-name i) i))
+                 (when (eof-object? s)
+                   (error 'default-load-handler
+                          (string-append "expected a `module' declaration;\n"
+                                         " found end-of-file\n"
+                                         "  in: ~e")
+                          (object-name i)))
+                 (define m-s (check-module-form s path))
+                 (define s2 (read-syntax (object-name i) i))
+                 (unless (eof-object? s2)
+                   (error 'default-load-handler
+                          (string-append "expected a `module' declaration;\n"
+                                         " found an extra form\n"
+                                         "  in: ~e\n"
+                                         "  found: ~.s")
+                          (object-name i)
+                          s2))
+                 m-s)))))
+      ((current-eval) m-s)]
+     [else
+      (define (add-top-interaction s)
+        (namespace-syntax-introduce
+         (datum->syntax #f (cons '#%top-interaction s))))
+      (call-with-input-file*
+       path
+       (lambda (i)
+         (port-count-lines! i)
+         (let loop ([vals (list (void))])
+           (define s
+             (parameterize ([read-accept-compiled #t]
+                            [read-accept-reader #t]
+                            [read-accept-lang #t])
+               (read-syntax (object-name i) i)))
+           (if (eof-object? s)
+               (apply values vals)
+               (loop
+                (call-with-values (lambda () ((current-eval) (add-top-interaction s))) list))))))])))
+
 (define (boot)
   (seal)
   (current-module-name-resolver standard-module-name-resolver)
   (current-load/use-compiled default-load/use-compiled)
   (current-reader-guard default-reader-guard)
   (current-eval default-eval-handler)
-  (current-compile default-compile-handler))
+  (current-compile default-compile-handler)
+  (current-load default-load-handler))
 
 (define (seal)
   (set! orig-paramz

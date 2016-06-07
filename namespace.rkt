@@ -36,6 +36,7 @@
          namespace-same-instance?
          
          namespace-set-variable!
+         namespace-unset-variable!
          namespace-set-transformer!
          namespace-get-variable
          namespace-get-transformer
@@ -292,7 +293,11 @@
 
 (define (namespace-set-variable! ns phase-level name val)
   (define d (namespace->definitions ns phase-level))
-  (set-instance-variable-value! (definitions-variables d) name val))
+  (instance-set-variable-value! (definitions-variables d) name val))
+
+(define (namespace-unset-variable! ns phase-level name)
+  (define d (namespace->definitions ns phase-level))
+  (instance-unset-variable! (definitions-variables d) name))
 
 (define (namespace-set-transformer! ns phase-level name val)
   (define d (namespace->definitions ns phase-level))

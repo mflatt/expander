@@ -1,6 +1,7 @@
 #lang racket/base
 (require "set.rkt"
          "datum-map.rkt"
+         "built-in-symbol.rkt"
          racket/unsafe/undefined)
 
 ;; A "linklet" is intended as the primitive form of separate (not
@@ -33,7 +34,8 @@
          instance-name               ; a "name" can be any data
          instance-variable-names
          instance-variable-value
-         set-instance-variable-value!
+         instance-set-variable-value!
+         instance-unset-variable!
 
          lookup-primitive-instance
 
@@ -60,20 +62,34 @@
 (define (instance-variable-box i sym can-create?)
   (or (hash-ref (instance-variables i) sym #f)
       (if can-create?
-          (let ([b (box unsafe-undefined)])
+          (let ([b (box undefined)])
             (hash-set! (instance-variables i) sym b)
             b)
           (error 'link "missing binding: ~s" sym))))
 
-(define (set-instance-variable-value! i sym val)
+(define (instance-set-variable-value! i sym val)
   (set-box! (instance-variable-box i sym #t) val))
+
+(define (instance-unset-variable! i sym)
+  (set-box! (instance-variable-box i sym #t) undefined))
 
 (define (instance-variable-value i sym [fail-k (lambda () (error "instance variable not found:" sym))])
   (define b (hash-ref (instance-variables i) sym #f))
   (cond
-   [b (unbox b)]
+   [(and b
+         (not (eq? (unbox b) undefined)))
+    (unbox b)]
    [(procedure? fail-k) (fail-k)]
    [else fail-k]))
+
+;; ----------------------------------------
+
+(define undefined (gensym 'undefined))
+
+(define (check-not-undefined val sym)
+  (if (eq? val undefined)
+      (check-not-unsafe-undefined unsafe-undefined sym)
+      val))
 
 ;; ----------------------------------------
 
@@ -102,7 +118,7 @@
 (define cu-namespace (make-base-empty-namespace))
 (parameterize ([current-namespace cu-namespace])
   (namespace-require ''#%kernel)
-  (namespace-require 'racket/unsafe/undefined)
+  (namespace-set-variable-value! 'check-not-undefined check-not-undefined)
   (namespace-set-variable-value! 'instance-variable-box instance-variable-box)
   (namespace-set-variable-value! 'variable-reference variable-reference)
   (namespace-set-variable-value! 'variable-reference? variable-reference? #t)
@@ -138,7 +154,7 @@
      [(symbol? e) (if (set-member? box-syms e)
                       (if (set-member? import-box-syms e)
                           `(unbox ,e)
-                          `(check-not-unsafe-undefined (unbox ,e) ',e))
+                          `(check-not-undefined (unbox ,e) ',e))
                       e)]
      [(pair? e)
       (case (car e)

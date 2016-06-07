@@ -2,6 +2,7 @@
 (require "set.rkt"
          "namespace.rkt"
          "eval.rkt"
+         "namespace-eval.rkt"
          (prefix-in wrapper: "eval-wrapper.rkt")
          "namespace-attach.rkt"
          "core.rkt"
@@ -10,9 +11,6 @@
          "place-primitives.rkt"
          "runtime-primitives.rkt"
          "boot.rkt"
-         (only-in "syntax.rkt"
-                  syntax?
-                  identifier?)
          "checked-syntax.rkt")
 
 (provide boot ; installs handlers: eval, module name resolver, etc.
@@ -63,12 +61,18 @@
           'expand wrapper:expand
           'expand-syntax wrapper:expand-syntax
           'dynamic-require dynamic-require
+
           'make-empty-namespace make-empty-namespace
-          'namespace-syntax-introduce namespace-syntax-introduce
-          'namespace-require namespace-require
+
           'namespace-module-identifier namespace-module-identifier
           'namespace-attach-module namespace-attach-module
-          'namespace-attach-module-declaration namespace-attach-module-declaration))
+          'namespace-attach-module-declaration namespace-attach-module-declaration
+          
+          'namespace-syntax-introduce namespace-syntax-introduce
+          'namespace-require namespace-require
+          'namespace-variable-value namespace-variable-value
+          'namespace-set-variable-value! namespace-set-variable-value!
+          'namespace-undefine-variable!	namespace-undefine-variable!))
 
 (define (make-empty-kernel-namespace)
   (define ns (make-empty-namespace))

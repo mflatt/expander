@@ -410,7 +410,7 @@
 (define deserialize-imports null)
 
 (define (add! sym val)
-  (set-instance-variable-value! deserialize-instance sym val)
+  (instance-set-variable-value! deserialize-instance sym val)
   (set! deserialize-imports
         (cons sym deserialize-imports))
   (register-built-in-symbol! sym))

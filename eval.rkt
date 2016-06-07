@@ -1,18 +1,12 @@
 #lang racket/base
-(require (only-in "syntax.rkt"
-                  syntax?
-                  identifier?)
-         "module-binding.rkt"
+(require "module-binding.rkt"
          "checked-syntax.rkt"
-         (only-in "scope.rkt" add-scopes)
          "namespace.rkt"
          "core.rkt"
          "phase.rkt"
          "match.rkt"
-         "require+provide.rkt"
          "expand-context.rkt"
          (rename-in "expand.rkt" [expand expand-in-context])
-         "expand-require.rkt"
          "compile.rkt"
          "compiled-in-memory.rkt"
          "eval-compiled-top.rkt"
@@ -20,15 +14,15 @@
          "module-path.rkt"
          "linklet.rkt"
          "bulk-binding.rkt"
-         "contract.rkt")
+         "contract.rkt"
+         "namespace-eval.rkt")
 
 (provide eval
          compile
          expand
-         namespace-syntax-introduce
 
-         namespace-require
-         namespace-module-identifier
+         compiled-module-expression?
+         
          dynamic-require)
 
 ;; This `eval` is suitable as an eval handler that will be called by
@@ -50,15 +44,18 @@
                                 (eval-compiled (compile s ns) ns)))])))
 
 (define (eval-compiled c ns)
-  (define ld (if (compiled-in-memory? c)
-                 (compiled-in-memory-linklet-directory c)
-                 c))
-  (define h (linklet-directory->hash ld))
   (cond
-   [(hash-ref h #".decl" #f)
+   [(compiled-module-expression? c)
     (eval-module c #:namespace ns)]
    [else
     (eval-top c ns)]))
+
+(define (compiled-module-expression? c)
+  (define ld (if (compiled-in-memory? c)
+                 (compiled-in-memory-linklet-directory c)
+                 c))
+  (and (linklet-directory? ld)
+       (hash-ref (linklet-directory->hash ld) #".decl" #f)))
 
 ;; This `compile` is suitable as a compile handler that will be called
 ;; by the `compile` and `compile-syntax` of '#%kernel
@@ -155,49 +152,7 @@
       [else
        (single exp-s ns)])))
 
-(define (namespace-syntax-introduce s [ns (current-namespace)])
-  (check 'namespace-syntax-introduce syntax? s)
-  (check 'namespace-syntax-introduce namespace? ns)
-  (define namespace-scopes (root-expand-context-module-scopes
-                            (namespace-root-expand-ctx ns)))
-  (define maybe-module-id
-    (and (pair? (syntax-e s))
-         (identifier? (car (syntax-e s)))
-         (add-scopes (car (syntax-e s)) namespace-scopes)))
-  (cond
-   [(and maybe-module-id
-         (free-identifier=? maybe-module-id
-                            (namespace-module-identifier ns)))
-    ;; The given syntax object starts `module`, so only add scope to `module`:
-    (datum->syntax s (cons maybe-module-id (cdr (syntax-e s))) s s)]
-   [else
-    ;; Add scope everywhere:
-    (add-scopes s namespace-scopes)]))
-
 ;; ----------------------------------------
-
-(define (namespace-require req [ns (current-namespace)])
-  (parse-and-perform-requires! #:run? #t
-                               (list (add-scopes (datum->syntax #f req)
-                                                 (root-expand-context-module-scopes
-                                                  (namespace-root-expand-ctx ns))))
-                               #f ns
-                               (namespace-phase ns)
-                               (make-requires+provides #f)))
-
-
-
-(define (namespace-module-identifier [where (current-namespace)])
-  (unless (or (namespace? where)
-              (phase? where))
-    (raise-argument-error 'namespace-module-identifier
-                          (string-append "(or/c namespace? " phase?-string ")")
-                          where))
-  (datum->syntax (syntax-shift-phase-level core-stx
-                                           (if (namespace? where)
-                                               (namespace-phase where)
-                                               where))
-                 'module))
 
 (define (dynamic-require mod-path sym [fail-k (lambda () (error "failed:" mod-path sym))])
   (unless (or (module-path? mod-path)

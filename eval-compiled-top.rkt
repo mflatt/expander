@@ -97,15 +97,15 @@
 
 (define (link-instance-from-compiled-in-memory cim)
   (define link-instance (make-instance 'link))
-  (set-instance-variable-value! link-instance 'original-phase
+  (instance-set-variable-value! link-instance 'original-phase
                                 (compiled-in-memory-phase cim))
-  (set-instance-variable-value! link-instance 'max-phase
+  (instance-set-variable-value! link-instance 'max-phase
                                 (compiled-in-memory-max-phase cim))
-  (set-instance-variable-value! link-instance 'phase-to-link-modules
+  (instance-set-variable-value! link-instance 'phase-to-link-modules
                                 (compiled-in-memory-phase-to-link-module-uses cim))
-  (set-instance-variable-value! link-instance 'mpi-vector
+  (instance-set-variable-value! link-instance 'mpi-vector
                                 (compiled-in-memory-mpis cim))
-  (set-instance-variable-value! link-instance 'syntax-literalss
+  (instance-set-variable-value! link-instance 'syntax-literalss
                                 (compiled-in-memory-syntax-literalss cim))
   link-instance)
 

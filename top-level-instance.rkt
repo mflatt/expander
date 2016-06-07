@@ -1,5 +1,6 @@
 #lang racket/base
-(require "scope.rkt"
+(require "syntax-to-list.rkt"
+         "scope.rkt"
          "phase.rkt"
          "namespace.rkt"
          "root-expand-context.rkt"
@@ -13,18 +14,18 @@
 
 (define top-level-instance (make-instance 'top-level))
 
-(set-instance-variable-value!
+(instance-set-variable-value!
  top-level-instance
  'top-level-bind!
  (lambda (id mpi orig-phase phase-shift sym)
    (define phase (phase+ orig-phase phase-shift))
    (add-binding! id (make-module-binding mpi phase sym) phase)))
 
-(set-instance-variable-value!
+(instance-set-variable-value!
  top-level-instance
  'top-level-require!
  (lambda (stx ns)
-   (define reqs (cdr (syntax-e
+   (define reqs (cdr (syntax->list
                       (add-scopes stx (root-expand-context-module-scopes
                                        (namespace-root-expand-ctx
                                         ns))))))

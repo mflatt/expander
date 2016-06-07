@@ -3,6 +3,8 @@
          (rename-in "syntax.rkt"
                     [syntax->datum raw:syntax->datum]
                     [datum->syntax raw:datum->syntax])
+         (rename-in "syntax-to-list.rkt"
+                    [syntax->list raw:syntax->list])
          (rename-in "scope.rkt"
                     [syntax-e raw:syntax-e]
                     [bound-identifier=? raw:bound-identifier=?]
@@ -17,10 +19,12 @@
          (rename-in "debug.rkt"
                     [syntax-debug-info raw:syntax-debug-info]))
 
-(provide syntax-e
+(provide syntax?
+         syntax-e
          syntax->datum
          datum->syntax
          syntax->list
+         identifier?
          bound-identifier=?
          free-identifier=?
          identifier-binding
@@ -51,14 +55,7 @@
 
 (define (syntax->list s)
   (check syntax->list syntax? s)
-  (define l
-    (let loop ([s s])
-      (cond
-       [(pair? s) (cons (car s) (loop (cdr s)))]
-       [(syntax? s) (loop (syntax-e s))]
-       [else s])))
-  (and (list? l)
-       l))
+  (raw:syntax->list s))
 
 (define (bound-identifier=? a b [phase (syntax-local-phase-level)])
   (check 'bound-identifier=? identifier? a)

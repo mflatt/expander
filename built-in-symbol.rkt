@@ -28,3 +28,12 @@
             set! quote
             with-continuation-mark
             #%variable-reference))
+
+;; Temporary linklet glue
+(for-each register-built-in-symbol!
+          '(check-not-undefined 
+            instance-variable-box
+            variable-reference
+            variable-reference?
+            variable-reference->instance
+            variable-reference-constant?))

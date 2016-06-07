@@ -1,6 +1,6 @@
 #lang racket/base
 (require (prefix-in direct: "eval.rkt")
-         (only-in "syntax.rkt" syntax?)
+         (prefix-in direct: "namespace-eval.rkt")
          "checked-syntax.rkt"
          "namespace.rkt"
          "contract.rkt")
