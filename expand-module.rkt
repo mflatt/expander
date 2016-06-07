@@ -143,7 +143,7 @@
                                                  #:enclosing-requires+provides enclosing-r+p
                                                  enclosing-mod
                                                  keep-enclosing-scope-at-phase)
-     (namespace-module-visit! m-ns enclosing-self
+     (namespace-module-visit! m-ns enclosing-mod
                               keep-enclosing-scope-at-phase)])
    
    ;; The primitive `#%module-body` form calls this function to expand the

@@ -880,12 +880,16 @@
  'b)
 
 (eval-module-declaration '(module with-#f-submodule '#%kernel
+                           (#%require (for-syntax '#%kernel))
                            (define-values (c) 'c)
+                           (define-syntaxes (c2) (lambda (stx) (quote-syntax c)))
                            (module* c #f
-                             (print c) (newline))))
+                             (print c) (newline)
+                             (print c2) (newline))))
 
 (check-print
  (namespace-require '(submod 'with-#f-submodule c) demo-ns)
+ 'c
  'c)
 
 (eval-module-declaration '(module used-by-shifted-submodule '#%kernel
