@@ -633,7 +633,9 @@
     (eval s
           (current-namespace)
           (let ([c (current-compile)])
-            (lambda (e ns) (c e #t))))))
+            (lambda (e ns)
+              (parameterize ([current-namespace ns])
+                (c e #t)))))))
 
 (define default-compile-handler
   ;; Constrained to a single argument:

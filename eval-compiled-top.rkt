@@ -81,7 +81,7 @@
                                                                      (module-use-phase mu)))))
      
      (define inst (make-instance-instance
-                   #:namespace ns
+                   #:namespace (namespace->namespace-at-phase ns (phase+ phase phase-shift))
                    #:phase-shift phase-shift
                    #:self (namespace-mpi ns)
                    #:bulk-binding-registry (namespace-bulk-binding-registry ns)
@@ -103,7 +103,7 @@
                                      inst
                                      imports)
                               ;; Instantiation merges with the namespace's current instance:
-                              (namespace->instance ns (namespace-phase ns))))
+                              (namespace->instance ns (phase+ phase phase-shift))))
        (if (eqv? phase orig-phase)
            (instance-variable-value i 'body-thunk)
            void)]
