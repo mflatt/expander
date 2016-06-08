@@ -16,12 +16,14 @@
          "syntax-local.rkt"
          "srcloc.rkt"
          "contract.rkt"
+         "read-syntax.rkt"
          (rename-in "debug.rkt"
                     [syntax-debug-info raw:syntax-debug-info]))
 
 (provide syntax?
          syntax-e
          syntax-property
+         syntax-original?
          syntax->datum
          datum->syntax
          syntax->list
@@ -63,6 +65,11 @@
 (define (syntax->list s)
   (check syntax->list syntax? s)
   (raw:syntax->list s))
+
+(define (syntax-original? s)
+  (check syntax-original? syntax? s)
+  (and (syntax-property s original-property-sym)
+       (not (syntax-any-macro-scopes? s))))
 
 (define (bound-identifier=? a b [phase (syntax-local-phase-level)])
   (check 'bound-identifier=? identifier? a)

@@ -21,6 +21,7 @@
          syntax-e ; handles lazy scope propagation
          
          syntax-scope-set
+         syntax-any-macro-scopes?
          
          syntax-shift-phase-level
 
@@ -574,6 +575,9 @@
                                   (scope-bulk-bindings max-sc)))
   (remove-matching-bindings! max-sc scopes binding))
 
+(define (syntax-any-macro-scopes? s)
+  (for/or ([sc (in-set (syntax-scopes s))])
+    (eq? (scope-kind sc) 'macro)))
 
 ;; ----------------------------------------
 

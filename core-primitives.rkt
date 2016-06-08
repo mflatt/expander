@@ -65,6 +65,7 @@
                       syntax-span
                       syntax->list
                       syntax-property
+                      syntax-original?
                       
                       syntax-tainted?
                       syntax-arm
