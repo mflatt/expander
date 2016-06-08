@@ -10,6 +10,8 @@
          "compile-header.rkt"
          "compile-impl-id.rkt"
          "compile-instance.rkt"
+         "compile-eager-instance.rkt"
+         "compile-eager-instance.rkt"
          "compile-expr.rkt"
          "compile-form.rkt")
 
@@ -57,12 +59,14 @@
        (define link-cu
          (compile-linklet
           `(linklet
-            #:import ([deserialize ,@deserialize-imports])
+            #:import ([deserialize ,@deserialize-imports]
+                      [eager-instance ,@eager-instance-imports])
             #:export ([,mpi-vector-id mpi-vector]
-                      syntax-literals
+                      deserialized-syntax
+                      original-phase
+                      max-phase
                       phase-to-link-modules
-                      min-phase
-                      max-phase)
+                      syntax-literalss)
             (define-values (,mpi-vector-id)
               ,(generate-module-path-index-deserialize mpis))
             (define-values (deserialized-syntax) 
@@ -70,7 +74,7 @@
             (define-values (original-phase) ,phase)
             (define-values (max-phase) ,max-phase)
             (define-values (phase-to-link-modules) ,phase-to-link-module-uses-expr)
-            (define syntax-literalss ,syntax-literalss-expr))))
+            (define-values (syntax-literalss) ,syntax-literalss-expr))))
        
        (hash-set body-linklets #".link" link-cu)]
       [else

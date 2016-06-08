@@ -5,6 +5,7 @@
          "linklet.rkt"
          "serialize.rkt"
          "compile-instance.rkt"
+         "compile-eager-instance.rkt"
          "compiled-in-memory.rkt"
          "top-level-instance.rkt")
 
@@ -55,7 +56,11 @@
     (if (compiled-in-memory? c)
         (link-instance-from-compiled-in-memory c)
         (instantiate-linklet (hash-ref h #".link")
-                             (list deserialize-instance))))
+                             (list deserialize-instance
+                                   (make-eager-instance-instance
+                                    #:dest-phase (namespace-phase ns)
+                                    #:self (namespace-mpi ns)
+                                    #:bulk-binding-registry (namespace-bulk-binding-registry ns))))))
 
   (define orig-phase (instance-variable-value link-instance 'original-phase))
   (define max-phase (instance-variable-value link-instance 'max-phase))

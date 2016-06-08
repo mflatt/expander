@@ -3,6 +3,7 @@
 
 ;; Identifers used in the compiler's output:
 (provide phase-shift-id
+         dest-phase-id
          ns-id
          self-id
          syntax-literals-id
@@ -16,6 +17,7 @@
          body-thunk-id)
 
 (define phase-shift-id (make-built-in-symbol! 'phase))
+(define dest-phase-id (make-built-in-symbol! 'dest-phase))
 (define ns-id (make-built-in-symbol! 'namespace))
 (define self-id (make-built-in-symbol! 'self))
 (define syntax-literals-id (make-built-in-symbol! 'syntax-literals))

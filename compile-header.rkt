@@ -99,12 +99,12 @@
 ;; syntax-literal position)
 (define (generate-eager-syntax-literals! syntax-literals-boxes mpis base-phase self)
   (define syntax-literalss (map unbox syntax-literals-boxes))
-  `(let ([stxss ,(generate-deserialize (append
-                                        ;; Pad result vector get to the base phase:
-                                        (for/list ([i (in-range base-phase)]) #f)
-                                        ;; Reverse syntax literals per phase
-                                        (map reverse syntax-literalss))
-                                       mpis)])
+  `(let-values ([(stxss) ,(generate-deserialize (append
+                                                 ;; Pad result vector get to the base phase:
+                                                 (for/list ([i (in-range base-phase)]) #f)
+                                                 ;; Reverse syntax literals per phase
+                                                 (map reverse syntax-literalss))
+                                                mpis)])
     (list->vector
      (map (lambda (stxs)
             (list->vector
@@ -112,7 +112,7 @@
                     (syntax-module-path-index-shift
                      (syntax-shift-phase-level
                       stx
-                      ,phase-shift-id)
+                      (- ,base-phase ,dest-phase-id))
                      ,(add-module-path-index! mpis self)
                      ,self-id
                      ,bulk-binding-registry-id))

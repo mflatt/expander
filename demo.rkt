@@ -9,6 +9,7 @@
 (namespace-require '(for-syntax '#%kernel) demo-ns)
 
 (define check-reexpand? #f)
+(define check-serialize? #t)
 
 (define (expand-expression e #:namespace [ns demo-ns])
   (expand (namespace-syntax-introduce (datum->syntax #f e) ns)
@@ -20,9 +21,16 @@
                                 (if check-reexpand?
                                     (parameterize ([current-output-port (open-output-bytes)])
                                       (expand exp-e ns))
-                                    exp-e))))
+                                    exp-e))
+                     #:serializable? check-serialize?))
+  (define ready-c (if check-serialize?
+                      (let ([o (open-output-bytes)])
+                        (display c o)
+                        (parameterize ([read-accept-compiled #t])
+                          (read (open-input-bytes (get-output-bytes o)))))
+                      c))
   (values exp-e
-          (eval c ns)))
+          (eval ready-c ns)))
 
 (define (eval-expression e #:check [check-val 'no-value-to-check]
                          #:namespace [ns demo-ns])
