@@ -15,7 +15,8 @@
          "linklet.rkt"
          "bulk-binding.rkt"
          "contract.rkt"
-         "namespace-eval.rkt")
+         "namespace-eval.rkt"
+         "lift-context.rkt")
 
 (provide eval
          compile
@@ -77,6 +78,13 @@
   (case (core-form-sym exp-s (namespace-phase ns))
     [(module)
      (compile-module exp-s (make-compile-context #:namespace ns))]
+    [(begin)
+     ;; expansion must have captured lifts
+     (define m (match-syntax exp-s '(begin e ...)))
+     (compiled-tops->compiled-top
+      (for/list ([e (in-list (m 'e))])
+        (compile-top e (make-compile-context #:namespace ns)
+                     #:serializable? serializable?)))]
     [else
      (compile-top exp-s (make-compile-context #:namespace ns)
                   #:serializable? serializable?)]))
@@ -96,7 +104,22 @@
                                            s)))))
 
 (define (expand-single s ns)
-  (expand-in-context s (make-expand-context ns)))
+  ;; Ideally, this would be just
+  ;; (expand-in-context s (make-expand-context ns))
+  ;; but we have to handle lifted definitions
+  (define ctx (make-expand-context ns))
+  (define lift-ctx (make-lift-context (make-toplevel-lift ctx)))
+  (define exp-s
+    (expand-in-context s (struct-copy expand-context ctx
+                                      [lifts lift-ctx])))
+  (define lifts (get-and-clear-lifts! lift-ctx))
+  (cond
+   [(null? lifts) exp-s]
+   [else
+    (wrap-lifts-as-begin lifts exp-s s (namespace-phase ns)
+                         #:adjust-defn
+                         (lambda (defn)
+                           (expand-single defn ns)))]))
 
 ;; Add scopes to `s` if it's not syntax:
 (define (maybe-intro s ns)
@@ -115,42 +138,54 @@
   (define ctx (make-expand-context ns))
   (define phase (namespace-phase ns))
   (let loop ([s s] [phase phase] [ns ns])
+    (define tl-ctx (struct-copy expand-context ctx
+                                [phase phase]
+                                [namespace ns]))
+    (define lift-ctx (make-lift-context (make-toplevel-lift tl-ctx)))
     (define exp-s
-      (expand-in-context s (struct-copy expand-context ctx
+      (expand-in-context s (struct-copy expand-context tl-ctx
                                         [only-immediate? #t]
                                         [phase phase]
-                                        [namespace ns])))
-    (case (core-form-sym exp-s phase)
-      [(begin)
-       (define m (match-syntax exp-s '(begin e ...)))
-       ;; Map `loop` over the `e`s, but in the case of `eval`,
-       ;; tail-call for last one:
-       (define (begin-loop es)
+                                        [namespace ns]
+                                        [lifts lift-ctx])))
+    (define lifts (get-and-clear-lifts! lift-ctx))
+    (cond
+     [(null? lifts)
+      (case (core-form-sym exp-s phase)
+        [(begin)
+         (define m (match-syntax exp-s '(begin e ...)))
+         ;; Map `loop` over the `e`s, but in the case of `eval`,
+         ;; tail-call for last one:
+         (define (begin-loop es)
+           (cond
+            [(null? es) (if combine null (void))]
+            [(and (not combine) (null? (cdr es)))
+             (loop (car es) phase ns)]
+            [else
+             (define a (loop (car es) phase ns))
+             (if combine
+                 (combine a (begin-loop (cdr es)))
+                 (begin-loop (cdr es)))]))
+         (if wrap
+             (wrap (m 'begin) exp-s (begin-loop (m 'e)))
+             (begin-loop (m 'e)))]
+        [(begin-for-syntax)
+         (define m (match-syntax exp-s '(begin-for-syntax e ...)))
+         (define next-phase (add1 phase))
+         (define next-ns (namespace->namespace-at-phase ns next-phase))
+         (define l
+           (for/list ([s (in-list (m 'e))])
+             (loop s next-phase next-ns)))
          (cond
-          [(null? es) (if combine null (void))]
-          [(and (not combine) (null? (cdr es)))
-           (loop (car es) phase ns)]
-          [else
-           (define a (loop (car es) phase ns))
-           (if combine
-               (combine a (begin-loop (cdr es)))
-               (begin-loop (cdr es)))]))
-       (if wrap
-           (wrap (m 'begin) exp-s (begin-loop (m 'e)))
-           (begin-loop (m 'e)))]
-      [(begin-for-syntax)
-       (define m (match-syntax exp-s '(begin-for-syntax e ...)))
-       (define next-phase (add1 phase))
-       (define next-ns (namespace->namespace-at-phase ns next-phase))
-       (define l
-         (for/list ([s (in-list (m 'e))])
-           (loop s next-phase next-ns)))
-       (cond
-        [wrap (wrap (m 'begin-for-syntax) exp-s l)]
-        [combine l]
-        [else (void)])]
-      [else
-       (single exp-s ns)])))
+          [wrap (wrap (m 'begin-for-syntax) exp-s l)]
+          [combine l]
+          [else (void)])]
+        [else
+         (single exp-s ns)])]
+     [else
+      ;; Fold in lifted definitions and try again
+      (define new-s (wrap-lifts-as-begin lifts exp-s s phase))
+      (loop new-s phase ns)])))
 
 ;; ----------------------------------------
 

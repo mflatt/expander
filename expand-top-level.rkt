@@ -9,7 +9,8 @@
          "expand.rkt"
          "expand-context.rkt"
          "expand-require.rkt"
-         "expand-def-id.rkt")
+         "expand-def-id.rkt"
+         "bind-top-level.rkt")
 
 (add-core-form!
  'define-values
@@ -34,20 +35,6 @@
    (rebuild
     s
     `(,(m 'define-syntaxes) ,ids ,exp-rhs))))
-
-(define (as-top-level-bindings ids ctx)
-  (define top-level-bind-scope (root-expand-context-top-level-bind-scope ctx))
-  (define tl-ids
-    (for/list ([id (in-list ids)])
-      (add-scope (remove-use-site-scopes id ctx)
-                 top-level-bind-scope)))
-  (select-defined-syms-and-bind! tl-ids (root-expand-context-defined-syms ctx)
-                                 (namespace-mpi (expand-context-namespace ctx))
-                                 (expand-context-phase ctx)
-                                 (root-expand-context-all-scopes-stx ctx)
-                                 #:frame-id (root-expand-context-frame-id ctx)
-                                 #:top-level-bind-scope top-level-bind-scope)
-  tl-ids)
 
 (add-core-form!
  'begin-for-syntax

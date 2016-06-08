@@ -4,6 +4,7 @@
          "scope.rkt"
          "binding.rkt"
          "env.rkt"
+         "use-site.rkt"
          "expand-context.rkt"
          "expand.rkt"
          "syntax-local.rkt")

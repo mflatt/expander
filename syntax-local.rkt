@@ -8,6 +8,7 @@
          "expand-context.rkt"
          "expand.rkt"
          "core.rkt"
+         "use-site.rkt"
          "rename-trans.rkt"
          "lift-context.rkt"
          "require+provide.rkt"

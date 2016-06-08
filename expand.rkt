@@ -9,6 +9,7 @@
          "syntax-error.rkt"
          "free-id-set.rkt"
          "dup-check.rkt"
+         "use-site.rkt"
          "compile.rkt"
          "eval-compiled-top.rkt"
          "core.rkt"
@@ -34,7 +35,6 @@
          eval-for-syntaxes-binding
          eval-for-bindings
          
-         remove-use-site-scopes
          rebuild)
 
 ;; ----------------------------------------
@@ -521,20 +521,6 @@
                     ,(datum->syntax s-runtime-stx 'values)))
                  s))
 
-;; Helper to remove any created use-site scopes from the left-hand
-;; side of a definition that was revealed by partial expansion in a
-;; definition context; the `s` argument can be syntax of a list
-;; of syntax
-(define (remove-use-site-scopes s ctx)
-  (define use-sites (root-expand-context-use-site-scopes ctx))
-  (if (and use-sites
-           (pair? (unbox use-sites)))
-      (if (syntax? s)
-          (remove-scopes s (unbox use-sites))
-          (for/list ([id (in-list s)])
-            (remove-scopes id (unbox use-sites))))
-      s))
-
 ;; ----------------------------------------
 
 ;; Expand `s` as a compile-time expression relative to the current
@@ -552,7 +538,7 @@
                                      [lifts (make-lift-context
                                              (if local?
                                                  (make-local-lift lift-env (root-expand-context-counter ctx))
-                                                 (make-toplevel-lift)))]
+                                                 (make-toplevel-lift ctx)))]
                                      [lift-envs (if local?
                                                     (cons lift-env
                                                           (expand-context-lift-envs ctx))

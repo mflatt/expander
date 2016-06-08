@@ -3,7 +3,8 @@
          "scope.rkt"
          "binding.rkt"
          "env.rkt"
-         "core.rkt")
+         "core.rkt"
+         "bind-top-level.rkt")
 
 (provide make-lift-context
          add-lifted!
@@ -61,9 +62,10 @@
       (set-box! lift-env (hash-set (unbox lift-env) key variable)))
     (values ids (list ids rhs))))
 
-(define (make-toplevel-lift)
+(define (make-toplevel-lift ctx)
   (lambda (ids rhs phase)
-    (values ids (list ids rhs))))
+    (define tl-ids (as-top-level-bindings ids ctx))
+    (values tl-ids (list tl-ids rhs))))
 
 (define (wrap-lifts-as-let lifts body s phase)
   (datum->syntax
@@ -75,7 +77,8 @@
            (list lift)
            body))))
 
-(define (wrap-lifts-as-begin lifts body s phase)
+(define (wrap-lifts-as-begin lifts body s phase
+                             #:adjust-defn [adjust-defn values])
   (datum->syntax
    #f
    (cons (datum->syntax
@@ -85,11 +88,14 @@
           (for/list ([lift (in-list lifts)])
             (define ids (car lift))
             (define rhs (cadr lift))
-            (list (datum->syntax
-                   (syntax-shift-phase-level core-stx phase)
-                   'define-values)
-                  ids
-                  rhs))
+            (adjust-defn
+             (datum->syntax
+              #f
+              (list (datum->syntax
+                     (syntax-shift-phase-level core-stx phase)
+                     'define-values)
+                    ids
+                    rhs))))
           (list body)))))
 
 ;; ----------------------------------------

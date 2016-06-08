@@ -4,7 +4,6 @@
          "binding.rkt"
          "module-binding.rkt"
          "require+provide.rkt")
-(require "debug.rkt")
 
 (provide select-defined-syms-and-bind!)
 

@@ -13,6 +13,7 @@
          "lift-context.rkt"
          "core.rkt"
          "expand-context.rkt"
+         "use-site.rkt"
          "expand.rkt"
          "expand-require.rkt"
          "expand-provide.rkt"
