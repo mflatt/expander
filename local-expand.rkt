@@ -125,9 +125,11 @@
   (define output-s (cond
                     [(and as-transformer? capture-lifts?)
                      (expand-transformer input-s local-ctx
+                                         #:context context
                                          #:begin-form? #t)]
                     [as-transformer?
                      (expand-transformer input-s local-ctx
+                                         #:context context
                                          #:begin-form? (eq? 'top-level context))]
                     [capture-lifts?
                      (expand/capture-lifts input-s local-ctx

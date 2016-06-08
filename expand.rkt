@@ -562,10 +562,11 @@
 ;; Expand `s` as a compile-time expression relative to the current
 ;; expansion context
 (define (expand-transformer s ctx
+                            #:context [context 'expression]
                             #:begin-form? [begin-form? #f])
   (define phase (add1 (expand-context-phase ctx)))
   (define trans-ctx (struct-copy expand-context ctx
-                                 [context 'expression]
+                                 [context context]
                                  [scopes null]
                                  [phase phase]
                                  [namespace (namespace->namespace-at-phase

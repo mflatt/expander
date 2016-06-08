@@ -46,7 +46,7 @@
      (format "not allowed in context\n  expansion context: ~a"
              (context->symbol (expand-context-context ctx)))
      s))
-  (case (expand-context-context ctx)
+  (case (context->symbol (expand-context-context ctx))
     [(module-begin) (wrap 'begin)]
     [(module top-level definition-context)
      (if (memq 'expression (expansion-contexts-ref t))
