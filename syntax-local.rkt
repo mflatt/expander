@@ -134,7 +134,7 @@
   (define ext-scs (syntax-scope-set ext-s phase))
   (define base-scs (syntax-scope-set base-s phase))
   (define delta-scs (set->list (set-subtract ext-scs base-scs)))
-  (lambda (s [mode 'flip])
+  (lambda (s [mode 'add])
     (case mode
       [(add) (add-scopes s delta-scs)]
       [(remove) (remove-scopes s delta-scs)]
