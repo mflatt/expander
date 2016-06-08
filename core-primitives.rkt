@@ -43,7 +43,13 @@
 
                       bound-identifier=?
                       free-identifier=?
+                      free-transformer-identifier=?
+                      free-template-identifier=?
+                      free-label-identifier=?
                       identifier-binding
+                      identifier-transformer-binding
+                      identifier-template-binding
+                      identifier-label-binding
                       identifier-binding-symbol
                       identifier-prune-lexical-context
                       syntax-debug-info

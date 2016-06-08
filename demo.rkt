@@ -1207,6 +1207,23 @@
  #t)
 
 ;; ----------------------------------------
+;; for-label imports
+
+(eval-module-declaration '(module provides-title '#%kernel
+                           (#%provide title)
+                           (define-values (title) "Of Mice and Men")))
+
+(eval-module-declaration '(module imports-title-for-label '#%kernel
+                           (#%require (for-label 'provides-title))
+                           (print (identifier-binding (quote-syntax title))) (newline)
+                           (print (cadr (identifier-label-binding (quote-syntax title)))) (newline)))
+
+(check-print
+ (namespace-require ''imports-title-for-label demo-ns)
+ #f
+ 'title)
+
+;; ----------------------------------------
 ;; namespace-attach
 
 (eval-module-declaration '(module provides-random-r '#%kernel

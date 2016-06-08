@@ -3,6 +3,8 @@
 (provide phase?
          phase+
          phase-
+         zero-phase?
+         label-phase?
          phase?-string)
 
 ;; Terminology:
@@ -25,6 +27,12 @@
 
 (define (phase- a b)
   (and a b (- a b)))
+
+(define (zero-phase? a)
+  (eq? a 0))
+
+(define (label-phase? a)
+  (not a))
 
 ;; For contract errors:
 (define phase?-string "(or/c exact-integer? #f)")

@@ -65,7 +65,7 @@
                                   (resolved-module-path-name
                                    (module-path-index-resolve n)))))
           (define phase (namespace-phase ns))
-          (unless (zero? phase)
+          (unless (zero-phase? phase)
             (fprintf port ":~s" phase))
           (write-string ">" port)))
 
@@ -197,7 +197,7 @@
   (unless m (raise-unknown-module-error 'instantiate name))
   (cond
    [(and (module-cross-phase-persistent? m)
-         (or (not (zero? phase))
+         (or (not (zero-phase? phase))
              (namespace-cross-phase-persistent-namespace ns)))
     (or (namespace->module-namespace ns name phase)
         (let ([c-ns (or (namespace-cross-phase-persistent-namespace ns)
@@ -229,7 +229,8 @@
       (for ([phase-level (in-range (module-min-phase-level m)
                                    (add1 (module-max-phase-level m)))])
         (define phase (phase+ phase-level phase-shift))
-        (when (phase . >= . min-phase)
+        (when (and (not (label-phase? phase))
+                   (phase . >= . min-phase))
           (define defs (namespace->definitions m-ns phase-level))
           (unless (definitions-instantiated? defs)
             (set-definitions-instantiated?! defs #t)

@@ -28,7 +28,13 @@
          identifier?
          bound-identifier=?
          free-identifier=?
+         free-transformer-identifier=?
+         free-template-identifier=?
+         free-label-identifier=?
          identifier-binding
+         identifier-transformer-binding
+         identifier-template-binding
+         identifier-label-binding
          identifier-binding-symbol
          identifier-prune-lexical-context
          syntax-shift-phase-level
@@ -76,11 +82,40 @@
     (raise-argument-error 'free-identifier=? phase?-string b-phase))
   (raw:free-identifier=? a b a-phase b-phase))
 
-(define (identifier-binding id [phase (syntax-local-phase-level)])
+(define (free-transformer-identifier=? a b)
+  (check 'free-transformer-identifier=? identifier? a)
+  (check 'free-transformer-identifier=? identifier? b)
+  (define phase (add1 (syntax-local-phase-level)))
+  (raw:free-identifier=? a b phase phase))
+
+(define (free-template-identifier=? a b)
+  (check 'free-template-identifier=? identifier? a)
+  (check 'free-template-identifier=? identifier? b)
+  (define phase (sub1 (syntax-local-phase-level)))
+  (raw:free-identifier=? a b phase phase))
+
+(define (free-label-identifier=? a b)
+  (check 'free-label-identifier=? identifier? a)
+  (check 'free-label-identifier=? identifier? b)
+  (raw:free-identifier=? a b #f #f))
+
+(define (identifier-binding id [phase  (syntax-local-phase-level)])
   (check 'identifier-binding identifier? id)
   (unless (phase? phase)
     (raise-argument-error 'identifier-binding phase?-string phase))
   (raw:identifier-binding id phase))
+
+(define (identifier-transformer-binding id)
+  (check 'identifier-transformer-binding identifier? id)
+  (raw:identifier-binding id (add1 (syntax-local-phase-level))))
+
+(define (identifier-template-binding id)
+  (check 'identifier-template-binding identifier? id)
+  (raw:identifier-binding id (sub1 (syntax-local-phase-level))))
+
+(define (identifier-label-binding id)
+  (check 'identifier-label-binding identifier? id)
+  (raw:identifier-binding id #f))
 
 (define (identifier-binding-symbol id [phase (syntax-local-phase-level)])
   (check 'identifier-binding-symbol identifier? id)
