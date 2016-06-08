@@ -42,7 +42,7 @@
 ;; ----------------------------------------
 
 (define (do-local-expand who s context stop-ids [intdefs #f]
-                         #:capture-lifts? [capture-lifts? #t]
+                         #:capture-lifts? [capture-lifts? #f]
                          #:as-transformer? [as-transformer? #f])
   (unless (syntax? s)
     (raise-argument-error who "syntax?" s))

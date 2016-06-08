@@ -405,7 +405,7 @@
                                done-bodys
                                s)
   (when (null? done-bodys)
-    (raise-syntax-error #f "empty form is not allowed" s))
+    (raise-syntax-error #f "no expression after a sequence of internal definitions" s))
   ;; To reference core forms at the current expansion phase:
   (define s-core-stx
     (syntax-shift-phase-level core-stx (expand-context-phase body-ctx)))
