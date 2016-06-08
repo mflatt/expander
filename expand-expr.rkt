@@ -331,8 +331,11 @@
  (lambda (s ctx)
    (define m (match-syntax s '(#%top . id)))
    (define id (m 'id))
-   (define b (resolve+shift id (expand-context-phase ctx)))
+   (define b (resolve+shift id (expand-context-phase ctx)
+                            #:ambiguous-value 'ambiguous))
    (cond
+    [(eq? b 'ambiguous)
+     (raise-ambigious-error id ctx)]
     [(and b
           (module-binding? b)
           (eq? (module-binding-module b) (namespace-mpi (expand-context-namespace ctx))))
@@ -366,7 +369,10 @@
    (define id (m 'id))
    (let rename-loop ([id id] [from-rename? #f])
      (define binding (resolve+shift id (expand-context-phase ctx)
+                                    #:ambiguous-value 'ambiguous
                                     #:immediate? #t))
+     (when (eq? binding 'ambiguous)
+       (raise-ambigious-error id ctx))
      (define t (and binding (lookup binding ctx s)))
      (cond
       [(or (variable? t)
@@ -419,7 +425,10 @@
                         (match-syntax s '(#%variable-reference))))
    (when (or id-m top-m)
      (define id ((or id-m top-m) 'id))
-     (define binding (resolve+shift id (expand-context-phase ctx)))
+     (define binding (resolve+shift id (expand-context-phase ctx)
+                                    #:ambiguous-value 'ambiguous))
+     (when (eq? binding 'ambiguous)
+       (raise-ambigious-error id ctx))
      (unless binding
        (raise-syntax-error #f "unbound identifier" s id null
                            (syntax-debug-info-string id ctx))))

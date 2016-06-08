@@ -9,6 +9,7 @@
          make-exn:fail:syntax
          
          raise-syntax-error
+         raise-ambigious-error
          syntax-debug-info-string)
 
 (struct exn:fail:syntax exn:fail (exprs)
@@ -81,6 +82,14 @@
        (let ([str (srcloc->string (syntax-srcloc s))])
          (and str
               (string-append str ": ")))))
+
+;; ----------------------------------------
+
+(define (raise-ambigious-error id ctx)
+  (raise-syntax-error #f
+                      "identifier's binding is ambiguous"
+                      id #f null
+                      (syntax-debug-info-string id ctx)))
 
 ;; ----------------------------------------
 

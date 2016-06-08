@@ -143,6 +143,7 @@
 ;; module path index shifts attached to `s` are taken into account in
 ;; the result
 (define (resolve+shift s phase
+                       #:ambiguous-value [ambiguous-value #f]
                        #:exactly? [exactly? #f]
                        #:immediate? [immediate? exactly?]
                        #:unbound-sym? [unbound-sym? #f]
@@ -150,6 +151,7 @@
                        #:bulk-binding-registry [bulk-binding-registry #f]
                        #:extra-shifts [extra-shifts null])
   (define immediate-b (resolve s phase
+                               #:ambiguous-value ambiguous-value
                                #:exactly? exactly?
                                #:bulk-binding-registry bulk-binding-registry
                                #:extra-shifts extra-shifts))
@@ -160,6 +162,7 @@
                                #:bulk-binding-registry (or bulk-binding-registry
                                                            (syntax-bulk-binding-registry s))
                                #:extra-shifts (append extra-shifts (syntax-mpi-shifts s))
+                               #:ambiguous-value ambiguous-value
                                #:exactly? exactly?
                                #:unbound-sym? unbound-sym?)
                 immediate-b))

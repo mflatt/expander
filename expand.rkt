@@ -49,8 +49,11 @@
     (guard-stop
      id ctx s
      (define binding (resolve+shift id (expand-context-phase ctx)
+                                    #:ambiguous-value 'ambiguous
                                     #:immediate? #t))
      (cond
+      [(eq? binding 'ambiguous)
+       (raise-ambigious-error id ctx)]
       [(not binding)
        ;; The implicit `#%top` form handles unbound identifiers
        (expand-implicit '#%top (substitute-alternate-id s alternate-id) ctx s)]
@@ -64,8 +67,11 @@
     (guard-stop
      id ctx s
      (define binding (resolve+shift id (expand-context-phase ctx)
+                                    #:ambiguous-value 'ambiguous
                                     #:immediate? #t))
      (cond
+      [(eq? binding 'ambiguous)
+       (raise-ambigious-error id ctx)]
       [(not binding)
        ;; The `#%app` binding might do something with unbound ids
        (expand-implicit '#%app (substitute-alternate-id s alternate-id) ctx id)]
@@ -109,7 +115,10 @@
    ;; we reimplement the "applicaiton"-form case of `expand` so that
    ;; we provide an error if the implicit form is not suitably bound
    (define b (resolve+shift id (expand-context-phase ctx)
+                            #:ambiguous-value 'ambiguous
                             #:immediate? #t))
+   (when (eq? b 'ambiguous)
+     (raise-ambigious-error id ctx))
    (define t (and b (lookup b ctx id)))
    (cond
     [(core-form? t)

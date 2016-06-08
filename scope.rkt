@@ -544,7 +544,10 @@
 
 ;; ----------------------------------------
 
+;; Result is #f for no binding, `ambigious-value` for an ambigious binding,
+;; or binding value
 (define (resolve s phase
+                 #:ambiguous-value [ambiguous-value #f]
                  #:exactly? [exactly? #f]
                  ;; For resolving bulk bindings in `free-identifier=?` chains:
                  #:bulk-binding-registry [bulk-binding-registry #f]
@@ -587,13 +590,15 @@
                max-c))))
   (cond
    [max-candidate
-    (for ([c (in-list candidates)])
-      (unless (subset? (car c) (car max-candidate))
-        (error "ambiguous:" s scopes)))
-    (and (or (not exactly?)
-             (equal? (set-count scopes)
-                     (set-count (car max-candidate))))
-         (cdr max-candidate))]
+    (cond
+     [(not (for/and ([c (in-list candidates)])
+             (subset? (car c) (car max-candidate))))
+      ambiguous-value]
+     [else
+      (and (or (not exactly?)
+               (equal? (set-count scopes)
+                       (set-count (car max-candidate))))
+           (cdr max-candidate))])]
    [else #f]))
 
 ;; ----------------------------------------
