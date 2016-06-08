@@ -22,6 +22,8 @@
          
          syntax-shift-phase-level
 
+         syntax-swap-scopes
+
          add-binding!
          add-bulk-binding!
          
@@ -463,6 +465,43 @@
                                    [content d]
                                    [shifted-multi-scopes
                                     (shift-all (syntax-shifted-multi-scopes s))]))
+                    syntax-e))))
+
+;; ----------------------------------------
+
+;; Scope swapping is used to make top-level compilation relative to
+;; the top level. Each top-level environment has a set of scopes that
+;; identify the environment; usually, it's a common outside-edge scope
+;; and a namespace-specific inside-edge scope, but there can be
+;; additional scopes due to `module->namespace` on a module that was
+;; expanded multiple times (where each expansion adds scopes).
+(define (syntax-swap-scopes s src-scopes dest-scopes)
+  (if (equal? src-scopes dest-scopes)
+      s
+      (let-values ([(src-smss src-scs)
+                    (set-partition (for/set ([sc (in-set src-scopes)])
+                                     (generalize-scope sc))
+                                   shifted-multi-scope?)]
+                   [(dest-smss dest-scs)
+                    (set-partition (for/set ([sc (in-set dest-scopes)])
+                                     (generalize-scope sc))
+                                   shifted-multi-scope?)])
+        (define-memo-lite (swap-scs scs)
+          (if (subset? src-scs scs)
+              (set-union (set-subtract scs src-scs) dest-scs)
+              scs))
+        (define-memo-lite (swap-smss smss)
+          (if (subset? src-smss smss)
+              (set-union (set-subtract smss src-smss) dest-smss)
+              smss))
+        (syntax-map s
+                    (lambda (tail? d) d)
+                    (lambda (s d)
+                      (struct-copy syntax s
+                                   [content d]
+                                   [scopes (swap-scs (syntax-scopes s))]
+                                   [shifted-multi-scopes
+                                    (swap-smss (syntax-shifted-multi-scopes s))]))
                     syntax-e))))
 
 ;; ----------------------------------------

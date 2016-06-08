@@ -17,9 +17,12 @@
          "compile-impl-id.rkt"
          "compile-def-id.rkt"
          "compile-instance.rkt"
+         "compile-namespace-scope.rkt"
          "compile-expr.rkt")
 
-(provide compile-forms)
+(provide compile-forms
+
+         compile-namespace-scopes)
 
 ;; Compiles a module body or sequence of top-level forms, returning a
 ;; linklet directory to cover all phases covered by the forms
@@ -281,6 +284,12 @@
                                 phase
                                 cctx))
         `(,top-level-bind!-id ,id-stx ,self-expr ,phase ,phase-shift-id ',binding-sym))))
+
+;; To support namespace-relative binding, bundle scope information for
+;; the current namespace into a syntax object
+(define (compile-namespace-scopes phase cctx)
+  (define v (encode-namespace-scopes (compile-context-namespace cctx)))
+  (compile-quote-syntax v phase cctx))
 
 ;; ----------------------------------------
 

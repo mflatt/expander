@@ -2,7 +2,7 @@
 (require "compile-impl-id.rkt"
          "linklet.rkt")
 
-;; Compilation generate a linklet that has an `instance` argument to
+;; Compilation generates a linklet that has an `instance` argument to
 ;; receive instantiation information: a namspace, its phase, etc.
 
 (provide instance-imports

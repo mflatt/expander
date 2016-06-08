@@ -11,7 +11,6 @@
          "compile-impl-id.rkt"
          "compile-instance.rkt"
          "compile-eager-instance.rkt"
-         "compile-eager-instance.rkt"
          "compile-expr.rkt"
          "compile-form.rkt")
 
@@ -54,7 +53,8 @@
           syntax-literalss
           mpis
           phase
-          (compile-context-self cctx)))
+          (compile-context-self cctx)
+          (compile-context-namespace cctx)))
 
        (define link-cu
          (compile-linklet
@@ -96,13 +96,7 @@
   (define phase (compile-context-phase cctx))
   (case (core-form-sym s phase)
     [(#%require)
-     (define form-stx
-       (compile-quote-syntax
-        (remove-scopes s (root-expand-context-module-scopes
-                          (namespace-root-expand-ctx
-                           (compile-context-namespace cctx))))
-        phase
-        cctx))
+     (define form-stx (compile-quote-syntax s phase cctx))
      `(,top-level-require!-id ,form-stx ,ns-id)]
     [else #f]))
 

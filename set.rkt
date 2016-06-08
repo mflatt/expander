@@ -13,9 +13,11 @@
          subset?
          set-subtract
          set-union
+         set-partition
          set->list
          list->set
          for/set
+         for/seteq
          for*/set
          in-set)
 
@@ -56,6 +58,12 @@
       (for/fold ([s1 s1]) ([k (in-hash-keys s2)])
         (hash-set s1 k #t))))
 
+(define (set-partition s pred)
+  (for/fold ([y (set)] [n (set)]) ([v (in-set s)])
+    (if (pred v)
+        (values (set-add y v) n)
+        (values y (set-add n v)))))
+
 (define (set->list s)
   (for/list ([k (in-hash-keys s)])
     k))
@@ -69,6 +77,12 @@
                       (let ()
                         body ...)
                       #t)))
+
+(define-syntax-rule (for/seteq bindings body ...)
+  (for/hasheq bindings (values
+                        (let ()
+                          body ...)
+                        #t)))
 
 (define-syntax-rule (for*/set bindings body ...)
   (for*/hash bindings (values

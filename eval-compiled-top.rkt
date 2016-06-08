@@ -40,6 +40,7 @@
     (let loop ([keys (sort (hash-keys ht) bytes<?)])
       (cond
        [(null? keys) (void)]
+       [(equal? (car keys) #".multi") (loop (cdr keys))]
        [(null? (cdr keys))
         ;; Tail call:
         (eval-compiled (hash-ref ht (car keys)) ns)]
@@ -58,6 +59,7 @@
         (instantiate-linklet (hash-ref h #".link")
                              (list deserialize-instance
                                    (make-eager-instance-instance
+                                    #:namespace ns
                                     #:dest-phase (namespace-phase ns)
                                     #:self (namespace-mpi ns)
                                     #:bulk-binding-registry (namespace-bulk-binding-registry ns))))))

@@ -5,6 +5,7 @@
          "compile-context.rkt"
          "built-in-symbol.rkt"
          "compile-impl-id.rkt"
+         "compile-namespace-scope.rkt"
          "serialize.rkt")
 
 (provide (struct-out header)
@@ -97,27 +98,33 @@
 ;; objects across multiple phases; the result is an expression for a
 ;; vector (indexed by original phase) of vectors (indexes by
 ;; syntax-literal position)
-(define (generate-eager-syntax-literals! syntax-literals-boxes mpis base-phase self)
+(define (generate-eager-syntax-literals! syntax-literals-boxes mpis base-phase self ns)
   (define syntax-literalss (map unbox syntax-literals-boxes))
-  `(let-values ([(stxss) ,(generate-deserialize (append
-                                                 ;; Pad result vector get to the base phase:
-                                                 (for/list ([i (in-range base-phase)]) #f)
-                                                 ;; Reverse syntax literals per phase
-                                                 (map reverse syntax-literalss))
-                                                mpis)])
-    (list->vector
-     (map (lambda (stxs)
-            (list->vector
-             (map (lambda (stx)
-                    (syntax-module-path-index-shift
-                     (syntax-shift-phase-level
-                      stx
-                      (- ,base-phase ,dest-phase-id))
-                     ,(add-module-path-index! mpis self)
-                     ,self-id
-                     ,bulk-binding-registry-id))
-                  stxs)))
-          stxss))))
+  `(let-values ([(ns+stxss) ,(generate-deserialize (cons
+                                                    ;; Prefix with namespace scope:
+                                                    (encode-namespace-scopes ns)
+                                                    (append
+                                                     ;; Pad result vector get to the base phase:
+                                                     (for/list ([i (in-range base-phase)]) null)
+                                                     ;; Reverse syntax literals per phase
+                                                     (map reverse syntax-literalss)))
+                                                   mpis)])
+    (let-values ([(ns-scope-s) (car ns+stxss)])
+      (list->vector
+       (map (lambda (stxs)
+              (list->vector
+               (map (lambda (stx)
+                      (swap-top-level-scopes
+                       (syntax-module-path-index-shift
+                        (syntax-shift-phase-level
+                         stx
+                         (- ,base-phase ,dest-phase-id))
+                        ,(add-module-path-index! mpis self)
+                        ,self-id
+                        ,bulk-binding-registry-id)
+                       ns-scope-s ,ns-id))
+                    stxs)))
+            (cdr ns+stxss))))))
 
 ;; Genereate a vector for a set of syntax objects across multiple
 ;; phases; the result is a vector of vectors like the one generated and

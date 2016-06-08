@@ -19,16 +19,14 @@
  'top-level-bind!
  (lambda (id mpi orig-phase phase-shift sym)
    (define phase (phase+ orig-phase phase-shift))
-   (add-binding! id (make-module-binding mpi phase sym) phase)))
+   (define b (make-module-binding mpi phase sym))
+   (add-binding! id b phase)))
 
 (instance-set-variable-value!
  top-level-instance
  'top-level-require!
  (lambda (stx ns)
-   (define reqs (cdr (syntax->list
-                      (add-scopes stx (root-expand-context-module-scopes
-                                       (namespace-root-expand-ctx
-                                        ns))))))
+   (define reqs (cdr (syntax->list stx)))
    (parse-and-perform-requires! #:run? #t
                                 reqs
                                 #f ; no syntax errors should happen
