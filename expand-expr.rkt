@@ -351,7 +351,7 @@
      (cond
       [(not (expand-context-allow-unbound? ctx))
        ;; In a module, unbound or out of context:
-       (raise-syntax-error #f "unbound identifier" #f (m 'id) null
+       (raise-syntax-error #f "unbound identifier" (m 'id) #f null
                            (syntax-debug-info-string (m 'id) ctx))]
       [else
        ;; At the top level:

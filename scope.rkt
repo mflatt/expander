@@ -71,6 +71,8 @@
         (lambda (sc port mode)
           (write-string "#<scope:" port)
           (display (scope-id sc) port)
+          (write-string ":" port)
+          (display (scope-kind sc) port)
           (write-string ">" port))
         #:property prop:serialize
         (lambda (s ser state)
