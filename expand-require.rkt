@@ -182,11 +182,16 @@
   (define done-syms (make-hash))
   (define m (namespace->module m-ns module-name))
   (unless m (raise-unknown-module-error 'require module-name))
-  (add-required-module! requires+provides mpi phase-shift
-                        (module-cross-phase-persistent? m))
+  (define interned-mpi
+    (add-required-module! requires+provides mpi phase-shift
+                          (module-cross-phase-persistent? m)))
   (bind-all-provides!
    m
-   bind-in-stx phase-shift m-ns mpi
+   bind-in-stx phase-shift m-ns interned-mpi
+   #:only (cond
+           [(adjust-only? adjust) (set->list (adjust-only-syms adjust))]
+           [(adjust-rename? adjust) (list (adjust-rename-from-sym adjust))]
+           [else #f])
    #:can-bulk? (not adjust)
    #:filter (lambda (binding)
               (define sym (module-binding-nominal-sym binding))
@@ -225,9 +230,9 @@
                                              s bind-phase binding
                                              #:can-shadow? can-shadow?))
               adjusted-sym))
-  (namespace-module-visit! m-ns mpi phase-shift)
+  (namespace-module-visit! m-ns interned-mpi phase-shift)
   (when run?
-    (namespace-module-instantiate! m-ns mpi phase-shift))
+    (namespace-module-instantiate! m-ns interned-mpi phase-shift))
   ;; check that we covered all expected ids:
   (define need-syms (cond
                     [(adjust-only? adjust)
@@ -246,22 +251,25 @@
 ;; ----------------------------------------
 
 (define (bind-all-provides! m in-stx phase-shift ns mpi
+                            #:only only-syms
                             #:can-bulk? can-bulk?
                             #:filter filter)
   (define self (module-self m))
   (for ([(provide-phase-level provides) (in-hash (module-provides m))])
     (define phase (phase+ phase-shift provide-phase-level))
-    (for ([(sym out-binding) (in-hash provides)])
-      (define b (provide-binding-to-require-binding out-binding sym
-                                                    #:self self
-                                                    #:mpi mpi
-                                                    #:provide-phase-level provide-phase-level
-                                                    #:phase-shift phase-shift))
-      (let-values ([(sym) (filter b)])
-        (when (and sym
-                   (not can-bulk?)) ;; bulk binding added later
-          ;; Add a non-bulk binding, since `filter` has checked/adjusted it
-          (add-binding! (datum->syntax in-stx sym) b phase))))
+    (for ([sym (in-list (or only-syms (hash-keys provides)))])
+      (define out-binding (hash-ref provides sym #f))
+      (when out-binding
+        (define b (provide-binding-to-require-binding out-binding sym
+                                                      #:self self
+                                                      #:mpi mpi
+                                                      #:provide-phase-level provide-phase-level
+                                                      #:phase-shift phase-shift))
+        (let-values ([(sym) (filter b)])
+          (when (and sym
+                     (not can-bulk?)) ;; bulk binding added later
+            ;; Add a non-bulk binding, since `filter` has checked/adjusted it
+            (add-binding! (datum->syntax in-stx sym) b phase)))))
     ;; Add bulk binding after all filtering
     (when can-bulk?
       (add-bulk-binding! in-stx
