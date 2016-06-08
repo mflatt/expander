@@ -1176,16 +1176,31 @@
                                                (string->uninterned-symbol "u")))))
 
 (eval-module-declaration '(module use-cross-phase-persistent '#%kernel
-                           (#%require 'cross-phase-persistent
-                                      (for-syntax '#%kernel
-                                                  'cross-phase-persistent))
+                           (#%require (for-syntax '#%kernel
+                                                  'cross-phase-persistent)
+                                      (for-meta 2 '#%kernel
+                                                'cross-phase-persistent))
+                           (begin-for-syntax
+                             (define-syntaxes (ctct-gen)
+                               (lambda (stx)
+                                 (datum->syntax
+                                  (quote-syntax here)
+                                  (list (quote-syntax quote)
+                                        gen)))))
                            (define-syntaxes (ct-gen)
                              (lambda (stx)
                                (datum->syntax
                                 (quote-syntax here)
                                 (list (quote-syntax quote)
                                       gen))))
-                           (print (equal? gen (ct-gen))) (newline)))
+                           (define-syntaxes (use-ctct-gen)
+                             (lambda (stx)
+                               (datum->syntax
+                                (quote-syntax here)
+                                (list (quote-syntax quote)
+                                      (ctct-gen)))))
+
+                           (print (equal? (ct-gen) (use-ctct-gen))) (newline)))
 
 (check-print
  (namespace-require ''use-cross-phase-persistent demo-ns)
