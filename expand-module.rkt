@@ -113,6 +113,7 @@
    (define ctx (struct-copy expand-context (copy-root-expand-context init-ctx root-ctx)
                             [allow-unbound? #f]
                             [namespace m-ns]
+                            [post-expansion-scope-mode 'add]
                             [phase phase]))
    
    ;; Add the module's scope to the bodies

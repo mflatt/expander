@@ -21,6 +21,8 @@
          identifier?
          datum->syntax syntax->datum
          syntax-property
+         identifier-binding
+         syntax-debug-info
          
          syntax-shift-phase-level
          bound-identifier=?

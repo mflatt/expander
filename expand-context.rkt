@@ -23,6 +23,7 @@
                                             phase      ; current expansion phase; must match phase of `namespace`
                                             namespace  ; namespace for modules and evaluation
                                             env        ; environment for local bindings
+                                            post-expansion-scope-mode ; 'add or 'push for `post-expansion-scope`
                                             scopes     ; list of scopes that should be pruned by `quote-syntax`
                                             def-ctx-scopes ; #f or box of list of scopes; transformer-created def-ctxes
                                             only-immediate? ; #t => stop at core forms
@@ -53,6 +54,7 @@
                   (namespace-phase ns)
                   ns
                   empty-env
+                  'push ; post-expansion-scope-mode
                   null ; scopes
                   #f   ; def-ctx-scopes
                   #f   ; only-immediate?
@@ -95,6 +97,7 @@
                       [context 'expression]
                       [name #f]
                       [use-site-scopes #:parent root-expand-context #f]
+                      [post-expansion-scope #:parent root-expand-context #f]
                       [frame-id #:parent root-expand-context #f])]))
 
 ;; Adjusts `ctx` (which should be an expression context) to make it

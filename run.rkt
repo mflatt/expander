@@ -3,7 +3,6 @@
          "set.rkt"
          "main.rkt"
          "namespace.rkt"
-         "binding.rkt"
          "read-syntax.rkt"
          "module-path.rkt"
          "module-read.rkt"

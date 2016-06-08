@@ -23,7 +23,7 @@
 (struct syntax ([content #:mutable] ; datum and nested syntax objects; mutated for lazy propagation
                 scopes  ; scopes that apply at all phases
                 [scope-propagations #:mutable] ; lazy propogation info
-                shifted-multi-scopes ; scopes with a distinct identity at each phase
+                shifted-multi-scopes ; scopes with a distinct identity at each phase; maybe a fallback search
                 mpi-shifts ; chain of module-path-index substitutions
                 bulk-binding-registry ; for resolving bulk bindings on unmarshal
                 srcloc ; source location

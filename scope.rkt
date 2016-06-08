@@ -5,6 +5,7 @@
          "memo.rkt"
          "syntax.rkt"
          "phase.rkt"
+         "fallback.rkt"
          "datum-map.rkt")
 
 (provide new-scope
@@ -15,6 +16,7 @@
          remove-scopes
          flip-scope
          flip-scopes
+         push-scope
          
          syntax-e ; handles lazy scope propagation
          
@@ -50,7 +52,8 @@
            (struct-out representative-scope)
            (struct-out bulk-binding-at)
            bulk-binding-symbols
-           bulk-binding-create))
+           bulk-binding-create
+           scope-set-at-fallback))
 
 ;; A scope represents a distinct "dimension" of binding. We can attach
 ;; the bindings for a set of scopes to an arbitrary scope in the set;
@@ -291,10 +294,12 @@
 
 ;; Non-lazy application of a shifted multi scope;
 ;; since this kind of scope is only added for modules,
-;; it's not work making it lazy
-(define (apply-shifted-multi-scope s sc op)
-  (define-memo-lite (do-op scs)
-    (op scs sc))
+;; it's not worth making it lazy
+(define (apply-shifted-multi-scope s sms op)
+  (define-memo-lite (do-op smss)
+    (fallback-update-first
+     smss
+     (lambda (smss) (op smss sms))))
   (syntax-map s
               (lambda (tail? x) x)
               (lambda (s d)
@@ -360,6 +365,25 @@
 (define (flip-scopes s scs)
   (for/fold ([s s]) ([sc (in-list scs)])
     (flip-scope s sc)))
+
+;; Pushes a multi-scope to accomodate multiple top-level namespaces.
+;; See "fallback.rkt".
+(define (push-scope s sms)
+  (define-memo-lite (push smss/maybe-fallbacks)
+    (define smss (fallback-first smss/maybe-fallbacks))
+    (cond
+     [(set-empty? smss) (set-add smss sms)]
+     [(set-member? smss sms) smss/maybe-fallbacks]
+     [else (fallback-push (set-add smss sms)
+                          smss/maybe-fallbacks)]))
+  (syntax-map s
+              (lambda (tail? x) x)
+              (lambda (s d)
+                (struct-copy syntax s
+                             [content d]
+                             [shifted-multi-scopes
+                              (push (syntax-shifted-multi-scopes s))]))
+              syntax-e))
 
 ;; ----------------------------------------
 
@@ -450,14 +474,17 @@
                            (shifted-multi-scope-multi-scope sms))))
 
 ;; Since we tend to shift rarely and only for whole modules, it's
-;; probably less useful to make this lazy:
+;; probably not worth making this lazy
 (define (syntax-shift-phase-level s phase)
   (if (eqv? phase 0)
       s
       (let ()
         (define-memo-lite (shift-all smss)
-          (for/set ([sms (in-set smss)])
-            (shift-multi-scope sms phase)))
+          (fallback-map
+           smss
+           (lambda (smss)
+             (for/set ([sms (in-set smss)])
+               (shift-multi-scope sms phase)))))
         (syntax-map s
                     (lambda (tail? d) d)
                     (lambda (s d)
@@ -491,9 +518,12 @@
               (set-union (set-subtract scs src-scs) dest-scs)
               scs))
         (define-memo-lite (swap-smss smss)
-          (if (subset? src-smss smss)
-              (set-union (set-subtract smss src-smss) dest-smss)
-              smss))
+          (fallback-update-first
+           smss
+           (lambda (smss)
+             (if (subset? src-smss smss)
+                 (set-union (set-subtract smss src-smss) dest-smss)
+                 smss))))
         (syntax-map s
                     (lambda (tail? d) d)
                     (lambda (s d)
@@ -509,7 +539,10 @@
 ;; Assemble the complete set of scopes at a given phase by extracting
 ;; a phase-specific representative from each multi-scope.
 (define (syntax-scope-set s phase)
-  (for/fold ([scopes (syntax-scopes s)]) ([sms (in-set (syntax-shifted-multi-scopes s))])
+  (scope-set-at-fallback s (fallback-first (syntax-shifted-multi-scopes s)) phase))
+  
+(define (scope-set-at-fallback s smss phase)
+  (for/fold ([scopes (syntax-scopes s)]) ([sms (in-set smss)])
     (set-add scopes (multi-scope-to-scope-at-phase (shifted-multi-scope-multi-scope sms)
                                                    (phase- (shifted-multi-scope-phase sms)
                                                            phase)))))
@@ -556,50 +589,56 @@
     (raise-argument-error 'resolve "identifier?" s))
   (unless (phase? phase)
     (raise-argument-error 'resolve "phase?" phase))
-  (define scopes (syntax-scope-set s phase))
-  (define sym (syntax-e s))
-  (define candidates
-    (for*/list ([sc (in-set scopes)]
-                [bindings (in-value
-                           (let ([bindings (or (hash-ref (scope-bindings sc) sym #f)
-                                               #hash())])
-                             ;; Check bulk bindings; if a symbol match is found,
-                             ;; synthesize a non-bulk binding table, as long as the
-                             ;; same set of scopes is not already mapped
-                             (for*/fold ([bindings bindings])
-                                        ([bulk-at (in-list (scope-bulk-bindings sc))]
-                                         [bulk (in-value (bulk-binding-at-bulk bulk-at))]
-                                         [syms (in-value
-                                                (bulk-binding-symbols bulk s
-                                                                      bulk-binding-registry
-                                                                      extra-shifts))]
-                                         [b-info (in-value (hash-ref syms sym #f))]
-                                         #:when (and b-info
-                                                     (not (hash-ref bindings (bulk-binding-at-scopes bulk-at) #f))))
-                               (hash-set bindings
-                                         (bulk-binding-at-scopes bulk-at)
-                                         ((bulk-binding-create bulk) bulk b-info sym)))))]
-                [(b-scopes binding) (in-hash bindings)]
-                #:when (subset? b-scopes scopes))
-      (cons b-scopes binding)))
-  (define max-candidate
-    (and (pair? candidates)
-         (for/fold ([max-c (car candidates)]) ([c (in-list (cdr candidates))])
-           (if ((set-count (car c)) . > . (set-count (car max-c)))
-               c
-               max-c))))
-  (cond
-   [max-candidate
+  (let fallback-loop ([smss (syntax-shifted-multi-scopes s)])
+    (define scopes (scope-set-at-fallback s (fallback-first smss) phase))
+    (define sym (syntax-e s))
+    (define candidates
+      (for*/list ([sc (in-set scopes)]
+                  [bindings (in-value
+                             (let ([bindings (or (hash-ref (scope-bindings sc) sym #f)
+                                                 #hash())])
+                               ;; Check bulk bindings; if a symbol match is found,
+                               ;; synthesize a non-bulk binding table, as long as the
+                               ;; same set of scopes is not already mapped
+                               (for*/fold ([bindings bindings])
+                                          ([bulk-at (in-list (scope-bulk-bindings sc))]
+                                           [bulk (in-value (bulk-binding-at-bulk bulk-at))]
+                                           [syms (in-value
+                                                  (bulk-binding-symbols bulk s
+                                                                        bulk-binding-registry
+                                                                        extra-shifts))]
+                                           [b-info (in-value (hash-ref syms sym #f))]
+                                           #:when (and b-info
+                                                       (not (hash-ref bindings (bulk-binding-at-scopes bulk-at) #f))))
+                                 (hash-set bindings
+                                           (bulk-binding-at-scopes bulk-at)
+                                           ((bulk-binding-create bulk) bulk b-info sym)))))]
+                  [(b-scopes binding) (in-hash bindings)]
+                  #:when (subset? b-scopes scopes))
+        (cons b-scopes binding)))
+    (define max-candidate
+      (and (pair? candidates)
+           (for/fold ([max-c (car candidates)]) ([c (in-list (cdr candidates))])
+             (if ((set-count (car c)) . > . (set-count (car max-c)))
+                 c
+                 max-c))))
     (cond
-     [(not (for/and ([c (in-list candidates)])
-             (subset? (car c) (car max-candidate))))
-      ambiguous-value]
+     [max-candidate
+      (cond
+       [(not (for/and ([c (in-list candidates)])
+               (subset? (car c) (car max-candidate))))
+        (if (fallback? smss)
+            (fallback-loop (fallback-rest smss))
+            ambiguous-value)]
+       [else
+        (and (or (not exactly?)
+                 (equal? (set-count scopes)
+                         (set-count (car max-candidate))))
+             (cdr max-candidate))])]
      [else
-      (and (or (not exactly?)
-               (equal? (set-count scopes)
-                       (set-count (car max-candidate))))
-           (cdr max-candidate))])]
-   [else #f]))
+      (if (fallback? smss)
+          (fallback-loop (fallback-rest smss))
+          #f)])))
 
 ;; ----------------------------------------
 

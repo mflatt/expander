@@ -4,7 +4,7 @@
          "module-binding.rkt"
          "checked-syntax.rkt"
          "syntax-error.rkt"
-         (only-in "scope.rkt" add-scopes)
+         (only-in "scope.rkt" add-scopes push-scope)
          "namespace.rkt"
          "core.rkt"
          "phase.rkt"
@@ -27,12 +27,18 @@
 (define (namespace-syntax-introduce s [ns (current-namespace)])
   (check 'namespace-syntax-introduce syntax? s)
   (check 'namespace-syntax-introduce namespace? ns)
-  (define namespace-scopes (root-expand-context-module-scopes
-                            (namespace-root-expand-ctx ns)))
+  (define root-ctx (namespace-root-expand-ctx ns))
+  (define post-scope (root-expand-context-post-expansion-scope root-ctx))
+  (define other-namespace-scopes (for/list ([sc (in-list (root-expand-context-module-scopes root-ctx))]
+                                            #:unless (equal? sc post-scope))
+                                   sc))
+  (define (add-ns-scopes s)
+    (push-scope (add-scopes s other-namespace-scopes)
+                post-scope))
   (define maybe-module-id
     (and (pair? (syntax-e s))
          (identifier? (car (syntax-e s)))
-         (add-scopes (car (syntax-e s)) namespace-scopes)))
+         (add-ns-scopes (car (syntax-e s)))))
   (cond
    [(and maybe-module-id
          (free-identifier=? maybe-module-id
@@ -41,7 +47,7 @@
     (datum->syntax s (cons maybe-module-id (cdr (syntax-e s))) s s)]
    [else
     ;; Add scope everywhere:
-    (add-scopes s namespace-scopes)]))
+    (add-ns-scopes s)]))
 
 (define (namespace-module-identifier [where (current-namespace)])
   (unless (or (namespace? where)

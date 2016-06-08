@@ -244,7 +244,11 @@
     ;; to be added to any immediate macro expansion; that way, if the
     ;; macro expands to a definition form, the binding will be in the
     ;; definition context's scope
-    (add-scope s (root-expand-context-post-expansion-scope ctx))]
+    (case (expand-context-post-expansion-scope-mode ctx)
+      [(add)
+       (add-scope s (root-expand-context-post-expansion-scope ctx))]
+      [(push)
+       (push-scope s (root-expand-context-post-expansion-scope ctx))])]
    [else s]))
 
 ;; Helper to lookup a binding in an expansion context
@@ -301,6 +305,7 @@
                                 [context (list (make-liberal-define-context))]
                                 [only-immediate? #t]
                                 [post-expansion-scope #:parent root-expand-context inside-sc]
+                                [post-expansion-scope-mode 'add]
                                 [scopes (list* outside-sc
                                                inside-sc
                                                (expand-context-scopes ctx))]

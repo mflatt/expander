@@ -1,5 +1,6 @@
 #lang racket/base
-(require "main.rkt")
+(require "main.rkt"
+         "set.rkt")
 
 ;; ----------------------------------------
 
@@ -44,9 +45,12 @@
                                      #:namespace [ns demo-ns])
   (define v (eval e ns))
   (unless (eq? check-val 'no-value-to-check)
-    (unless (equal? v check-val)
-      (error "check failed:" v "vs." check-val)))
+    (check-value v check-val))
   v)
+
+(define (check-value v check-val)
+  (unless (equal? v check-val)
+    (error "check failed:" v "vs." check-val)))
 
 (define-syntax-rule (check-print expr out ...)
   (check-thunk-print (lambda () expr) out ...))
@@ -1272,3 +1276,48 @@
 (check-error
  (namespace-attach-module-declaration demo-ns ''provides-random-r has-already-ns)
  #rx"different declaration")
+
+;; ----------------------------------------
+;; top-level fallbacks
+
+(define s-only-in-demo (namespace-syntax-introduce (datum->syntax #f 'car) demo-ns))
+
+(define alt-ns (make-empty-namespace))
+(namespace-attach-module demo-ns ''#%kernel alt-ns)
+
+(define s-also-in-alt (namespace-syntax-introduce s-only-in-demo alt-ns))
+(define s-only-in-alt (namespace-syntax-introduce (datum->syntax #f 'car) alt-ns))
+
+(check-value (hash-ref (syntax-debug-info s-only-in-demo) 'fallbacks #f)
+             #f)
+(check-value (hash-ref (syntax-debug-info s-only-in-alt) 'fallbacks #f)
+             #f)
+(check-value (length (hash-ref (syntax-debug-info s-also-in-alt) 'fallbacks null))
+             1)
+(check-value (list->set (hash-ref (syntax-debug-info s-also-in-alt) 'context #f))
+             (set-union (list->set (hash-ref (syntax-debug-info s-only-in-demo) 'context #f))
+                        (list->set (hash-ref (syntax-debug-info s-only-in-alt) 'context #f))))
+
+(check-value (cadr (identifier-binding s-only-in-demo))
+             'car)
+(check-value (identifier-binding s-only-in-alt)
+             #f)
+(check-value (cadr (identifier-binding s-also-in-alt))
+             'car)
+
+(namespace-require ''#%kernel alt-ns)
+(check-value (cadr (identifier-binding s-only-in-alt))
+             'car)
+
+(eval-module-declaration '(module kar '#%kernel
+                           (#%provide (rename kar car))
+                           (define-values (kar) 5))
+                         #:namespace alt-ns)
+(eval-expression '(#%require 'kar) #:namespace alt-ns)
+(eval-expression 'car #:namespace alt-ns
+                 #:check 5)
+
+(check-value (cadr (identifier-binding s-only-in-alt))
+             'kar)
+(check-value (cadr (identifier-binding s-also-in-alt))
+             'car) ;; because using combined scopes is ambiguous
