@@ -817,8 +817,8 @@
  0)
 
 ;; ----------------------------------------
-
 ;; Custom `#%module-begin'
+
 (eval-module-declaration '(module printing-mb '#%kernel
                            (#%require (for-syntax '#%kernel))
                            (#%provide (all-from-except '#%kernel #%module-begin)
@@ -866,7 +866,31 @@
  15)
 
 ;; ----------------------------------------
+;; local-expanding `#%module-begin'
 
+(eval-module-declaration '(module local-expanding-mb '#%kernel
+                           (#%require (for-syntax '#%kernel))
+                           (#%provide (all-from-except '#%kernel #%module-begin)
+                                      (rename module-begin #%module-begin))
+                           (define-syntaxes (module-begin)
+                             (lambda (stx)
+                               (local-expand (datum->syntax
+                                              #f
+                                              (cons
+                                               (quote-syntax #%module-begin)
+                                               (cdr (syntax-e stx))))
+                                             'module-begin
+                                             null)))))
+
+(eval-module-declaration '(module local-expanded-mb 'local-expanding-mb
+                           (define-values (x) 'x)
+                           (print x) (newline)))
+
+(check-print
+ (namespace-require ''local-expanded-mb demo-ns)
+ 'x)
+
+;; ----------------------------------------
 ;; Submodule
 
 (eval-module-declaration '(module with-pre-submodule '#%kernel

@@ -4,6 +4,7 @@
          "phase.rkt"
          "scope.rkt"
          "binding.rkt"
+         "syntax-error.rkt"
          "namespace.rkt"
          "module-path.rkt")
 
@@ -17,11 +18,12 @@
          add-enclosing-module-defined-and-required!
          remove-required-id!
          check-not-defined
+         add-defined-syms!
          extract-module-requires
          extract-module-definitions
          extract-all-module-requires
          
-         reset-provides!
+         reset-provides-and-defines!
          add-provide!
          
          attach-require-provide-properties
@@ -34,13 +36,15 @@
                            require-mpis ; module-path-index to itself, as interned
                            requires   ; module-path-index -> require-phase -> list of (required id phase boolean)
                            provides   ; phase -> sym -> binding
+                           phase-to-defined-syms ; phase -> sym -> boolean
                            [can-cross-phase-persistent? #:mutable]))
 
 (define (make-requires+provides self)
   (requires+provides self
-                     (make-hash)
-                     (make-hash)
-                     (make-hasheqv)
+                     (make-hash)    ; require-mpis
+                     (make-hash)    ; requires
+                     (make-hasheqv) ; provides
+                     (make-hasheqv) ; phase-to-defined-syms
                      #t))
 
 ;; ----------------------------------------
@@ -134,7 +138,15 @@
   (define defined? (and b (eq? (requires+provides-self r+p)
                                (module-binding-module b))))
   (when (and b
-             (or check-not-required? defined?))
+             (or check-not-required?
+                 (and defined?
+                      ;; In case `#%module-begin` is expanded multiple times, check
+                      ;; that the definition has been seen this particular expansion
+                      (hash-ref (hash-ref (requires+provides-phase-to-defined-syms r+p)
+                                          phase
+                                          #hasheq())
+                                (module-binding-sym b)
+                                #f))))
     (define at-mod (hash-ref (requires+provides-requires r+p)
                              (module-binding-nominal-module b)
                              #f))
@@ -146,8 +158,19 @@
                       (not (required-can-shadow? r))
                       (or (not ok-binding)
                           (not (same-binding? b ok-binding))))
-             (error (format "already ~a:" (if defined? "defined" "required"))
-                    id "in" orig-s "at" phase))))))
+             (raise-syntax-error #f
+                                 (string-append "identifier already "
+                                                (if defined? "defined" "required"))
+                                 orig-s
+                                 id))))))
+
+(define (add-defined-syms! r+p syms phase)
+  (define phase-to-defined-syms (requires+provides-phase-to-defined-syms r+p))
+  (define defined-syms (hash-ref phase-to-defined-syms phase #hasheq()))
+  (define new-defined-syms
+    (for/fold ([defined-syms defined-syms]) ([sym (in-list syms)])
+      (hash-set defined-syms sym #t)))
+  (hash-set! phase-to-defined-syms phase new-defined-syms))
 
 ;; Get all the bindings imported from a given module
 (define (extract-module-requires r+p mod-name phase)
@@ -179,8 +202,9 @@
 ;; ----------------------------------------
 
 ;; Clear recorded provides
-(define (reset-provides! r+p)
-  (hash-clear! (requires+provides-provides r+p)))
+(define (reset-provides-and-defines! r+p)
+  (hash-clear! (requires+provides-provides r+p))
+  (hash-clear! (requires+provides-phase-to-defined-syms r+p)))
 
 ;; Register that a binding is provided as a given symbol; report an
 ;; error if the provide is inconsistent with an earlier one

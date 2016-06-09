@@ -156,10 +156,11 @@
      (define mb-m (match-syntax mb '(#%module-begin body ...)))
      
      ;; In case the module body is expanded multiple times, we clear
-     ;; the set of provides each time (but we accumulate requires, since those
-     ;; may have been used for earlier expansions)
-     (reset-provides! requires+provides)
-     
+     ;; the set of provides and definitions each time (but we
+     ;; accumulate requires, since those may have been used for
+     ;; earlier expansions)
+     (reset-provides-and-defines! requires+provides)
+
      ;; In case `#%module-begin` expansion is forced on syntax that
      ;; that wasn't already introduced into the mdoule's inside scope,
      ;; add it to all the given body forms
@@ -526,6 +527,7 @@
                                                       self phase all-scopes-stx
                                                       #:frame-id frame-id
                                                       #:requires+provides requires+provides))
+          (add-defined-syms! requires+provides syms phase)
           (cons (rebuild exp-body
                          `(,(m 'define-values) ,ids ,(m 'rhs)))
                 (loop tail? (cdr bodys)))]
@@ -537,6 +539,7 @@
                                                       self phase all-scopes-stx
                                                       #:frame-id frame-id
                                                       #:requires+provides requires+provides))
+          (add-defined-syms! requires+provides syms phase)
           ;; Expand and evaluate RHS:
           (define-values (exp-rhs vals)
             (expand+eval-for-syntaxes-binding (m 'rhs) ids
