@@ -37,6 +37,7 @@
          namespace-module-identifier
          namespace-attach-module
          namespace-attach-module-declaration
+         module-declared?
          
          ;; These are direct functions, not ones that use handlers:
          expand
@@ -74,7 +75,9 @@
           'namespace-require namespace-require
           'namespace-variable-value namespace-variable-value
           'namespace-set-variable-value! namespace-set-variable-value!
-          'namespace-undefine-variable!	namespace-undefine-variable!))
+          'namespace-undefine-variable!	namespace-undefine-variable!
+          
+          'module-declared? module-declared?))
 
 (define (make-empty-kernel-namespace)
   (define ns (make-empty-namespace))

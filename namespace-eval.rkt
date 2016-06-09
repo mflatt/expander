@@ -22,7 +22,9 @@
          
          namespace-variable-value
          namespace-set-variable-value!
-         namespace-undefine-variable!)
+         namespace-undefine-variable!
+         
+         module-declared?)
 
 (define (namespace-syntax-introduce s [ns (current-namespace)])
   (check 'namespace-syntax-introduce syntax? s)
@@ -147,3 +149,21 @@
   (check 'namespace-variable-value symbol? sym)
   (check 'namespace-variable-value namespace? ns)
   (namespace-unset-variable! ns (namespace-phase ns) sym))
+
+(define (module-declared? mod [load? #f])
+  (unless (or (module-path? mod)
+              (module-path-index? mod)
+              (resolved-module-path? mod))
+    (raise-argument-error 'module-declared? 
+                          "(or/c module-path? module-path-index? resolved-module-path?)"
+                          mod))
+  (define ns (current-namespace))
+  (cond
+   [(resolved-module-path? mod)
+    (and (namespace->module ns mod) #t)]
+   [else
+    (define mpi (if (module-path-index? mod)
+                    mod
+                    (module-path-index-join mod #f)))
+    (define name (module-path-index-resolve mpi #t))
+    (and (namespace->module ns name) #t)]))

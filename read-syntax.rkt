@@ -9,18 +9,19 @@
                              syntax-position syntax-span)))
 
 (provide read-syntax
-         original-property-sym)
+         original-property-sym
+         base:syntax->syntax)
 
 (define (read-syntax src [i (current-input-port)])
-  (syntax->syntax (base:read-syntax src i)))
+  (base:syntax->syntax (base:read-syntax src i)))
 
-(define (syntax->syntax v)
+(define (base:syntax->syntax v)
   (datum-map v
              (lambda (tail? v)
                (cond
                 [(base:syntax? v)
                  (struct-copy syntax empty-syntax
-                              [content (syntax->syntax (base:syntax-e v))]
+                              [content (base:syntax->syntax (base:syntax-e v))]
                               [srcloc (srcloc (base:syntax-source v)
                                               (base:syntax-line v)
                                               (base:syntax-column v)

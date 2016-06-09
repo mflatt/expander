@@ -12,6 +12,7 @@
          "run-cache.rkt"
          "runtime-primitives.rkt"
          "linklet.rkt"
+         "reader-bridge.rkt"
          "status.rkt"
          "extract.rkt")
 
@@ -52,11 +53,6 @@
   (set! load-file file)])
 
 (define cache (make-cache cache-dir))
-
-;; The `#lang` reader doesn't use the reimplemented module system,
-;; so make sure the reader is loaded for `racket/base` (before
-;; `boot` sets handlers):
-(base:dynamic-require 'racket/base/lang/reader #f)
 
 ;; Install handlers:
 (boot)
@@ -111,6 +107,15 @@
                           (loop)]
                          [else (eval c)]))]))]
                  [else (orig-load path #f)])))
+
+;; Set the reader guard to load modules on demand, and
+;; synthesize a module for the host Racket to call
+;; the hosted module system's instance
+(current-reader-guard (lambda (mod-path)
+                        (when (module-declared? mod-path #t)
+                          (define rs (dynamic-require mod-path 'read-syntax))
+                          (synthesize-reader-bridge-module mod-path rs))
+                        mod-path))
 
 ;; Load and run the requested module
 (namespace-require boot-module)
