@@ -1320,4 +1320,4 @@
 (check-value (cadr (identifier-binding s-only-in-alt))
              'kar)
 (check-value (cadr (identifier-binding s-also-in-alt))
-             'car) ;; because using combined scopes is ambiguous
+             'car) ; because using combined scopes is ambiguous

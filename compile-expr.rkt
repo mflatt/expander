@@ -76,7 +76,7 @@
          (define m (match-syntax s '(quote datum)))
          (correlate s `(quote ,(syntax->datum (m 'datum))))]
         [(quote-syntax)
-         (define m (match-syntax s '(quote datum)))
+         (define m (match-syntax s '(quote datum . _)))
          (compile-quote-syntax (m 'datum) phase cctx)]
         [(#%variable-reference)
          (define id-m (try-match-syntax s '(#%variable-reference id)))

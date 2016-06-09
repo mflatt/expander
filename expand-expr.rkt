@@ -272,12 +272,15 @@
                  (match-syntax s '(quote-syntax datum))))
    (rebuild
     s
-    `(,(m 'quote-syntax)
-      ,(if m-local
-           ;; #:local means don't prune:
-           (m 'datum)
-           ;; otherwise, prune scopes up to transformer boundary:
-           (remove-scopes (m 'datum) (expand-context-scopes ctx)))))))
+    (cond
+     [m-local
+      ;; #:local means don't prune:
+      (define m-kw (try-match-syntax s '(_ _ kw)))
+      `(,(m 'quote-syntax) ,(m 'datum) ,(m-kw 'kw))]
+     [else
+      ;; otherwise, prune scopes up to transformer boundary:
+      `(,(m 'quote-syntax)
+        ,(remove-scopes (m 'datum) (expand-context-scopes ctx)))]))))
 
 (add-core-form!
  'if
