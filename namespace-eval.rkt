@@ -20,13 +20,21 @@
          
          namespace-syntax-introduce
          namespace-module-identifier
-         
+         namespace-symbol->identifier
+          
          namespace-require
+         namespace-require/copy
+         namespace-require/constant
+         namespace-require/expansion-time
          
          namespace-variable-value
          namespace-set-variable-value!
          namespace-undefine-variable!
          
+         namespace-mapped-symbols
+
+         namespace-base-phase
+
          module-declared?)
 
 (define (make-empty-namespace)
@@ -76,9 +84,14 @@
                                                where))
                  'module))
 
+(define (namespace-symbol->identifier sym)
+  (check 'namespace-symbol->identifier symbol? sym)
+  (namespace-syntax-introduce (datum->syntax #f sym)))
+
 ;; ----------------------------------------
 
-(define (namespace-require req [ns (current-namespace)])
+(define (do-namespace-require #:run? run? who req ns)
+  (check who namespace? ns)
   (parse-and-perform-requires! #:run? #t
                                (list (add-scopes (datum->syntax #f req)
                                                  (root-expand-context-module-scopes
@@ -87,6 +100,20 @@
                                #f ns
                                (namespace-phase ns)
                                (make-requires+provides #f)))
+
+(define (namespace-require req [ns (current-namespace)])
+  (do-namespace-require #:run? #t 'namespace-require req ns))
+
+(define (namespace-require/expansion-time req [ns (current-namespace)])
+  (do-namespace-require #:run? #f 'namespace-require/expansion-time req ns))
+  
+;; FIXME
+(define (namespace-require/constant req [ns (current-namespace)])
+  (namespace-require req ns))
+
+;; FIXME
+(define (namespace-require/copy req [ns (current-namespace)])
+  (namespace-require req ns))
 
 ;; ----------------------------------------
 
@@ -162,6 +189,15 @@
   (check 'namespace-variable-value symbol? sym)
   (check 'namespace-variable-value namespace? ns)
   (namespace-unset-variable! ns (namespace-phase ns) sym))
+
+;; FIXME
+(define (namespace-mapped-symbols [ns (current-namespace)])
+  (check 'namespace-mapped-symbols namespace? ns)
+  null)
+
+(define (namespace-base-phase [ns (current-namespace)])
+  (check 'namespace-base-phase namespace? ns)
+  (namespace-phase ns))
 
 (define (module-declared? mod [load? #f])
   (unless (or (module-path? mod)
