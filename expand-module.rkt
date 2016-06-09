@@ -73,10 +73,12 @@
    ;; All module bodies start at phase 0
    (define phase 0)
    
+   (define module-name-sym (syntax-e (m 'id:module-name)))
+   
    (define outside-scope (new-scope 'module))
-   (define inside-scope (new-multi-scope (syntax-e (m 'id:module-name))))
+   (define inside-scope (new-multi-scope module-name-sym))
 
-   (define self (make-self-module-path-index (syntax-e (m 'id:module-name))
+   (define self (make-self-module-path-index module-name-sym
                                              enclosing-self))
    
    (define enclosing-mod (and enclosing-self
@@ -327,7 +329,8 @@
       
    ;; Add `#%module-begin` around the body if it's not already present
    (define mb
-     (ensure-module-begin bodys 
+     (ensure-module-begin bodys
+                          #:module-name-sym module-name-sym
                           #:initial-require-s initial-require-s
                           #:m-ns m-ns
                           #:ctx mb-ctx
@@ -361,6 +364,7 @@
 
 ;; Add `#%module-begin` to `bodys`, if needed
 (define (ensure-module-begin bodys
+                             #:module-name-sym module-name-sym
                              #:initial-require-s initial-require-s
                              #:m-ns m-ns
                              #:ctx ctx 
@@ -370,32 +374,37 @@
     (struct-copy expand-context ctx
                  [context 'module-begin]
                  [only-immediate? #t]))
-  (cond
-   [(= 1 (length bodys))
-    ;; Maybe it's already a `#%module-begin` form, or maybe it
-    ;; will expand to one
+  (define mb
     (cond
-     [(eq? '#%module-begin (core-form-sym (car bodys) phase))
-      ;; Done
-      (car bodys)]
-     [else
-      ;; A single body form might be a macro that expands to
-      ;; the primitive `#%module-begin` form:
-      (define partly-expanded-body
-        (expand (car bodys) (make-mb-ctx)))
+     [(= 1 (length bodys))
+      ;; Maybe it's already a `#%module-begin` form, or maybe it
+      ;; will expand to one
       (cond
-       [(eq? '#%module-begin (core-form-sym partly-expanded-body phase))
-        ;; Yes, it expanded to `#%module-begin`
-        partly-expanded-body]
+       [(eq? '#%module-begin (core-form-sym (car bodys) phase))
+        ;; Done
+        (car bodys)]
        [else
-        ;; No, it didn't expand to `#%module-begin`
-        (add-module-begin (list partly-expanded-body) s initial-require-s phase (make-mb-ctx))])])]
-   [else
-    ;; Multiple body forms definitely need a `#%module-begin` wrapper
-    (add-module-begin bodys s initial-require-s phase (make-mb-ctx))]))
+        ;; A single body form might be a macro that expands to
+        ;; the primitive `#%module-begin` form:
+        (define partly-expanded-body
+          (expand (add-enclosing-name-property (car bodys) module-name-sym)
+                  (make-mb-ctx)))
+        (cond
+         [(eq? '#%module-begin (core-form-sym partly-expanded-body phase))
+          ;; Yes, it expanded to `#%module-begin`
+          partly-expanded-body]
+         [else
+          ;; No, it didn't expand to `#%module-begin`
+          (add-module-begin (list partly-expanded-body) s initial-require-s phase module-name-sym 
+                            (make-mb-ctx))])])]
+     [else
+      ;; Multiple body forms definitely need a `#%module-begin` wrapper
+      (add-module-begin bodys s initial-require-s phase module-name-sym
+                        (make-mb-ctx))]))
+  (add-enclosing-name-property mb module-name-sym))
 
 ;; Add `#%module-begin`, because it's needed
-(define (add-module-begin bodys s initial-require-s phase mb-ctx)
+(define (add-module-begin bodys s initial-require-s phase module-name-sym mb-ctx)
   (define mb-id (datum->syntax initial-require-s '#%module-begin))
   ;; If `mb-id` is not bound, we'd like to give a clear error message
   (unless (resolve mb-id phase)
@@ -403,12 +412,16 @@
   (define mb (rebuild
               s
               `(,mb-id ,@bodys)))
-  (define partly-expanded-mb (expand mb mb-ctx))
+  (define partly-expanded-mb (expand (add-enclosing-name-property mb module-name-sym)
+                                     mb-ctx))
   (unless (eq? '#%module-begin (core-form-sym partly-expanded-mb phase))
     (raise-syntax-error #f "expansion of #%module-begin is not a #%plain-module-begin form" s
                         partly-expanded-mb))
   partly-expanded-mb)
-  
+
+(define (add-enclosing-name-property stx module-name-sym)
+  (syntax-property stx 'enclosing-module-name module-name-sym))
+
 ;; ----------------------------------------
 
 ;; Make function to adjust syntax that appears in the original module body
