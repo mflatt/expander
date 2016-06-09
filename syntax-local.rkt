@@ -323,10 +323,21 @@
 ;; ----------------------------------------
 
 (define (syntax-local-module-exports mod-path)
-  (check 'syntax-local-module-exports module-path? mod-path)
+  (unless (or (module-path? mod-path)
+              (and (syntax? mod-path)
+                   (module-path? (syntax->datum mod-path))))
+    (raise-argument-error 'syntax-local-module-exports
+                          (string-append
+                           "(or/c module-path?\n"
+                           "      (and/c syntax?\n"
+                           "             (lambda (stx)\n"
+                           "               (module-path? (syntax->datum stx)))))")
+                          mod-path))
   (define ctx (get-current-expand-context 'syntax-local-module-exports))
   (define ns (expand-context-namespace ctx))
-  (define mod-name (resolve-module-path mod-path
+  (define mod-name (resolve-module-path (if (syntax? mod-path)
+                                            (syntax->datum mod-path)
+                                            mod-path)
                                         (module-path-index-resolve
                                          (namespace-mpi ns))))
   (define m (namespace->module ns mod-name))
