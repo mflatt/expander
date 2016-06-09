@@ -265,7 +265,7 @@
                                       (fail-k))]
                                  [else
                                   ;; expand in a fresh namespace
-                                  (define tmp-ns (make-empty-namespace ns))
+                                  (define tmp-ns (make-namespace ns))
                                   (define name (resolved-module-path-name mod-name))
                                   (define mod-path (if (path? name)
                                                        name

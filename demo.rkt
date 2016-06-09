@@ -1242,7 +1242,7 @@
   (error "not the same random number"))
 'ok-dynamic
 
-(define other-ns (make-empty-namespace))
+(define other-ns (make-namespace))
 (namespace-attach-module demo-ns ''provides-random-r other-ns)
 
 (unless (equal? random-r (parameterize ([current-namespace other-ns])
@@ -1252,7 +1252,7 @@
 
 (namespace-attach-module demo-ns ''provides-random-r other-ns) ; re-attach ok
 
-(define third-ns (make-empty-namespace))
+(define third-ns (make-namespace))
 (namespace-attach-module-declaration demo-ns ''provides-random-r third-ns)
 
 (when (equal? random-r (parameterize ([current-namespace third-ns])
@@ -1282,7 +1282,7 @@
 
 (define s-only-in-demo (namespace-syntax-introduce (datum->syntax #f 'car) demo-ns))
 
-(define alt-ns (make-empty-namespace))
+(define alt-ns (make-namespace))
 (namespace-attach-module demo-ns ''#%kernel alt-ns)
 
 (define s-also-in-alt (namespace-syntax-introduce s-only-in-demo alt-ns))

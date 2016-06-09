@@ -27,7 +27,7 @@
          syntax-shift-phase-level
          bound-identifier=?
          
-         make-empty-namespace
+         make-namespace
          make-empty-kernel-namespace
          current-namespace
          
@@ -80,7 +80,7 @@
           'module-declared? module-declared?))
 
 (define (make-empty-kernel-namespace)
-  (define ns (make-empty-namespace))
+  (define ns (make-namespace))
   (declare-core-module! ns)
   (declare-hash-based-module! '#%main main-primitives #:namespace ns)
   (declare-hash-based-module! '#%utils utils-primitives #:namespace ns)

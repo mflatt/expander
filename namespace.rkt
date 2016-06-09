@@ -8,7 +8,7 @@
          "linklet.rkt"
          "built-in-symbol.rkt")
 
-(provide make-empty-namespace
+(provide make-namespace
          namespace?
          current-namespace
          namespace-module-registry
@@ -87,9 +87,9 @@
                 cross-phase-persistent?
                 root-expand-ctx)) ; preserve module's expand-context for `module->namespace`
 
-(define (make-empty-namespace [share-from-ns #f]
-                              #:root-expand-ctx [root-expand-ctx (make-root-expand-context)]
-                              #:register? [register? #t])
+(define (make-namespace [share-from-ns #f]
+                        #:root-expand-ctx [root-expand-ctx (make-root-expand-context)]
+                        #:register? [register? #t])
   (define phase (if share-from-ns
                     (namespace-phase share-from-ns)
                     0))
@@ -118,7 +118,7 @@
     (hash-set! (namespace-phase-to-namespace ns) phase ns))
   ns)
 
-(define current-namespace (make-parameter (make-empty-namespace)))
+(define current-namespace (make-parameter (make-namespace)))
 
 (define (make-module-namespace ns
                                #:mpi name-mpi
@@ -128,9 +128,9 @@
   (define name (module-path-index-resolve name-mpi))
   (define m-ns
     ;; Keeps all module declarations, but makes a fresh space of instances
-    (struct-copy namespace (make-empty-namespace ns
-                                                 #:root-expand-ctx root-expand-ctx
-                                                 #:register? #f)
+    (struct-copy namespace (make-namespace ns
+                                           #:root-expand-ctx root-expand-ctx
+                                           #:register? #f)
                  [mpi name-mpi]
                  [phase phase]
                  [0-phase phase]

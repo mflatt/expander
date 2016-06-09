@@ -18,7 +18,7 @@
 
 (define (variable-reference->empty-namespace vr)
   (check 'variable-reference->empty-namespace variable-reference? vr)
-  (make-empty-namespace (variable-reference->namespace vr)))
+  (make-namespace (variable-reference->namespace vr)))
 
 (define (variable-reference->namespace vr)
   (check 'variable-reference->namespace variable-reference? vr)

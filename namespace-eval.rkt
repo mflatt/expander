@@ -6,6 +6,7 @@
          "syntax-error.rkt"
          (only-in "scope.rkt" add-scopes push-scope)
          "namespace.rkt"
+         "namespace-attach.rkt"
          "core.rkt"
          "phase.rkt"
          "require+provide.rkt"
@@ -15,7 +16,9 @@
          "contract.rkt"
          "env.rkt")
 
-(provide namespace-syntax-introduce
+(provide make-empty-namespace
+         
+         namespace-syntax-introduce
          namespace-module-identifier
          
          namespace-require
@@ -25,6 +28,16 @@
          namespace-undefine-variable!
          
          module-declared?)
+
+(define (make-empty-namespace)
+  (define current-ns (current-namespace))
+  (define phase (namespace-phase current-ns))
+  (define ns (namespace->namespace-at-phase (make-namespace)
+                                            phase))
+  ;; For historical reasons, an empty namespace isn't actually
+  ;; empty; we always carry '#%kernel along
+  (namespace-attach-module current-ns ''#%kernel ns)
+  ns)
 
 (define (namespace-syntax-introduce s [ns (current-namespace)])
   (check 'namespace-syntax-introduce syntax? s)
