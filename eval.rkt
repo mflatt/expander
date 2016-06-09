@@ -208,16 +208,7 @@
     (cond
      [(module-path? mod-path) (module-path-index-join mod-path #f)]
      [(module-path-index? mod-path) mod-path]
-     [else
-      (define name (resolved-module-path-name mod-path))
-      (define root-name (if (pair? name) (car name) name))
-      (define root-mod-path (if (path? root-name)
-                                root-name
-                                `(quote ,root-name)))
-      (define new-mod-path (if (pair? name)
-                               root-mod-path
-                               `(submod ,root-mod-path ,@(cdr name))))
-      (module-path-index-join new-mod-path #f)]))
+     [else (module-path-index-join (resolved-module-path->module-path mod-path) #f)]))
   (define mod-name (module-path-index-resolve mpi #t))
   (define phase (namespace-phase ns))
   (cond

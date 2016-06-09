@@ -139,9 +139,13 @@
                (adjust-rename (m 'id:to) (syntax-e (m 'id:from)))
                #f #f 'path)]
         [else
-         (define mp (syntax->datum req))
-         (unless (module-path? mp)
-           (error #f "bad require spec" orig-s req))
+         (define maybe-mp (syntax->datum req))
+         (unless (or (module-path? maybe-mp)
+                     (resolved-module-path? maybe-mp))
+           (raise-syntax-error #f "bad require spec" orig-s req))
+         (define mp (if (resolved-module-path? maybe-mp)
+                        (resolved-module-path->module-path maybe-mp)
+                        maybe-mp))
          (perform-require! mp #f self
                            (or req top-req) m-ns phase-shift just-meta adjust
                            requires+provides

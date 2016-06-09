@@ -6,6 +6,7 @@
          make-resolved-module-path
          resolved-module-path-name
          resolved-module-path-root-name
+         resolved-module-path->module-path
          format-resolved-module-path-name
          
          module-path-index?
@@ -84,6 +85,16 @@
       (let ([r (resolved-module-path p)])
         (hash-set! resolved-module-paths p (make-ephemeron p r))
         r)))
+
+(define (resolved-module-path->module-path r)
+  (define name (resolved-module-path-name r))
+  (define root-name (if (pair? name) (car name) name))
+  (define root-mod-path (if (path? root-name)
+                            root-name
+                            `(quote ,root-name)))
+  (if (pair? name)
+      `(submod ,root-mod-path ,@(cdr name))
+      root-mod-path))
 
 ;; ----------------------------------------
 
