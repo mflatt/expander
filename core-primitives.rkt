@@ -79,6 +79,9 @@
                       exn:fail:syntax?
                       exn:fail:syntax-exprs
                       
+                      read-syntax
+                      read-syntax/recursive
+                      
                       syntax-transforming?
                       syntax-transforming-with-lifts?
                       syntax-transforming-module-expression?

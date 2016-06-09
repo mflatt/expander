@@ -16,7 +16,9 @@
          "syntax-local.rkt"
          "srcloc.rkt"
          "contract.rkt"
-         "read-syntax.rkt"
+         (rename-in "read-syntax.rkt"
+                    [read-syntax raw:read-syntax]
+                    [read-syntax/recursive raw:read-syntax/recursive])
          (rename-in "debug.rkt"
                     [syntax-debug-info raw:syntax-debug-info]))
 
@@ -41,7 +43,9 @@
          identifier-prune-lexical-context
          syntax-shift-phase-level
          syntax-track-origin
-         syntax-debug-info)
+         syntax-debug-info
+         read-syntax
+         read-syntax/recursive)
 
 (define (syntax-e s)
   (check 'syntax-e syntax? s)
@@ -156,3 +160,17 @@
   (check 'syntax-track-origin identifier? id)
   ;; No-op for now
   new-stx)
+
+;; ----------------------------------------
+
+(define (read-syntax [src (object-name (current-input-port))] [in (current-input-port)])
+  (check 'read-syntax input-port? in)
+  (raw:read-syntax src in))
+
+(define (read-syntax/recursive src in start readtable graph?)
+  (check 'read-syntax/recursive input-port? in)
+  (unless (or (char? start) (not start))
+    (raise-argument-error 'read-syntax/recursive "(or/c char? #f)" start))
+  (unless (or (readtable? readtable) (not readtable))
+    (raise-argument-error 'read-syntax/recursive "(or/c readtable? #f)" readtable))
+  (raw:read-syntax/recursive src in start readtable graph?))

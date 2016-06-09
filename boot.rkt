@@ -8,8 +8,7 @@
          "eval.rkt"
          "namespace-eval.rkt"
          "module-path.rkt"
-         "module-read.rkt"
-         "read-syntax.rkt")
+         "module-read.rkt")
 
 (provide boot
          seal
