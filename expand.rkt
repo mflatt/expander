@@ -286,7 +286,7 @@
 ;; ----------------------------------------
 
 ;; Expand a sequence of body forms in a definition context
-(define (expand-body bodys sc s ctx)
+(define (expand-body bodys sc s ctx #:stratified? [stratified? #f])
   ;; The outside-edge scope identifies the original content of the
   ;; definition context
   (define outside-sc (new-scope 'local))
@@ -295,7 +295,7 @@
   (define inside-sc (new-scope 'intdef))
   (define init-bodys
     (for/list ([body (in-list bodys)])
-      (add-scope (add-scope (add-scope body sc) outside-sc) inside-sc)))
+      (add-scope (add-scope (if sc (add-scope body sc) body) outside-sc) inside-sc)))
   (define phase (expand-context-phase ctx))
   (define frame-id (make-reference-record)) ; accumulates info on referenced variables
   ;; Create an expansion context for expanding only immediate macros;
@@ -331,7 +331,8 @@
       (finish-expanding-body body-ctx frame-id
                              (reverse val-idss) (reverse val-keyss) (reverse val-rhss)
                              (reverse done-bodys)
-                             s)]
+                             s
+                             #:stratified? stratified?)]
      [else
       (define exp-body (expand (car bodys) body-ctx))
       (case (core-form-sym exp-body phase)
@@ -403,21 +404,33 @@
                val-rhss
                new-dups)]
         [else
-         ;; Found an expression; accumulate it and continue
-         (loop body-ctx
-               (cdr bodys)
-               (cons exp-body done-bodys)
-               val-idss
-               val-keyss
-               val-rhss
-               dups)])])))
+         (cond
+          [stratified?
+           ;; Found an expression, so no more definitions are allowed
+           (loop body-ctx
+                 null
+                 (append (reverse bodys) (cons exp-body done-bodys))
+                 val-idss
+                 val-keyss
+                 val-rhss
+                 dups)]
+          [else
+           ;; Found an expression; accumulate it and continue
+           (loop body-ctx
+                 (cdr bodys)
+                 (cons exp-body done-bodys)
+                 val-idss
+                 val-keyss
+                 val-rhss
+                 dups)])])])))
 
 ;; Partial expansion is complete, so assumble the result as a
 ;; `letrec-values` form and continue expanding
 (define (finish-expanding-body body-ctx frame-id
                                val-idss val-keyss val-rhss
                                done-bodys
-                               s)
+                               s
+                               #:stratified? stratified?)
   (when (null? done-bodys)
     (raise-syntax-error #f "no expression after a sequence of internal definitions" s))
   ;; To reference core forms at the current expansion phase:
@@ -449,10 +462,11 @@
     ;; No definitions, so no `letrec-values` wrapper needed:
     (finish-bodys)]
    [else
-    ;; Add `letrec-values` wrapper, finish expanding the right-hand
-    ;; sides, and then finish the body expression:
+    ;; Roughly, finish expanding the right-hand sides, finish the body
+    ;; expression, then add a `letrec-values` wrapper:
     (expand-and-split-bindings-by-reference
      val-idss val-keyss val-rhss
+     #:split? (not stratified?)
      #:frame-id frame-id #:ctx finish-ctx #:source s
      #:get-body finish-bodys)]))
 
@@ -462,6 +476,7 @@
 ;; at each binding clause. Similar, end a `letrec-values` form and start a new
 ;; one if there were forward references up to the clause but not beyond.
 (define (expand-and-split-bindings-by-reference idss keyss rhss
+                                                #:split? split?
                                                 #:frame-id frame-id #:ctx ctx #:source s
                                                 #:get-body get-body)
   (define s-core-stx
@@ -487,7 +502,8 @@
       (define forward-references? (reference-record-forward-references? frame-id))
       
       (cond
-       [(not local-or-forward-references?)
+       [(and (not local-or-forward-references?)
+             split?)
         (unless (null? accum-idss) (error "internal error: accumulated ids not empty"))
         (datum->syntax
          #f
@@ -495,7 +511,8 @@
            ([,ids ,expanded-rhs])
            ,(loop (cdr idss) (cdr keyss) (cdr rhss) null null))
          s)]
-       [(not forward-references?)
+       [(and (not forward-references?)
+             (or split? (null? (cdr idss))))
         (datum->syntax
          #f
          `(,(datum->syntax s-core-stx 'letrec-values)

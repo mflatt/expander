@@ -179,6 +179,7 @@
      (expand-and-split-bindings-by-reference
       val-idss val-keyss (for/list ([rhs (in-list (m 'val-rhs))])
                            (add-scope rhs sc))
+      #:split? #t
       #:frame-id frame-id #:ctx rec-ctx #:source s
       #:get-body get-body)])))
 
@@ -193,6 +194,14 @@
 (add-core-form!
  'letrec-syntaxes+values
  (make-let-values-form #:syntaxes? #t #:rec? #t #:split-by-reference? #t))
+
+;; ----------------------------------------
+
+(add-core-form!
+ '#%stratified-body
+ (lambda (s ctx)
+   (define m (match-syntax s '(#%stratified-body body ...+)))
+   (expand-body (m 'body) #f s ctx #:stratified? #t)))
 
 ;; ----------------------------------------
 
