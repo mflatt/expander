@@ -254,7 +254,7 @@
                               (lambda ()
                                 ;; Maybe syntax?
                                 (define missing (gensym 'missing))
-                                (define t (namespace-get-transformer m-ns ex-phase sym missing))
+                                (define t (namespace-get-transformer m-ns ex-phase ex-sym missing))
                                 (cond
                                  [(eq? t missing)
                                   (if (eq? fail-k default-fail-thunk)
