@@ -17,7 +17,10 @@
          
          transformer? transformer->procedure
          variable?
-         
+
+         (struct-out local-variable)
+         substitute-variable
+
          binding-lookup)
 
 ;; ----------------------------------------
@@ -30,7 +33,21 @@
 
 ;; `variable` is a token to represent a binding to a run-time variable
 (define variable (gensym 'variable))
-(define (variable? t) (eq? t variable))
+(define (variable? t) (or (eq? t variable)
+                          (local-variable? t)))
+
+;; A `local-variable` records a binding identifier, so that a
+;; reference can be replaced with the binding identifier
+(struct local-variable (id))
+
+;; If a variable binding corresponds to a local binding, substitute
+;; the binding identifier in place of the original reference
+(define (substitute-variable id t)
+  (if (local-variable? t)
+      (let ([bind-id (local-variable-id t)])
+        ;; Keep source locations and properties of original reference:
+        (datum->syntax bind-id (syntax-e bind-id) id id))
+      id))
 
 ;; `missing` is a token to represent the absence of a binding; a
 ;; distinct token is needed so that it's distinct from all compile-time

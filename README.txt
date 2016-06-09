@@ -9,7 +9,6 @@ TODO:
  origin tracking
  taints
  expander observer
- expand local references to binding
  continuation barrier on macro invocation
  enforced namespace constants
 

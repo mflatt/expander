@@ -31,8 +31,9 @@
   (define counter (root-expand-context-counter ctx))
   (define keys (for/list ([id (in-list ids)])
                  (add-local-binding! id phase counter)))
-  (define body-env (for*/fold ([env (expand-context-env ctx)]) ([key (in-list keys)])
-                     (env-extend env key variable)))
+  (define body-env (for/fold ([env (expand-context-env ctx)]) ([key (in-list keys)]
+                                                               [id (in-list ids)])
+                     (env-extend env key (local-variable id))))
   ;; Expand the function body:
   (define body-ctx (struct-copy expand-context ctx
                                 [env body-env]
@@ -137,9 +138,12 @@
                          (eval-for-syntaxes-binding (add-scope rhs sc) ids ctx)))
    ;; Fill expansion-time environment:
    (define rec-val-env
-     (for*/fold ([env (expand-context-env ctx)]) ([keys (in-list val-keyss)]
-                                                  [key (in-list keys)])
-       (env-extend env key variable)))
+     (for/fold ([env (expand-context-env ctx)]) ([keys (in-list val-keyss)]
+                                                 [ids (in-list val-idss)]
+                                                 #:when #t
+                                                 [key (in-list keys)]
+                                                 [id (in-list ids)])
+       (env-extend env key (local-variable id))))
    (define rec-env (for/fold ([env rec-val-env]) ([keys (in-list trans-keyss)]
                                                   [vals (in-list trans-valss)]
                                                   [ids (in-list trans-idss)])
@@ -391,7 +395,7 @@
        (rebuild
         s
         (list (m 'set!)
-              id
+              (substitute-variable id t)
               (expand (m 'rhs) (as-expression-context ctx))))]
       [(not binding)
        (raise-syntax-error #f "unbound identifier" s id null

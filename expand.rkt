@@ -181,7 +181,8 @@
                (local-binding? binding)
                (reference-record? (binding-frame-id binding)))
       (reference-record-used! (binding-frame-id binding) (local-binding-key binding)))
-    id]
+    ;; If the variable is locally bound, replace the use's scopes with the binding's scopes
+    (substitute-variable id t)]
    [else
     ;; Some other compile-time value:
     (raise-syntax-error #f "illegal use of syntax" t)]))
@@ -356,8 +357,9 @@
          (define counter (root-expand-context-counter ctx))
          (define keys (for/list ([id (in-list ids)])
                         (add-local-binding! id phase counter #:frame-id frame-id)))
-         (define extended-env (for/fold ([env (expand-context-env body-ctx)]) ([key (in-list keys)])
-                                (env-extend env key variable)))
+         (define extended-env (for/fold ([env (expand-context-env body-ctx)]) ([key (in-list keys)]
+                                                                               [id (in-list ids)])
+                                (env-extend env key (local-variable id))))
          (loop (struct-copy expand-context body-ctx
                             [env extended-env])
                (cdr bodys)
