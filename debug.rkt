@@ -59,7 +59,7 @@
          [else null]))
       (if (null? bindings)
           context-ht
-          (hash-set context-ht 'binding bindings))))
+          (hash-set context-ht 'bindings bindings))))
   (define ht (car hts))
   (if (null? (cdr hts))
       ht

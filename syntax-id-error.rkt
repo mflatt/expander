@@ -18,15 +18,24 @@
 
 (define (syntax-debug-info-string s ctx)
   (define info (syntax-debug-info s (expand-context-phase ctx) #t))
-  (apply string-append
-         "\n  context...:" (describe-context (hash-ref info 'context))
-         (for/list ([b (hash-ref info 'bindings null)])
-           (string-append
-            "\n  " (if (hash-ref b 'match? #f) "matching" "other") " binding...:"
-            "\n   " (if (hash-ref b 'local #f)
-                        'local
-                        (hash-ref b 'module #f))
-            (describe-context (hash-ref b 'context))))))
+  (let loop ([info info] [layer 0])
+    (string-append
+     "\n  context " (layer->string layer) "...:"
+     (describe-context (hash-ref info 'context))
+     (apply string-append
+            (for/list ([b (hash-ref info 'bindings null)])
+              (string-append
+               "\n  " (if (hash-ref b 'match? #f) "matching" "other") " binding" (layer->string layer) "...:"
+               "\n   " (if (hash-ref b 'local #f)
+                           "local"
+                           (format "~a" (hash-ref b 'module #f)))
+               (describe-context (hash-ref b 'context)))))
+     (let ([fallbacks (hash-ref info 'fallbacks null)])
+       (apply
+        string-append
+        (for/fold ([str null]) ([fallback (in-list fallbacks)]
+                                [layer (in-naturals layer)])
+          (loop fallback layer)))))))
 
 (define (describe-context scopes)
   (define strs
@@ -46,7 +55,9 @@
    [(null? strs) "\n   [empty]"]
    [else
     (apply string-append (for/list ([str (in-list strs)])
-                           (string-append "\n   " str)))]))
+                           (string-append "\n  " str)))]))
 
-
-
+(define (layer->string layer)
+  (if (zero? layer)
+      ""
+      (format " at layer ~a" layer)))
