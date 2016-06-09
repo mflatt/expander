@@ -16,7 +16,8 @@
          "compile-def-id.rkt"
          "compile-instance.rkt"
          "compile-form.rkt"
-         "compiled-in-memory.rkt")
+         "compiled-in-memory.rkt"
+         "correlate.rkt")
 
 (provide compile-module)
 
@@ -55,8 +56,9 @@
   (define (check-side-effects! e ; compiled expression
                                expected-results ; number of expected reuslts, or #f if any number is ok
                                phase)
-    (when (any-side-effects? e expected-results)
-      (hash-set! side-effects phase #t)))
+    (unless (hash-ref side-effects phase #f)
+      (when (any-side-effects? e expected-results)
+        (hash-set! side-effects phase #t))))
 
   ;; Compile the sequence of body forms:
   (define-values (body-linklets

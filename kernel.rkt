@@ -7,9 +7,7 @@
          "core-primitives.rkt"
          "module-path.rkt"
          "require+provide.rkt"
-         "linklet.rkt"
-         (only-in racket/base
-                  [dynamic-require base:dynamic-require]))
+         "linklet.rkt")
 
 ;; The '#%kernel module combines '#%core, '#%runtime, and '#%main
 

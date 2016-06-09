@@ -9,7 +9,6 @@
          "module-path.rkt"
          "module-use.rkt"
          "serialize.rkt"
-         "side-effect.rkt"
          "built-in-symbol.rkt"
          "linklet.rkt"
          "compile-context.rkt"
@@ -299,8 +298,9 @@
     (lambda () ,rhs)
     (case-lambda
       [,gen-syms
-       ,@transformer-set!s
-       (void)]
+       (begin
+         ,@transformer-set!s
+         (void))]
       [() (void)]
       [args
        ;; Provoke the wrong-number-of-arguments error:

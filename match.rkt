@@ -15,7 +15,8 @@
     (cond
      [(symbol? pattern)
       (when (regexp-match? #rx"^id(:|$)" (symbol->string pattern))
-        (unless (identifier? s)
+        (unless (or (identifier? s)
+                    (symbol? s))
           (raise-syntax-error #f "not an identifier" orig-s s)))
       (list (list pattern s))]
      [(syntax? s) (match (syntax-e s) pattern)]

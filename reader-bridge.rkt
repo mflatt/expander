@@ -1,8 +1,8 @@
 #lang racket/base
 (require (prefix-in new: "syntax.rkt")
          (prefix-in new: "scope.rkt")
-         (only-in "read-syntax.rkt"
-                  base:syntax->syntax))
+         "syntax-to-host-syntax.rkt"
+         "host-syntax-to-syntax.rkt")
 
 (provide synthesize-reader-bridge-module)
 
@@ -27,23 +27,8 @@
               (define-values (read-syntax)
                 ,(if (procedure-arity-includes? reader 6)
                      (lambda (name in modname line col pos)
-                       (syntax->base:syntax (reader name in (base:syntax->syntax modname) line col pos)))
+                       (syntax->host-syntax (reader name in (host-syntax->syntax modname) line col pos)))
                      (lambda (name in)
-                       (syntax->base:syntax (reader name in)))))
+                       (syntax->host-syntax (reader name in)))))
               (module* reader #f
                 (#%provide read-syntax)))))))
-
-(define (syntax->base:syntax v)
-  (new:syntax-map v
-                  (lambda (tail? v) v)
-                  (lambda (orig-s d)
-                    (datum->syntax #f d (srcloc->vector (new:syntax-srcloc orig-s))))
-                  new:syntax-e))
-
-(define (srcloc->vector s)
-  (and s
-       (vector (srcloc-source s)
-               (srcloc-line s)
-               (srcloc-column s)
-               (srcloc-position s)
-               (srcloc-span s))))

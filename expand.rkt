@@ -7,6 +7,7 @@
          "binding.rkt"
          "env.rkt"
          "syntax-error.rkt"
+         "syntax-id-error.rkt"
          "free-id-set.rkt"
          "dup-check.rkt"
          "use-site.rkt"

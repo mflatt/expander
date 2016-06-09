@@ -2,6 +2,8 @@
 (require "set.rkt"
          "datum-map.rkt"
          "built-in-symbol.rkt"
+         "correlate.rkt"
+         (submod "correlate.rkt" host)
          racket/unsafe/undefined)
 
 ;; A "linklet" is intended as the primitive form of separate (not
@@ -151,48 +153,57 @@
                               (apply seteq (map caar export-box-bindings))))
   (define (desugar e)
     (cond
+     [(correlated? e)
+      (correlate e (desugar (correlated-e e)))]
      [(symbol? e) (if (set-member? box-syms e)
                       (if (set-member? import-box-syms e)
                           `(unbox ,e)
                           `(check-not-undefined (unbox ,e) ',e))
                       e)]
      [(pair? e)
-      (case (car e)
+      (case (correlated-e (car e))
         [(quote) e]
-        [(set!) (if (set-member? box-syms (cadr e))
-                    `(set-box! ,(cadr e) ,(desugar (caddr e)))
-                    `(set! ,(cadr e) ,(desugar (caddr e))))]
+        [(set!)
+         (define m (match-correlated e '(set! var rhs)))
+         (if (set-member? box-syms (correlated-e (m 'var)))
+             `(set-box! ,(m 'var) ,(desugar (m 'rhs)))
+             `(set! ,(m 'var) ,(desugar (m 'rhs))))]
         [(define-values)
-         (define ids (cadr e))
+         (define m (match-correlated e '(define-values (id ...) rhs)))
+         (define ids (m 'id))
          (define tmps (map gensym ids))
          `(define-values ,(for/list ([id (in-list ids)]
-                                     #:when (not (set-member? box-syms id)))
+                                     #:when (not (set-member? box-syms (correlated-e id))))
                             id)
-           (let-values ([,tmps (let-values ([,ids ,(desugar (caddr e))])
+           (let-values ([,tmps (let-values ([,ids ,(desugar (m 'rhs))])
                                  (values ,@ids))])
              (begin
                ,@(for/list ([id (in-list ids)]
                             [tmp (in-list tmps)]
-                            #:when (set-member? box-syms id))
+                            #:when (set-member? box-syms (correlated-e id)))
                    `(set-box! ,id ,tmp))
                (values ,@(for/list ([id (in-list ids)]
                                     [tmp (in-list tmps)]
-                                    #:when (not (set-member? box-syms id)))
+                                    #:when (not (set-member? box-syms (correlated-e id))))
                            tmp)))))]
-        [(lambda) `(lambda ,(cadr e) ,@(map desugar (cddr e)))]
+        [(lambda)
+         (define m (match-correlated e '(lambda formals body)))
+         `(lambda ,(m 'formals) ,(desugar (m 'body)))]
         [(case-lambda)
-         `(case-lambda ,@(for/list ([clause (cdr e)])
-                      `[,(car clause) ,@(map desugar (cdr clause))]))]
+         (define m (match-correlated e '(case-lambda [formals body] ...)))
+         `(case-lambda ,@(for/list ([formals (in-list (m 'formals))]
+                               [body (in-list (m 'body))])
+                      `[,formals ,(desugar body)]))]
         [(#%variable-reference)
-         (if (and (pair? (cdr e))
-                  (set-member? box-syms (cadr e)))
+         (if (and (pair? (correlated-e (cdr (correlated-e e))))
+                  (set-member? box-syms (correlated-e (correlated-cadr e))))
              ;; Using a plain `#%variable-reference` (for now) means
              ;; that all imported and exported variables count as
              ;; mutable:
              '(variable-reference self-inst (#%variable-reference))
              ;; Preserve info about a local identifier:
              `(variable-reference self-inst ,e))]
-        [else (map desugar e)])]
+        [else (map desugar (correlated->list e))])]
      [else e]))
   `(lambda (self-inst ,@(map car imports))
     (let-values ,box-bindings
@@ -229,7 +240,7 @@
 (define (compile-linklet c)
   (cond
    [(linklet-compile-to-s-expr)
-    (de-path c)]
+    (de-path (correlated->datum c))]
    [else
     (define plain-c (desugar-linklet c))
     (parameterize ([current-namespace cu-namespace]
@@ -237,7 +248,7 @@
                    [current-compile orig-compile])
       ;; Use a vector to list the exported variables
       ;; with the compiled bytecode
-      (vector (compile plain-c)
+      (vector (compile (correlated->host-syntax plain-c))
               (extract-import-variables-from-expression c)
               (extract-export-variables-from-expression c)))]))
 

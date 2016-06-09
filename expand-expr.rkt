@@ -7,6 +7,7 @@
          "binding.rkt"
          "env.rkt"
          "syntax-error.rkt"
+         "syntax-id-error.rkt"
          "dup-check.rkt"
          "core.rkt"
          "expand-context.rkt"
@@ -14,8 +15,7 @@
          "expand.rkt"
          "set-bang-trans.rkt"
          "rename-trans.rkt"
-         "reference-record.rkt"
-         "debug.rkt")
+         "reference-record.rkt")
 
 ;; ----------------------------------------
 

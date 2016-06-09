@@ -6,8 +6,6 @@
          "read-syntax.rkt"
          "module-path.rkt"
          "module-read.rkt"
-         (only-in racket/base
-                  [dynamic-require base:dynamic-require])
          "kernel.rkt"
          "run-cache.rkt"
          "runtime-primitives.rkt"
