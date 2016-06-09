@@ -20,7 +20,7 @@
 (struct adjust-all-except (prefix-sym syms))
 (struct adjust-rename (to-id from-sym))
 
-(define layers '(raw raw/no-just-meta phaseless path))
+(define layers '(raw phaseless path))
 
 (define (parse-and-perform-requires! reqs orig-s self m-ns phase-shift
                                      requires+provides
@@ -31,17 +31,19 @@
              [phase-shift phase-shift]
              [just-meta 'all]
              [adjust #f]
+             [for-meta-ok? #t]
+             [just-meta-ok? #t]
              [layer 'raw])
     (for ([req (in-list reqs)])
-      (define (check-nested want-layer)
-        (unless (member want-layer (member layer layers))
+      (define (check-nested want-layer [ok? #t])
+        (unless (and ok? (member want-layer (member layer layers)))
           (raise-syntax-error #f "invalid nesting" orig-s req)))
       (define fm (and (pair? (syntax-e req))
                       (identifier? (car (syntax-e req)))
                       (syntax-e (car (syntax-e req)))))
       (case fm
         [(for-meta)
-         (check-nested 'raw/no-just-meta)
+         (check-nested 'raw for-meta-ok?)
          (define m (match-syntax req '(for-meta phase-level spec ...)))
          (define p (syntax-e (m 'phase-level)))
          (unless (phase? p)
@@ -51,36 +53,36 @@
                (phase+ phase-shift p)
                just-meta
                adjust
-               'phaseless)]
+               #f just-meta-ok? 'raw)]
         [(for-syntax)
-         (check-nested 'raw/no-just-meta)
+         (check-nested 'raw for-meta-ok?)
          (define m (match-syntax req '(for-syntax spec ...)))
          (loop (m 'spec)
                (or top-req req)
                (phase+ phase-shift 1)
                just-meta
                adjust
-               'phaseless)]
+               #f just-meta-ok? 'raw)]
         [(for-template)
-         (check-nested 'raw/no-just-meta)
+         (check-nested 'raw for-meta-ok?)
          (define m (match-syntax req '(for-template spec ...)))
          (loop (m 'spec)
                (or top-req req)
                (phase+ phase-shift -1)
                just-meta
                adjust
-               'phaseless)]
+               #f just-meta-ok? 'raw)]
         [(for-label)
-         (check-nested 'raw/no-just-meta)
+         (check-nested 'raw for-meta-ok?)
          (define m (match-syntax req '(for-label spec ...)))
          (loop (m 'spec)
                (or top-req req)
                (phase+ phase-shift #f)
                just-meta
                adjust
-               'phaseless)]
+               #f just-meta-ok? 'raw)]
         [(just-meta)
-         (check-nested 'raw)
+         (check-nested 'raw just-meta-ok?)
          (define m (match-syntax req '(just-meta phase-level spec ...)))
          (define p (syntax-e (m 'phase-level)))
          (unless (phase? p)
@@ -90,7 +92,7 @@
                phase-shift
                just-meta
                adjust
-               'raw/no-just-meta)]
+               for-meta-ok? #f 'raw)]
         [(only)
          (check-nested 'phaseless)
          (define m (match-syntax req '(only spec id ...)))
@@ -99,7 +101,7 @@
                phase-shift
                just-meta
                (adjust-only (ids->sym-set (m 'id)))
-               'path)]
+               #f #f 'path)]
         [(prefix)
          (check-nested 'phaseless)
          (define m (match-syntax req '(prefix id:prefix spec)))
@@ -108,7 +110,7 @@
                phase-shift
                just-meta
                (adjust-prefix (syntax-e (m 'id:prefix)))
-               'path)]
+               #f #f 'path)]
         [(all-except)
          (check-nested 'phaseless)
          (define m (match-syntax req '(all-except spec id ...)))
@@ -117,7 +119,7 @@
                phase-shift
                just-meta
                (adjust-all-except '|| (ids->sym-set (m 'id)))
-               'path)]
+               #f #f 'path)]
         [(prefix-all-except)
          (check-nested 'phaseless)
          (define m (match-syntax req '(prefix-all-except id:prefix spec id ...)))
@@ -126,7 +128,7 @@
                phase-shift
                just-meta
                (adjust-all-except (syntax-e (m 'id:prefix)) (ids->sym-set (m 'id)))
-               'path)]
+               #f #f 'path)]
         [(rename)
          (check-nested 'phaseless)
          (define m (match-syntax req '(rename spec id:to id:from)))
@@ -135,7 +137,7 @@
                phase-shift
                just-meta
                (adjust-rename (m 'id:to) (syntax-e (m 'id:from)))
-               'path)]
+               #f #f 'path)]
         [else
          (define mp (syntax->datum req))
          (unless (module-path? mp)
