@@ -107,19 +107,23 @@
            [(top-level-module-path-index? r)
             (fprintf port ":top-level")]
            [(module-path-index-path r)
-            (fprintf port ":~.s" (let loop ([r r])
-                                   (cond
-                                    [(not r) null]
-                                    [(module-path-index-path r)
-                                     (cons (module-path-index-path r)
-                                           (loop (module-path-index-base r)))]
-                                    [(module-path-index-resolved r)
-                                     (list
-                                      '+
-                                      (format-resolved-module-path-name
-                                       (resolved-module-path-name
-                                        (module-path-index-resolved r))))]
-                                    [else null])))]
+            (define l (let loop ([r r])
+                        (cond
+                         [(not r) null]
+                         [(module-path-index-path r)
+                          (cons (module-path-index-path r)
+                                (loop (module-path-index-base r)))]
+                         [(module-path-index-resolved r)
+                          (list
+                           '+
+                           (format-resolved-module-path-name
+                            (resolved-module-path-name
+                             (module-path-index-resolved r))))]
+                         [else null])))
+            (fprintf port ":~.a" (apply string-append
+                                        (format "~.s" (car l))
+                                        (for/list ([i (in-list (cdr l))])
+                                          (format " ~.s" (car l)))))]
            [(module-path-index-resolved r)
             (fprintf port "=~.s" (format-resolved-module-path-name
                                   (resolved-module-path-name
