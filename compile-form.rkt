@@ -283,7 +283,7 @@
           (compile-quote-syntax (remove-scope id top-level-bind-scope)
                                 phase
                                 cctx))
-        `(,top-level-bind!-id ,id-stx ,self-expr ,phase ,phase-shift-id ',binding-sym))))
+        `(,top-level-bind!-id ,id-stx ,self-expr ,phase ,phase-shift-id ,ns-id ',binding-sym))))
 
 ;; To support namespace-relative binding, bundle scope information for
 ;; the current namespace into a syntax object

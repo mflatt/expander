@@ -17,9 +17,11 @@
 (instance-set-variable-value!
  top-level-instance
  'top-level-bind!
- (lambda (id mpi orig-phase phase-shift sym)
+ (lambda (id mpi orig-phase phase-shift ns sym)
    (define phase (phase+ orig-phase phase-shift))
-   (define b (make-module-binding mpi phase sym))
+   (define b (make-module-binding mpi phase sym
+                                  #:frame-id (root-expand-context-frame-id
+                                              (namespace-root-expand-ctx ns))))
    (add-binding! id b phase)))
 
 (instance-set-variable-value!
