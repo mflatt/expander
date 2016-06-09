@@ -4,7 +4,7 @@
          (prefix-in base:
                     (only-in racket/base
                              read-syntax
-                             syntax? syntax-e
+                             syntax? syntax-e syntax-property
                              syntax-source syntax-line syntax-column
                              syntax-position syntax-span)))
 
@@ -26,7 +26,10 @@
                                               (base:syntax-column v)
                                               (base:syntax-position v)
                                               (base:syntax-span v))]
-                              [props original-props])]
+                              [props (case (base:syntax-property v 'paren-shape)
+                                       [(#\[) original-square-props]
+                                       [(#\{) original-curly-props]
+                                       [else original-props])])]
                 [else v]))))
 
 (define original-property-sym
@@ -34,3 +37,9 @@
 
 (define original-props
   (syntax-props (syntax-property empty-syntax original-property-sym #t)))
+(define original-square-props
+  (syntax-props (syntax-property (syntax-property empty-syntax original-property-sym #t)
+                                 'paren-shape #\[)))
+(define original-curly-props
+  (syntax-props (syntax-property (syntax-property empty-syntax original-property-sym #t)
+                                 'paren-shape #\{)))
