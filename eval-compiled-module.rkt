@@ -7,7 +7,8 @@
          "linklet.rkt"
          "compile-instance.rkt"
          (only-in "eval-compiled-top.rkt" eval-linklets)
-         "compiled-in-memory.rkt")
+         "compiled-in-memory.rkt"
+         "expand-context.rkt")
 
 ;; Run a reprsentation of top-level code as produced by `compile-module`;
 ;; see "compile.rkt" and "compile-module.rkt"
@@ -78,11 +79,20 @@
                                 #:bulk-binding-registry bulk-binding-registry
                                 #:set-transformer! (lambda (name val)
                                                      (namespace-set-transformer! ns (sub1 phase-level) name val))))
-                             (instantiate-linklet cu (list* deserialize-instance
-                                                            data-instance
-                                                            inst
-                                                            imports)
-                                                  (namespace->instance ns phase-level))))
+                             (define (instantiate-body)
+                               (instantiate-linklet cu (list* deserialize-instance
+                                                              data-instance
+                                                              inst
+                                                              imports)
+                                                    (namespace->instance ns phase-level)))
+                             (cond
+                              [(zero-phase? phase-level)
+                               (instantiate-body)]
+                              [else
+                               ;; For phase level 1 and up, set the expansion context
+                               ;; to point back to the module's info:
+                               (parameterize ([current-expand-context (make-expand-context ns)])
+                                 (instantiate-body))])))
                          #:cross-phase-persistent? (decl 'cross-phase-persistent?)))
 
   (declare-module! ns

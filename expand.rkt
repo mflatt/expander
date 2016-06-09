@@ -606,7 +606,8 @@
                              phase
                              (namespace->namespace-at-phase
                               (expand-context-namespace ctx)
-                              phase))))
+                              phase)
+                             ctx)))
 
 ;; Expand and evaluate `s` as a compile-time expression, returning
 ;; only the compile-time values
@@ -618,12 +619,14 @@
 ;; Expand and evaluate `s` as an expression in the given phase;
 ;; ensuring that the number of returned values matches the number of
 ;; target identifiers; return the values
-(define (eval-for-bindings ids s phase ns)
+(define (eval-for-bindings ids s phase ns ctx)
   (define compiled (compile-single s (make-compile-context
                                       #:namespace ns
                                       #:phase phase)))
   (define vals
-    (call-with-values (lambda () (eval-top compiled ns))
+    (call-with-values (lambda ()
+                        (parameterize ([current-expand-context ctx])
+                          (eval-top compiled ns)))
       list))
   (unless (= (length vals) (length ids))
     (error "wrong number of results (" (length vals) "vs." (length ids) ")"

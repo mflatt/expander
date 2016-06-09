@@ -498,7 +498,7 @@
           (define m (match-syntax exp-body '(begin-for-syntax e ...)))
           (define nested-bodys (phase-1-and-2-loop (m 'e) (add1 phase)))
           (define ct-m-ns (namespace->namespace-at-phase m-ns (add1 phase)))
-          (eval-nested-bodys nested-bodys (add1 phase) ct-m-ns self)
+          (eval-nested-bodys nested-bodys (add1 phase) ct-m-ns self partial-body-ctx)
           (cons
            (rebuild
             s
@@ -811,7 +811,7 @@
 
 ;; ----------------------------------------
 
-(define (eval-nested-bodys bodys phase m-ns self)
+(define (eval-nested-bodys bodys phase m-ns self ctx)
   ;; The defitions and expression bodys are fully expanded;
   ;; evaluate them
   (for ([body (in-list bodys)])
@@ -819,7 +819,7 @@
       [(define-values)
        (define m (match-syntax body '(define-values (id ...) rhs)))
        (define ids (m 'id))
-       (define vals (eval-for-bindings ids (m 'rhs) phase m-ns))
+       (define vals (eval-for-bindings ids (m 'rhs) phase m-ns ctx))
        (for ([id (in-list ids)]
              [val (in-list vals)])
          (define b (resolve id phase))
@@ -835,11 +835,12 @@
        (void)]
       [else
        ;; an expression
-       (eval-top
-        (compile-single body (make-compile-context
-                              #:namespace m-ns
-                              #:phase phase))
-        m-ns)])))
+       (parameterize ([current-expand-context ctx])
+         (eval-top
+          (compile-single body (make-compile-context
+                                #:namespace m-ns
+                                #:phase phase))
+          m-ns))])))
 
 ;; ----------------------------------------
 
