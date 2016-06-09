@@ -409,9 +409,10 @@
   ;; If `mb-id` is not bound, we'd like to give a clear error message
   (unless (resolve mb-id phase)
     (raise-syntax-error #f "no #%module-begin binding in the module's language" s))
-  (define mb (rebuild
-              s
-              `(,mb-id ,@bodys)))
+  (define mb (datum->syntax
+              initial-require-s
+              `(,mb-id ,@bodys)
+              s))
   (define partly-expanded-mb (expand (add-enclosing-name-property mb module-name-sym)
                                      mb-ctx))
   (unless (eq? '#%module-begin (core-form-sym partly-expanded-mb phase))
