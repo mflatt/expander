@@ -183,7 +183,7 @@
                (reference-record? (binding-frame-id binding)))
       (reference-record-used! (binding-frame-id binding) (local-binding-key binding)))
     ;; If the variable is locally bound, replace the use's scopes with the binding's scopes
-    (substitute-variable id t)]
+    (substitute-variable id t #:no-stops? (free-id-set-empty? (expand-context-stops ctx)))]
    [else
     ;; Some other compile-time value:
     (raise-syntax-error #f "illegal use of syntax" t)]))

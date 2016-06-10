@@ -6,6 +6,7 @@
          "namespace.rkt"
          "binding.rkt"
          "env.rkt"
+         "free-id-set.rkt"
          "syntax-track.rkt"
          "syntax-error.rkt"
          "syntax-id-error.rkt"
@@ -417,7 +418,7 @@
        (rebuild
         s
         (list (m 'set!)
-              (substitute-variable id t)
+              (substitute-variable id t #:no-stops? (free-id-set-empty? (expand-context-stops ctx)))
               (expand (m 'rhs) (as-expression-context ctx))))]
       [(not binding)
        (raise-syntax-error #f "unbound identifier" s id null
@@ -475,8 +476,9 @@
    (define m (match-syntax s '(#%expression e)))
    (define exp-e (expand (m 'e) (as-tail-context (as-expression-context ctx)
                                                  #:wrt ctx)))
-   (case (expand-context-context ctx)
-     [(expression) exp-e]
+   (case (and (not (expand-context-preserve-#%expression? ctx))
+              (expand-context-context ctx))
+     [(expression) (syntax-track-origin exp-e s)]
      [else (rebuild
             s
             `(,(m '#%expression) ,exp-e))])))

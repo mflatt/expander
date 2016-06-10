@@ -4,12 +4,13 @@
 
 (provide free-id-set
          empty-free-id-set
-         free-id-set-member?)
+         free-id-set-member?
+         free-id-set-empty?)
 
 ;; A free-id-set is a hash: sym -> list of id
 
 (define (free-id-set phase ids)
-  (for/fold ([ht (hasheq)]) ([id (in-list ids)])
+  (for/fold ([ht #hasheq()]) ([id (in-list ids)])
     (hash-update ht
                  (identifier-binding-symbol id phase)
                  (lambda (l) (cons id l))
@@ -22,3 +23,6 @@
                                   (identifier-binding-symbol given-id phase)
                                   null))])
     (free-identifier=? id given-id phase phase)))
+
+(define (free-id-set-empty? fs)
+  (zero? (hash-count fs)))

@@ -42,8 +42,8 @@
 
 ;; If a variable binding corresponds to a local binding, substitute
 ;; the binding identifier in place of the original reference
-(define (substitute-variable id t)
-  (if (local-variable? t)
+(define (substitute-variable id t #:no-stops? no-stops?)
+  (if (and no-stops? (local-variable? t))
       (let ([bind-id (local-variable-id t)])
         ;; Keep source locations and properties of original reference:
         (datum->syntax bind-id (syntax-e bind-id) id id))
