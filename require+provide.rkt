@@ -135,6 +135,8 @@
                            r+p id phase #:in orig-s
                            #:unless-matches [ok-binding #f])
   (define b (resolve+shift id phase #:exactly? #t))
+  (when (and b (not (module-binding? b)))
+    (raise-syntax-error #f "identifier out of context" id))
   (define defined? (and b (eq? (requires+provides-self r+p)
                                (module-binding-module b))))
   (when (and b

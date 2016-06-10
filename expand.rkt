@@ -566,7 +566,7 @@
                               #:begin-form? [begin-form? #f])
   (define context (expand-context-context ctx))
   (define phase (expand-context-phase ctx))
-  (define local? (not (memq context '(top-level module))))
+  (define local? (not begin-form?)) ;; see "[*]" below
   ;; Expand `s`, but loop to handle lifted expressions
   (let loop ([s s])
     (define lift-env (and local? (box empty-env)))
@@ -594,6 +594,14 @@
       (if expand-lifts?
           (loop with-lifts-s)
           with-lifts-s)])))
+
+;; [*] Although `(memq context '(top-level module))` makes more sense
+;;     than `(not begin-form?)`, the latter was used historically; the
+;;     implementation of `typed/require` currently depends on that
+;;     choice, because it expands in 'expression mode to obtain forms
+;;     that are splcied into a module context --- leading to an
+;;     out-of-context definition error if the historical choice is not
+;;     preserved.
 
 ;; Expand `s` as a compile-time expression relative to the current
 ;; expansion context
