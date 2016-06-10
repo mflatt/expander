@@ -76,19 +76,24 @@
   (cond
    [(module-binding? b)
     (define at-phase (- phase (module-binding-phase b)))
-    (define m (if (top-level-module-path-index? (module-binding-module b))
-                  ns
-                  (namespace->module-namespace ns
-                                               (module-path-index-resolve
-                                                (module-binding-module b))
-                                               at-phase)))
-    (unless m
-      (error "namespace mismatch: cannot locate module"
+    (define m-ns (if (top-level-module-path-index? (module-binding-module b))
+                     ns
+                     (namespace->module-namespace ns
+                                                  (module-path-index-resolve
+                                                   (module-binding-module b))
+                                                  at-phase)))
+    (unless m-ns
+      (error 'expand
+             (string-append "namespace mismatch; cannot locate module instance\n"
+                            "  module: ~s\n"
+                            "  use phase: ~a\n"
+                            "  definition phase: ~a\n"
+                            "  for identifier: ~s")
              (module-binding-module b)
-             at-phase
-             "for identifier"
+             phase
+             (module-binding-phase b)
              id))
-    (namespace-get-transformer m (module-binding-phase b) (module-binding-sym b)
+    (namespace-get-transformer m-ns (module-binding-phase b) (module-binding-sym b)
                                variable)]
    [(local-binding? b)
     (define t (hash-ref env (local-binding-key b) missing))
