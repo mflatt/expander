@@ -203,7 +203,7 @@
         (let ([c-ns (or (namespace-cross-phase-persistent-namespace ns)
                         ns)])
           (namespace-module-instantiate! c-ns mpi 0 0)
-          (define m-ns (namespace->module-namespace c-ns name 0 #:create? #t))
+          (define m-ns (namespace->module-namespace c-ns name 0 #:create-mpi mpi))
           (hash-set! (namespace-module-instances ns) (cons name phase) m-ns)
           (for ([(req-phase mods) (in-hash (module-requires m))])
             (for ([mod (in-list mods)])
@@ -214,7 +214,7 @@
                                    (cons name 0)))))
           m-ns))]
    [else
-    (define m-ns (namespace->module-namespace ns name phase #:create? #t))
+    (define m-ns (namespace->module-namespace ns name phase #:create-mpi mpi))
     (unless ((hash-ref (namespace-done-phases m-ns) phase +inf.0) . <= . min-phase)
       (for ([(req-phase mods) (in-hash (module-requires m))])
         (for ([mod (in-list mods)])
@@ -243,7 +243,7 @@
 
 (define (namespace->module-namespace ns name 0-phase
                                      #:install!-namespace [install!-ns #f]
-                                     #:create? [create? #f]
+                                     #:create-mpi [create-mpi #f]
                                      #:complain-on-failure? [complain-on-failure? #f])
   (or (hash-ref (namespace-module-instances ns) (cons name 0-phase) #f)
       (and complain-on-failure?
@@ -255,12 +255,12 @@
              (hash-set! (namespace-phase-to-namespace m-ns) 0-phase m-ns)
              (hash-set! (namespace-module-instances ns) (cons name 0-phase) m-ns)
              m-ns))
-      (and create?
+      (and create-mpi
            (let ([m (namespace->module ns name)])
              (unless m
                (error "no module declared to instantiate:" name))
              (define m-ns (struct-copy namespace ns
-                                       [mpi (make-self-module-path-index name)]
+                                       [mpi create-mpi]
                                        [root-expand-ctx (module-root-expand-ctx m)]
                                        [phase 0-phase]
                                        [0-phase 0-phase]
