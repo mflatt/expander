@@ -280,13 +280,13 @@
 (define (substitute-alternate-id s alternate-id)
   (cond
    [(not alternate-id) s]
-   [(identifier? s) alternate-id]
-   (datum->syntax
-    s
-    (cons alternate-id
-          (cdr (syntax-e s)))
-    s
-    s)))
+   [(identifier? s) (syntax-track-origin alternate-id s)]
+   [else (syntax-track-origin (datum->syntax
+                               s
+                               (cons alternate-id
+                                     (cdr (syntax-e s)))
+                               s)
+                              s)]))
 
 ;; ----------------------------------------
 
