@@ -40,7 +40,6 @@
   (direct:expand s))
 
 
-(define (intro s [ns (current-namespace)])
-  (if (syntax? s)
-      s
-      (direct:namespace-syntax-introduce (datum->syntax #f s) ns)))
+(define (intro given-s [ns (current-namespace)])
+  (define s (if (syntax? given-s) given-s (datum->syntax #f given-s)))
+  (direct:namespace-syntax-introduce s ns))
