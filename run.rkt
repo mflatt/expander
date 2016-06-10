@@ -25,35 +25,37 @@
 (define quiet-load? #f)
 (define boot-module (path->complete-path "main.rkt"))
 (define load-file #f)
-(command-line
- #:once-any
- [("-x" "--extract") "Extract bootstrap linklets"
-  (set! extract? #t)]
- [("-e" "--expand") "Expand instead of running"
-  (set! expand? #t)]
- #:once-each
- [("-c" "--cache") dir "Save and load from <dir>"
-  (set! cache-dir (path->complete-path dir))]
- [("-r" "--read-only") "Use cache in read-only mode"
-  (set! cache-read-only? #t)]
- [("-y" "--cache-only") file "Cache only for sources listed in <file>"
-  (set! cache-save-only (call-with-input-file* file read))]
- [("-i" "--skip-initial") "Don't use cache for the initial load"
-  (set! cache-skip-first? #t)]
- [("-s" "--s-expr") "Compile to S-expression instead of bytecode"
-  (linklet-compile-to-s-expr #t)]
- [("-q" "--quiet") "Quiet load status"
-  (set! quiet-load? #t)]
- [("--time") "Time re-expansion"
-  (set! time-expand? #t)]
- #:once-any
- [("-t") file "Load specified file"
-  (set! boot-module (path->complete-path file))]
- [("-l") lib "Load specified library"
-  (set! boot-module `(lib ,lib))]
- [("-f") file "Load non-module file in `racket/base` namespace"
-  (set! boot-module 'racket/base)
-  (set! load-file file)])
+(define args
+  (command-line
+   #:once-any
+   [("-x" "--extract") "Extract bootstrap linklets"
+    (set! extract? #t)]
+   [("-e" "--expand") "Expand instead of running"
+    (set! expand? #t)]
+   #:once-each
+   [("-c" "--cache") dir "Save and load from <dir>"
+    (set! cache-dir (path->complete-path dir))]
+   [("-r" "--read-only") "Use cache in read-only mode"
+    (set! cache-read-only? #t)]
+   [("-y" "--cache-only") file "Cache only for sources listed in <file>"
+    (set! cache-save-only (call-with-input-file* file read))]
+   [("-i" "--skip-initial") "Don't use cache for the initial load"
+    (set! cache-skip-first? #t)]
+   [("-s" "--s-expr") "Compile to S-expression instead of bytecode"
+    (linklet-compile-to-s-expr #t)]
+   [("-q" "--quiet") "Quiet load status"
+    (set! quiet-load? #t)]
+   [("--time") "Time re-expansion"
+    (set! time-expand? #t)]
+   #:once-any
+   [("-t") file "Load specified file"
+    (set! boot-module (path->complete-path file))]
+   [("-l") lib "Load specified library"
+    (set! boot-module `(lib ,lib))]
+   [("-f") file "Load non-module file in `racket/base` namespace"
+    (set! boot-module 'racket/base)
+    (set! load-file file)]
+   #:args args args))
 
 (define cache (make-cache cache-dir))
 
@@ -139,7 +141,7 @@
   (pretty-print (syntax->datum e))]
  [else
   ;; Load and run the requested module
-  (parameterize ([current-command-line-arguments (vector)])
+  (parameterize ([current-command-line-arguments (list->vector args)])
     (namespace-require boot-module))])
 
 (when extract?
