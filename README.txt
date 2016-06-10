@@ -6,7 +6,7 @@ TODO:
  bug fix for local definition contexts (MB's example)
  load handler's direct loading of submodules
  lazy module instantiation
- origin tracking
+ preserved syntax properties
  taints
  expander observer
  continuation barrier on macro invocation

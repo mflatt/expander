@@ -13,6 +13,8 @@
                     [free-identifier=? raw:free-identifier=?]
                     [identifier-binding raw:identifier-binding]
                     [identifier-binding-symbol raw:identifier-binding-symbol])
+         (rename-in "syntax-track.rkt"
+                    [syntax-track-origin raw:syntax-track-origin])
          "syntax-local.rkt"
          "srcloc.rkt"
          "contract.rkt"
@@ -158,8 +160,7 @@
   (check 'syntax-track-origin syntax? new-stx)
   (check 'syntax-track-origin syntax? old-stx)
   (check 'syntax-track-origin identifier? id)
-  ;; No-op for now
-  new-stx)
+  (raw:syntax-track-origin new-stx old-stx id))
 
 ;; ----------------------------------------
 

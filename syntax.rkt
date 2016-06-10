@@ -49,8 +49,7 @@
             ,(ser (intern-scopes (syntax-scopes s) state))
             ,(ser (intern-shifted-multi-scopes (syntax-shifted-multi-scopes s) state))
             ,(ser (intern-mpi-shifts (syntax-mpi-shifts s) state))
-            ,(ser (syntax-srcloc s))
-            ,(ser (syntax-props s))))
+            ,(ser (syntax-srcloc s))))
         #:property prop:reach-scopes
         (lambda (s reach)
           (define prop (syntax-scope-propagations s))
@@ -66,8 +65,8 @@
 (define-values (prop:propagation propagation? propagation-ref)
   (make-struct-type-property 'propagation))
 
-(define (deserialize-syntax content scopes shifted-multi-scopes mpi-shifts srcloc props)
-  (syntax content scopes #f shifted-multi-scopes mpi-shifts #f srcloc props))
+(define (deserialize-syntax content scopes shifted-multi-scopes mpi-shifts srcloc)
+  (syntax content scopes #f shifted-multi-scopes mpi-shifts #f srcloc empty-props))
 
 (define empty-scopes (seteq))
 (define empty-shifted-multi-scopes (set))

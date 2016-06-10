@@ -6,6 +6,7 @@
          "namespace.rkt"
          "binding.rkt"
          "env.rkt"
+         "syntax-track.rkt"
          "syntax-error.rkt"
          "syntax-id-error.rkt"
          "free-id-set.rkt"
@@ -212,10 +213,12 @@
                           "received value from syntax expander was not syntax"
                           "received" transformed-s))
   (define result-s (flip-scope transformed-s intro-scope))
+  ;; In a definition context, we need to add the inside-edge scope to
+  ;; any expansion result
+  (define post-s (maybe-add-post-expansion-scope result-s ctx))
   (values
-   ;; In a definition context, we need to add the inside-edge scope to
-   ;; any expansion result
-   (maybe-add-post-expansion-scope result-s ctx)
+   ;; Track expansion:
+   (syntax-track-origin post-s s id)
    ;; Move any accumulated definition-context scopes to the `scopes`
    ;; list for further expansion:
    (if (null? (unbox def-ctx-scopes))
@@ -288,7 +291,9 @@
 ;; ----------------------------------------
 
 ;; Expand a sequence of body forms in a definition context
-(define (expand-body bodys sc s ctx #:stratified? [stratified? #f])
+(define (expand-body bodys sc s ctx
+                     #:stratified? [stratified? #f]
+                     #:track? [track? #f])
   ;; The outside-edge scope identifies the original content of the
   ;; definition context
   (define outside-sc (new-scope 'local))
@@ -334,7 +339,8 @@
                              (reverse val-idss) (reverse val-keyss) (reverse val-rhss)
                              (reverse done-bodys)
                              s
-                             #:stratified? stratified?)]
+                             #:stratified? stratified?
+                             #:track? track?)]
      [else
       (define exp-body (expand (car bodys) body-ctx))
       (case (core-form-sym exp-body phase)
@@ -433,7 +439,8 @@
                                val-idss val-keyss val-rhss
                                done-bodys
                                s
-                               #:stratified? stratified?)
+                               #:stratified? stratified?
+                               #:track? track?)
   (when (null? done-bodys)
     (raise-syntax-error #f "no expression after a sequence of internal definitions" s))
   ;; To reference core forms at the current expansion phase:
@@ -449,21 +456,24 @@
                                   [only-immediate? #f]
                                   [post-expansion-scope #:parent root-expand-context #f]))
   ;; Helper to expand and wrap the ending expressions in `begin`, if needed:
-  (define (finish-bodys)
+  (define (finish-bodys track?)
     (cond
      [(null? (cdr done-bodys))
-      (expand (car done-bodys) finish-ctx)]
+      (define exp-body (expand (car done-bodys) finish-ctx))
+      (if track?
+          (syntax-track-origin exp-body s)
+          exp-body)]
      [else
-      (datum->syntax
-       #f
+      (rebuild
+       #:track? track?
+       s
        `(,(datum->syntax s-core-stx 'begin)
          ,@(for/list ([body (in-list done-bodys)])
-             (expand body finish-ctx)))
-       s)]))
+             (expand body finish-ctx))))]))
   (cond
    [(null? val-idss)
     ;; No definitions, so no `letrec-values` wrapper needed:
-    (finish-bodys)]
+    (finish-bodys track?)]
    [else
     ;; Roughly, finish expanding the right-hand sides, finish the body
     ;; expression, then add a `letrec-values` wrapper:
@@ -471,7 +481,7 @@
      val-idss val-keyss val-rhss
      #:split? (not stratified?)
      #:frame-id frame-id #:ctx finish-ctx #:source s
-     #:get-body finish-bodys)]))
+     #:get-body finish-bodys #:track? track?)]))
 
 ;; Roughly, create a `letrec-values` for for the given ids, right-hand sides, and
 ;; body. While expanding right-hand sides, though, keep track of whether any
@@ -481,21 +491,23 @@
 (define (expand-and-split-bindings-by-reference idss keyss rhss
                                                 #:split? split?
                                                 #:frame-id frame-id #:ctx ctx #:source s
-                                                #:get-body get-body)
+                                                #:get-body get-body #:track? track?)
   (define s-core-stx
     (syntax-shift-phase-level core-stx (expand-context-phase ctx)))
-  (let loop ([idss idss] [keyss keyss] [rhss rhss] [accum-idss null] [accum-rhss null])
+  (let loop ([idss idss] [keyss keyss] [rhss rhss]
+             [accum-idss null] [accum-rhss null] [track? track?])
     (cond
      [(null? idss)
       (cond
-       [(null? accum-idss) (get-body)]
+       [(null? accum-idss) (get-body track?)]
        [else
-        (datum->syntax
-         #f
+        (rebuild
+         #:track? track?
+         s
          `(,(datum->syntax s-core-stx 'letrec-values)
            ,(map list (reverse accum-idss) (reverse accum-rhss))
-           ,(loop (cdr idss) (cdr keyss) (cdr rhss) null null))
-         s)])]
+           ,(loop (cdr idss) (cdr keyss) (cdr rhss)
+                  null null #f)))])]
      [else
       (define ids (car idss))
       (define expanded-rhs (expand (car rhss) (as-named-context ctx ids)))
@@ -508,26 +520,27 @@
        [(and (not local-or-forward-references?)
              split?)
         (unless (null? accum-idss) (error "internal error: accumulated ids not empty"))
-        (datum->syntax
-         #f
+        (rebuild
+         #:track? track?
+         s
          `(,(datum->syntax s-core-stx 'let-values)
            ([,ids ,expanded-rhs])
-           ,(loop (cdr idss) (cdr keyss) (cdr rhss) null null))
-         s)]
+           ,(loop (cdr idss) (cdr keyss) (cdr rhss)
+                  null null #f)))]
        [(and (not forward-references?)
              (or split? (null? (cdr idss))))
-        (datum->syntax
-         #f
+        (rebuild
+         #:track? track?
+         s
          `(,(datum->syntax s-core-stx 'letrec-values)
            ,(map list
                  (reverse (cons ids accum-idss))
                  (reverse (cons expanded-rhs accum-rhss)))
-           ,(loop (cdr idss) (cdr keyss) (cdr rhss) null null))
-         s)]
+           ,(loop (cdr idss) (cdr keyss) (cdr rhss)
+                  null null #f)))]
        [else
         (loop (cdr idss) (cdr keyss) (cdr rhss)
-              (cons ids accum-idss)
-              (cons expanded-rhs accum-rhss))])])))
+              (cons ids accum-idss) (cons expanded-rhs accum-rhss) track?)])])))
 
 ;; Helper to turn an expression into a binding clause with zero
 ;; bindings
@@ -638,6 +651,9 @@
 
 ;; ----------------------------------------
 
-;; A helper for forms to reconstruct syntax
-(define (rebuild orig-s new)
-  (datum->syntax orig-s new orig-s orig-s))
+;; A helper for forms to reconstruct syntax while preserving source
+;; locations and properties; if `track?` is #f, then don't keep
+;; properties, because we've kept them in a surrounding form
+(define (rebuild orig-s new
+                 #:track? [track? #t])
+  (datum->syntax orig-s new orig-s (and track? orig-s)))

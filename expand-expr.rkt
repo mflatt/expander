@@ -6,6 +6,7 @@
          "namespace.rkt"
          "binding.rkt"
          "env.rkt"
+         "syntax-track.rkt"
          "syntax-error.rkt"
          "syntax-id-error.rkt"
          "dup-check.rkt"
@@ -164,8 +165,11 @@
      (if syntaxes?
          (datum->syntax (syntax-shift-phase-level core-stx phase) 'letrec-values)
          (m 'let-values)))
-   (define (get-body)
-     (expand-body (m 'body) sc s (as-tail-context rec-ctx #:wrt ctx)))
+   (define (get-body track?)
+     (define exp-body (expand-body (m 'body) sc s (as-tail-context rec-ctx #:wrt ctx)))
+     (if track?
+         (syntax-track-origin exp-body s)
+         exp-body))
    
    (cond
     [(not split-by-reference?)
@@ -178,14 +182,14 @@
                                                  (as-named-context rec-ctx ids))
                                          (expand rhs
                                                  (as-named-context expr-ctx ids)))])
-        ,(get-body)))]
+        ,(get-body #f)))]
     [else
      (expand-and-split-bindings-by-reference
       val-idss val-keyss (for/list ([rhs (in-list (m 'val-rhs))])
                            (add-scope rhs sc))
       #:split? #t
       #:frame-id frame-id #:ctx rec-ctx #:source s
-      #:get-body get-body)])))
+      #:get-body get-body #:track? #t)])))
 
 (add-core-form!
  'let-values
@@ -205,7 +209,7 @@
  '#%stratified-body
  (lambda (s ctx)
    (define m (match-syntax s '(#%stratified-body body ...+)))
-   (expand-body (m 'body) #f s ctx #:stratified? #t)))
+   (expand-body (m 'body) #f s ctx #:stratified? #t #:track-next? #t)))
 
 ;; ----------------------------------------
 
