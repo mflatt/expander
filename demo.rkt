@@ -1,6 +1,6 @@
 #lang racket/base
 (require "main.rkt"
-         "set.rkt")
+         "common/set.rkt")
 
 ;; ----------------------------------------
 

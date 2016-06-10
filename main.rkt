@@ -1,18 +1,18 @@
 #lang racket/base
-(require "set.rkt"
-         "namespace.rkt"
-         "eval.rkt"
-         "dynamic-require.rkt"
-         "namespace-eval.rkt"
-         (prefix-in wrapper: "eval-wrapper.rkt")
-         "namespace-attach.rkt"
-         "core.rkt"
-         "kernel.rkt"
-         "utils-primitives.rkt"
-         "place-primitives.rkt"
-         "runtime-primitives.rkt"
-         "boot.rkt"
-         "checked-syntax.rkt")
+(require "common/set.rkt"
+         "namespace/namespace.rkt"
+         "eval/eval.rkt"
+         "eval/dynamic-require.rkt"
+         "namespace/eval.rkt"
+         (prefix-in wrapper: "eval/main.rkt")
+         "namespace/namespace-attach.rkt"
+         "namespace/core.rkt"
+         "run/kernel.rkt"
+         "run/utils-primitives.rkt"
+         "run/place-primitives.rkt"
+         "run/runtime-primitives.rkt"
+         "run/boot.rkt"
+         "syntax/checked-syntax.rkt")
 
 (provide boot ; installs handlers: eval, module name resolver, etc.
 
@@ -48,12 +48,12 @@
 ;; ----------------------------------------
 
 ;; Register core forms:
-(require "expand-expr.rkt"
-         "expand-module.rkt"
-         "expand-top-level.rkt")
+(require "expand/expr.rkt"
+         "expand/module.rkt"
+         "expand/top-level.rkt")
 
 ;; Register core primitives:
-(require "core-primitives.rkt")
+(require "run/core-primitives.rkt")
 
 ;; ----------------------------------------
 

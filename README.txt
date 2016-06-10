@@ -16,31 +16,30 @@ TODO:
 
 Roadmap to a few key pieces:
 
- syntax.rkt - syntax-object structure
+ syntax/ - syntax-object and binding representation
+   syntax.rkt - syntax-object structure
+   scope.rkt - scope sets and binding
+   binding.rkt - binding representations
 
- scope.rkt - scope sets and binding
+ namespace/ - namespaces and module instances
 
- binding.rkt - binding representations
+ expand/ - expander loop and core forms
 
- namespace.rkt - namespaces
+ common/module-path.rkt - [resolved] module path [indexes]
 
- expand[-....].rkt - expander loop and core forms
+ compile/ - from expanded to S-expression linket
 
- module-path.rkt - [resolved] module path [indexes]
+ eval/ - evaluation
+   main.rkt - installs eval handler, compile handler, and resolver
+   eval.rkt - top-level evaluation
 
- compile[-....].rkt - from expanded to S-expression linket
-
- eval[-...].rkt - top-level and module evaluation
-
- boot.rkt - implements the default module name resolver
-
- main.rkt - installs eval handler, compile handler, and resolver
+ run/ - running the expander
+   boot.rkt - implements the default module name resolver
+   extract.rkt - extracts subset of compilation units (via "run.rkt")
 
  demo.rkt - exercises the expander and compiler
 
  run.rkt - starts a Racket replacement
-
- extract.rkt - extracts subset of compilation units (via "run.rkt")
 
 ----------------------------------------
 

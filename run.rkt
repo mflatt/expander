@@ -1,19 +1,19 @@
 #lang racket/base
 (require racket/cmdline
          racket/pretty
-         "set.rkt"
+         "common/set.rkt"
          "main.rkt"
-         "namespace.rkt"
-         "read-syntax.rkt"
-         "module-path.rkt"
-         "module-read.rkt"
-         "kernel.rkt"
-         "run-cache.rkt"
-         "runtime-primitives.rkt"
-         "linklet.rkt"
-         "reader-bridge.rkt"
-         "status.rkt"
-         "extract.rkt")
+         "namespace/namespace.rkt"
+         "syntax/read-syntax.rkt"
+         "common/module-path.rkt"
+         "eval/module-read.rkt"
+         "run/kernel.rkt"
+         "run/run-cache.rkt"
+         "run/runtime-primitives.rkt"
+         "host/linklet.rkt"
+         "host/reader-bridge.rkt"
+         "run/status.rkt"
+         "run/extract.rkt")
 
 (define extract? #f)
 (define expand? #f)
