@@ -3,9 +3,13 @@
          "scope.rkt"
          "binding.rkt"
          "module-binding.rkt"
-         "require+provide.rkt")
+         "require+provide.rkt"
+         "namespace.rkt"
+         "expand-context.rkt"
+         "root-expand-context.rkt")
 
-(provide select-defined-syms-and-bind!)
+(provide select-defined-syms-and-bind!
+         select-defined-syms-and-bind!/ctx)
 
 ;; For each identifier that is defined in a module or at the top
 ;; level, we need to map the identifier to a symbol for a variable in
@@ -71,3 +75,13 @@
            (not (bound-identifier=? (remove-scope prev-id top-level-bind-scope)
                                     (remove-scope id top-level-bind-scope)
                                     phase)))))
+
+;; ------------------------------
+
+(define (select-defined-syms-and-bind!/ctx tl-ids ctx)
+  (select-defined-syms-and-bind! tl-ids (root-expand-context-defined-syms ctx)
+                                 (namespace-mpi (expand-context-namespace ctx))
+                                 (expand-context-phase ctx)
+                                 (root-expand-context-all-scopes-stx ctx)
+                                 #:frame-id (root-expand-context-frame-id ctx)
+                                 #:top-level-bind-scope (root-expand-context-top-level-bind-scope ctx)))

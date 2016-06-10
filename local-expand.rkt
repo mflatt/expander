@@ -107,7 +107,7 @@
                                  [post-expansion-scope
                                   #:parent root-expand-context
                                   (and (and same-kind?
-                                            (memq context '(module top-level))
+                                            (memq context '(module module-begin top-level))
                                             (root-expand-context-post-expansion-scope ctx)))]
                                  [scopes
                                   (append (if (expand-context-def-ctx-scopes ctx)

@@ -4,7 +4,10 @@
          "binding.rkt"
          "env.rkt"
          "core.rkt"
-         "bind-top-level.rkt")
+         "namespace.rkt"
+         "root-expand-context.rkt"
+         "expand-context.rkt"
+         "expand-def-id.rkt")
 
 (provide make-lift-context
          add-lifted!
@@ -64,7 +67,16 @@
 
 (define (make-toplevel-lift ctx)
   (lambda (ids rhs phase)
-    (define tl-ids (as-top-level-bindings ids ctx))
+    ;; Add the namespace's post-expansion scope (i.e., the inside-edge
+    ;; scope) so that the binding has a specific phase:
+    (define post-scope
+      (root-expand-context-post-expansion-scope
+       (namespace-root-expand-ctx
+        (expand-context-namespace ctx))))
+    (define tl-ids (for/list ([id (in-list ids)])
+                     (add-scope id post-scope)))
+    ;; Bind the identifier:
+    (select-defined-syms-and-bind!/ctx tl-ids ctx)
     (values tl-ids (list tl-ids rhs))))
 
 (define (wrap-lifts-as-let lifts body s phase)
