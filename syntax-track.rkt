@@ -6,7 +6,9 @@
 
 (define missing (gensym))
 
-(define (syntax-track-origin new-stx old-stx [id (car (syntax-e old-stx))])
+(define (syntax-track-origin new-stx old-stx [id (if (identifier? old-stx)
+                                                     old-stx
+                                                     (car (syntax-e old-stx)))])
   (define old-props (syntax-props old-stx))
   (cond
    [(zero? (hash-count old-props))
