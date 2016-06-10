@@ -26,6 +26,7 @@
                                             post-expansion-scope-mode ; 'add or 'push for `post-expansion-scope`
                                             scopes     ; list of scopes that should be pruned by `quote-syntax`
                                             def-ctx-scopes ; #f or box of list of scopes; transformer-created def-ctxes
+                                            reference-records ; list of reference records for enclosing
                                             only-immediate? ; #t => stop at core forms
                                             module-begin-k ; expander for `#%module-begin` in a 'module-begin context
                                             need-eventually-defined ; phase(>=1) -> variables expanded before binding
@@ -57,6 +58,7 @@
                   'push ; post-expansion-scope-mode
                   null ; scopes
                   #f   ; def-ctx-scopes
+                  null ; reference-records
                   #f   ; only-immediate?
                   #f   ; module-begin-k
                   #f   ; need-eventually-defined

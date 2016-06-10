@@ -318,6 +318,8 @@
                                                (expand-context-scopes ctx))]
                                 [use-site-scopes #:parent root-expand-context (box null)]
                                 [frame-id #:parent root-expand-context frame-id]
+                                [reference-records (cons frame-id
+                                                         (expand-context-reference-records ctx))]
                                 [all-scopes-stx
                                  #:parent root-expand-context
                                  (add-scope
@@ -459,7 +461,9 @@
   (define (finish-bodys track?)
     (cond
      [(null? (cdr done-bodys))
-      (define exp-body (expand (car done-bodys) finish-ctx))
+      (define last-ctx (struct-copy expand-context finish-ctx
+                                    [reference-records (cdr (expand-context-reference-records finish-ctx))]))
+      (define exp-body (expand (car done-bodys) last-ctx))
       (if track?
           (syntax-track-origin exp-body s)
           exp-body)]
@@ -506,8 +510,7 @@
          s
          `(,(datum->syntax s-core-stx 'letrec-values)
            ,(map list (reverse accum-idss) (reverse accum-rhss))
-           ,(loop (cdr idss) (cdr keyss) (cdr rhss)
-                  null null #f)))])]
+           ,(get-body #f)))])]
      [else
       (define ids (car idss))
       (define expanded-rhs (expand (car rhss) (as-named-context ctx ids)))

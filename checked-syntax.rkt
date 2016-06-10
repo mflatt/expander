@@ -69,11 +69,11 @@
   (raw:datum->syntax stx-c s (to-srcloc-stx stx-l) stx-p))
 
 (define (syntax->list s)
-  (check syntax->list syntax? s)
+  (check 'syntax->list syntax? s)
   (raw:syntax->list s))
 
 (define (syntax-original? s)
-  (check syntax-original? syntax? s)
+  (check 'syntax-original? syntax? s)
   (and (syntax-property s original-property-sym)
        (not (syntax-any-macro-scopes? s))))
 

@@ -10,21 +10,30 @@
 (provide make-reference-record
          reference-record?
          reference-record-used!
+         reference-records-all-used!
          reference-record-bound!
          reference-record-forward-references?)
 
 (struct reference-record ([already-bound #:mutable]
-                          [reference-before-bound #:mutable])
+                          [reference-before-bound #:mutable]
+                          [all-referenced? #:mutable])
         #:transparent)
 
 (define (make-reference-record)
-  (reference-record (seteq) (seteq)))
+  (reference-record (seteq) (seteq) #f))
 
 (define (reference-record-used! rr key)
   (unless (set-member? (reference-record-already-bound rr) key)
     (set-reference-record-reference-before-bound!
      rr
      (set-add (reference-record-reference-before-bound rr) key))))
+
+(define (reference-records-all-used! rrs)
+  (for ([rr (in-list rrs)]
+        ;; If a reference record is already marked as all referenced,
+        ;; then later records must be already marked, too
+        #:break (reference-record-all-referenced? rr))
+    (set-reference-record-all-referenced?! rr #t)))
 
 (define (reference-record-bound! rr keys)
   (set-reference-record-already-bound!
@@ -37,4 +46,5 @@
      (set-remove rbb key))))
 
 (define (reference-record-forward-references? rr)
-  (positive? (set-count (reference-record-reference-before-bound rr))))
+  (or (reference-record-all-referenced? rr)
+      (positive? (set-count (reference-record-reference-before-bound rr)))))

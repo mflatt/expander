@@ -155,9 +155,13 @@
                        (env-extend env key val))))
    ;; Expand right-hand sides and body
    (define expr-ctx (as-expression-context ctx))
+   (define orig-rrs (expand-context-reference-records expr-ctx))
    (define rec-ctx (struct-copy expand-context expr-ctx
                                 [env rec-env]
                                 [scopes (cons sc (expand-context-scopes ctx))]
+                                [reference-records (if split-by-reference?
+                                                       (cons frame-id orig-rrs)
+                                                       orig-rrs)]
                                 [all-scopes-stx
                                  #:parent root-expand-context
                                  (add-scope (root-expand-context-all-scopes-stx ctx) sc)]))
@@ -166,7 +170,9 @@
          (datum->syntax (syntax-shift-phase-level core-stx phase) 'letrec-values)
          (m 'let-values)))
    (define (get-body track?)
-     (define exp-body (expand-body (m 'body) sc s (as-tail-context rec-ctx #:wrt ctx)))
+     (define body-ctx (struct-copy expand-context rec-ctx
+                                   [reference-records orig-rrs]))
+     (define exp-body (expand-body (m 'body) sc s (as-tail-context body-ctx #:wrt ctx)))
      (if track?
          (syntax-track-origin exp-body s)
          exp-body))
@@ -279,17 +285,21 @@
    (define m-local (try-match-syntax s '(quote-syntax datum #:local)))
    (define m (or m-local
                  (match-syntax s '(quote-syntax datum))))
-   (rebuild
-    s
-    (cond
-     [m-local
-      ;; #:local means don't prune:
-      (define m-kw (try-match-syntax s '(_ _ kw)))
-      `(,(m 'quote-syntax) ,(m 'datum) ,(m-kw 'kw))]
-     [else
-      ;; otherwise, prune scopes up to transformer boundary:
+   (cond
+    [m-local
+     ;; #:local means don't prune, and it counts as a reference to
+     ;; all variables for letrec splitting
+     (reference-records-all-used! (expand-context-reference-records ctx))
+     (define m-kw (try-match-syntax s '(_ _ kw)))
+     (rebuild
+      s
+      `(,(m 'quote-syntax) ,(m 'datum) ,(m-kw 'kw)))]
+    [else
+     ;; otherwise, prune scopes up to transformer boundary:
+     (rebuild
+      s
       `(,(m 'quote-syntax)
-        ,(remove-scopes (m 'datum) (expand-context-scopes ctx)))]))))
+        ,(remove-scopes (m 'datum) (expand-context-scopes ctx))))])))
 
 (add-core-form!
  'if
