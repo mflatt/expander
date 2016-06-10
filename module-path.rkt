@@ -134,7 +134,7 @@
             (fprintf port ":~.a" (apply string-append
                                         (format "~.s" (car l))
                                         (for/list ([i (in-list (cdr l))])
-                                          (format " ~.s" (car l)))))]
+                                          (format " ~.s" i))))]
            [(module-path-index-resolved r)
             (fprintf port "=~.s" (format-resolved-module-path-name
                                   (resolved-module-path-name
