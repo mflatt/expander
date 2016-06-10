@@ -45,7 +45,7 @@
                                    (compile-lambda formals body cctx))))]
         [(#%app)
          (define m (match-syntax s '(#%app . rest)))
-         (for/list ([s (in-list (m 'rest))])
+         (for/list ([s (in-list (correlated->list (m 'rest)))])
            (compile s))]
         [(if)
          (define m (match-syntax s '(if tst thn els)))

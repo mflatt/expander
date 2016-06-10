@@ -252,11 +252,16 @@
             null))]
     [else
      (define expr-ctx (as-expression-context ctx))
+     (define pre-m (match-syntax s '(_ . prefixless)))
+     (define prefixless (pre-m 'prefixless))
+     (define exp-es (for/list ([e (in-list es)])
+                      (expand e expr-ctx)))
      (rebuild
       s
-      (list* (m '#%app)
-             (for/list ([e (in-list es)])
-               (expand e expr-ctx))))])))
+      (cons (m '#%app)
+            (if (syntax? prefixless)
+                (rebuild prefixless exp-es)
+                exp-es)))])))
 
 (add-core-form!
  'quote
