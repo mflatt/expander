@@ -126,9 +126,9 @@
     [(core-form? t)
      (if (expand-context-only-immediate? ctx)
          s
-         (dispatch t (datum->syntax s (cons sym s) s) id ctx b))]
+         (dispatch t (datum->syntax s (cons sym s) s s) id ctx b))]
     [(transformer? t)
-     (dispatch t (datum->syntax s (cons sym s) s) id ctx b)]
+     (dispatch t (datum->syntax s (cons sym s) s s) id ctx b)]
     [else
      (define phase (expand-context-phase ctx))
      (define what

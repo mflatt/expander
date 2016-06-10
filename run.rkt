@@ -1,5 +1,6 @@
 #lang racket/base
 (require racket/cmdline
+         racket/pretty
          "set.rkt"
          "main.rkt"
          "namespace.rkt"
@@ -15,6 +16,7 @@
          "extract.rkt")
 
 (define extract? #f)
+(define expand? #f)
 (define cache-dir #f)
 (define cache-read-only? #f)
 (define cache-save-only #f)
@@ -24,9 +26,12 @@
 (define boot-module (path->complete-path "main.rkt"))
 (define load-file #f)
 (command-line
- #:once-each
+ #:once-any
  [("-x" "--extract") "Extract bootstrap linklets"
   (set! extract? #t)]
+ [("-e" "--expand") "Expand instead of running"
+  (set! expand? #t)]
+ #:once-each
  [("-c" "--cache") dir "Save and load from <dir>"
   (set! cache-dir (path->complete-path dir))]
  [("-r" "--read-only") "Use cache in read-only mode"
@@ -45,7 +50,7 @@
  [("-t") file "Load specified file"
   (set! boot-module (path->complete-path file))]
  [("-l") lib "Load specified library"
-  (set! boot-module (string->symbol lib))]
+  (set! boot-module `(lib ,lib))]
  [("-f") file "Load non-module file in `racket/base` namespace"
   (set! boot-module 'racket/base)
   (set! load-file file)])
@@ -115,8 +120,26 @@
                           (synthesize-reader-bridge-module mod-path rs))
                         mod-path))
 
-;; Load and run the requested module
-(namespace-require boot-module)
+(cond
+ [expand?
+  (define path (resolved-module-path-name
+                (resolve-module-path boot-module #f)))
+  (define-values (dir file dir?) (split-path path))
+  (define e
+    (parameterize ([current-load-relative-directory dir])
+      (expand (call-with-input-file*
+               path
+               (lambda (i)
+                 (port-count-lines! i)
+                 (with-module-reading-parameterization
+                     (lambda ()
+                       (check-module-form
+                        (read-syntax (object-name i) i)
+                        path))))))))
+  (pretty-print (syntax->datum e))]
+ [else
+  ;; Load and run the requested module
+  (namespace-require boot-module)])
 
 (when extract?
   ;; Extract a bootstrapping slice of the requested module
