@@ -33,13 +33,18 @@ Roadmap to a few key pieces:
    main.rkt - installs eval handler, compile handler, and resolver
    eval.rkt - top-level evaluation
 
- run/ - running the expander
-   boot.rkt - implements the default module name resolver
+ boot/ - internal initialization
+   handler.rkt - implements the default module name resolver
+   ...-primitive.rkt - export built-in functions as modules
+
+ run/ - helpers to drive the expander
    extract.rkt - extracts subset of compilation units (via "run.rkt")
 
- demo.rkt - exercises the expander and compiler
+ main.rkt - expander/compiler/evaluator entry point
 
- run.rkt - starts a Racket replacement
+ demo.rkt - exercises the expander and compiler (uses "main.rkt")
+
+ run.rkt - starts a Racket replacement (uses "main.rkt")
 
 ----------------------------------------
 

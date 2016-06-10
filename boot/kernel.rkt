@@ -4,7 +4,7 @@
          "../namespace/core.rkt"
          "../namespace/namespace.rkt"
          "../syntax/binding.rkt"
-         "core-primitives.rkt"
+         "core-primitive.rkt"
          "../common/module-path.rkt"
          "../expand/require+provide.rkt"
          "../host/linklet.rkt")

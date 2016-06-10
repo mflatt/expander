@@ -3,12 +3,12 @@
          racket/format
          "../common/set.rkt"
          "../common/phase.rkt"
-         "run-cache.rkt"
+         "cache.rkt"
          "../host/linklet.rkt"
          "../compile/serialize.rkt"
          "../compile/module-use.rkt"
          "../syntax/binding.rkt"
-         "runtime-primitives.rkt"
+         "../boot/runtime-primitive.rkt"
          "status.rkt"
          (prefix-in new: "../common/module-path.rkt"))
 

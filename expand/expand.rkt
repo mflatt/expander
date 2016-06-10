@@ -15,7 +15,7 @@
          "../compile/main.rkt"
          "../eval/compiled-top.rkt"
          "../namespace/core.rkt"
-         "../run/runtime-primitives.rkt"
+         "../boot/runtime-primitive.rkt"
          "context.rkt"
          "lift-context.rkt"
          "already-expanded.rkt"

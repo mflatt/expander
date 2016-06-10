@@ -7,11 +7,11 @@
          (prefix-in wrapper: "eval/main.rkt")
          "namespace/namespace-attach.rkt"
          "namespace/core.rkt"
-         "run/kernel.rkt"
-         "run/utils-primitives.rkt"
-         "run/place-primitives.rkt"
-         "run/runtime-primitives.rkt"
-         "run/boot.rkt"
+         "boot/kernel.rkt"
+         "boot/utils-primitive.rkt"
+         "boot/place-primitive.rkt"
+         "boot/runtime-primitive.rkt"
+         "boot/handler.rkt"
          "syntax/checked-syntax.rkt")
 
 (provide boot ; installs handlers: eval, module name resolver, etc.
@@ -53,7 +53,7 @@
          "expand/top-level.rkt")
 
 ;; Register core primitives:
-(require "run/core-primitives.rkt")
+(require "boot/core-primitive.rkt")
 
 ;; ----------------------------------------
 

@@ -5,7 +5,7 @@
          "../syntax/binding.rkt"
          "../namespace/core.rkt"
          "../common/module-path.rkt"
-         "../run/runtime-primitives.rkt")
+         "../boot/runtime-primitive.rkt")
 
 (provide check-cross-phase-persistent-form)
 
