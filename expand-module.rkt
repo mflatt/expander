@@ -8,6 +8,7 @@
          "syntax-error.rkt"
          "namespace.rkt"
          "binding.rkt"
+         "dup-check.rkt"
          "free-id-set.rkt"
          "require+provide.rkt"
          "module-path.rkt"
@@ -524,6 +525,7 @@
          [(define-values)
           (define m (match-syntax exp-body '(define-values (id ...) rhs)))
           (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
+          (check-no-duplicate-ids ids phase exp-body)
           (check-ids-unbound ids phase requires+provides #:in exp-body)
           (define syms (select-defined-syms-and-bind! ids defined-syms 
                                                       self phase all-scopes-stx
@@ -536,6 +538,7 @@
          [(define-syntaxes)
           (define m (match-syntax exp-body '(define-syntaxes (id ...) rhs)))
           (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
+          (check-no-duplicate-ids ids phase exp-body)
           (check-ids-unbound ids phase requires+provides #:in exp-body)
           (define syms (select-defined-syms-and-bind! ids defined-syms
                                                       self phase all-scopes-stx

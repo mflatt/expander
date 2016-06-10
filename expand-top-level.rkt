@@ -18,7 +18,7 @@
    (unless (eq? (expand-context-context ctx) 'top-level)
      (raise-syntax-error #f "not allowed in an expression position" s))
    (define m (match-syntax s '(define-values (id ...) rhs)))
-   (define ids (as-expand-time-top-level-bindings (m 'id) ctx))
+   (define ids (as-expand-time-top-level-bindings (m 'id) s ctx))
    (define exp-rhs (expand (m 'rhs) (as-named-context ctx ids)))
    (rebuild
     s
@@ -30,7 +30,7 @@
    (unless (eq? (expand-context-context ctx) 'top-level)
      (raise-syntax-error #f "not allowed in an expression position" s))
    (define m (match-syntax s '(define-syntaxes (id ...) rhs)))
-   (define ids (as-expand-time-top-level-bindings (m 'id) ctx))
+   (define ids (as-expand-time-top-level-bindings (m 'id) s ctx))
    (define exp-rhs (expand-transformer (m 'rhs) (as-named-context ctx ids)))
    (rebuild
     s

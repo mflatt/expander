@@ -2,7 +2,9 @@
 (require "syntax.rkt"
          "scope.rkt"
          "root-expand-context.rkt"
+         "expand-context.rkt"
          "expand-def-id.rkt"
+         "dup-check.rkt"
          "use-site.rkt")
 
 ;; When compiling `(define-values (x) ...)` at the top level, we'd
@@ -18,11 +20,12 @@
 
 (provide as-expand-time-top-level-bindings)
 
-(define (as-expand-time-top-level-bindings ids ctx)
+(define (as-expand-time-top-level-bindings ids s ctx)
   (define top-level-bind-scope (root-expand-context-top-level-bind-scope ctx))
   (define tl-ids
     (for/list ([id (in-list ids)])
       (add-scope (remove-use-site-scopes id ctx)
                  top-level-bind-scope)))
+  (check-no-duplicate-ids tl-ids (expand-context-phase ctx) s)
   (select-defined-syms-and-bind!/ctx tl-ids ctx)
   tl-ids)
