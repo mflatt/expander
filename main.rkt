@@ -2,6 +2,7 @@
 (require "set.rkt"
          "namespace.rkt"
          "eval.rkt"
+         "dynamic-require.rkt"
          "namespace-eval.rkt"
          (prefix-in wrapper: "eval-wrapper.rkt")
          "namespace-attach.rkt"

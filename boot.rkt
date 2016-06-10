@@ -6,6 +6,7 @@
          "srcloc.rkt"
          "namespace.rkt"
          "eval.rkt"
+         "dynamic-require.rkt"
          "namespace-eval.rkt"
          "module-path.rkt"
          "module-read.rkt")
