@@ -216,7 +216,7 @@
  '#%stratified-body
  (lambda (s ctx)
    (define m (match-syntax s '(#%stratified-body body ...+)))
-   (expand-body (m 'body) #f s ctx #:stratified? #t #:track-next? #t)))
+   (expand-body (m 'body) #f s ctx #:stratified? #t #:track? #t)))
 
 ;; ----------------------------------------
 
