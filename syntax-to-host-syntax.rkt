@@ -1,7 +1,9 @@
 #lang racket/base
 (require "syntax.rkt"
          "scope.rkt"
-         (only-in racket/base [datum->syntax host:datum->syntax]))
+         (only-in racket/base
+                  [datum->syntax host:datum->syntax]
+                  [syntax-property host:syntax-property]))
 
 (provide syntax->host-syntax)
 
@@ -9,7 +11,10 @@
   (syntax-map v
               (lambda (tail? v) v)
               (lambda (orig-s d)
-                (host:datum->syntax #f d (srcloc->vector (syntax-srcloc orig-s))))
+                (define s (host:datum->syntax #f d (srcloc->vector (syntax-srcloc orig-s))))
+                (define keys (syntax-property-symbol-keys orig-s))
+                (for/fold ([s s]) ([key (in-list keys)])
+                  (host:syntax-property s key (syntax-property orig-s key))))
               syntax-e))
 
 (define (srcloc->vector s)

@@ -27,6 +27,7 @@
 (provide syntax?
          syntax-e
          syntax-property
+         syntax-property-symbol-keys
          syntax-original?
          syntax->datum
          datum->syntax

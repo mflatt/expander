@@ -65,6 +65,7 @@
                       syntax-span
                       syntax->list
                       syntax-property
+                      syntax-property-symbol-keys
                       syntax-original?
                       
                       syntax-tainted?

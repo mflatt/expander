@@ -15,6 +15,7 @@
  syntax-map
  
  syntax-property
+ syntax-property-symbol-keys
  
  prop:propagation
  
@@ -149,3 +150,10 @@
      (struct-copy syntax s
                   [props (hash-set (syntax-props s) key val)])]))
 
+(define syntax-property-symbol-keys
+  (lambda (s)
+    (unless (syntax? s)
+      (raise-argument-error 'syntax-property-symbol-keys "syntax" s))
+    (for/list ([(k v) (in-hash (syntax-props s))]
+               #:when (and (symbol? k) (symbol-interned? k)))
+      k)))
