@@ -139,7 +139,8 @@
   (pretty-print (syntax->datum e))]
  [else
   ;; Load and run the requested module
-  (namespace-require boot-module)])
+  (parameterize ([current-command-line-arguments (vector)])
+    (namespace-require boot-module))])
 
 (when extract?
   ;; Extract a bootstrapping slice of the requested module
