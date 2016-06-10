@@ -4,6 +4,7 @@
          "scope.rkt"
          "match.rkt"
          "phase.rkt"
+         "syntax-track.rkt"
          "syntax-error.rkt"
          "namespace.rkt"
          "binding.rkt"
@@ -508,7 +509,8 @@
        (case (core-form-sym exp-body phase)
          [(begin)
           (define m (match-syntax exp-body '(begin e ...)))
-          (loop tail? (append (m 'e) (cdr bodys)))]
+          (define (track e) (syntax-track-origin e exp-body))
+          (loop tail? (append (map track (m 'e)) (cdr bodys)))]
          [(begin-for-syntax)
           (define m (match-syntax exp-body '(begin-for-syntax e ...)))
           (define nested-bodys (phase-1-and-2-loop (m 'e) (add1 phase)))

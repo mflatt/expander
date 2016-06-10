@@ -349,8 +349,9 @@
         [(begin)
          ;; Splice a `begin` form
          (define m (match-syntax exp-body '(begin e ...)))
+         (define (track e) (syntax-track-origin e exp-body))
          (loop body-ctx
-               (append (m 'e) (cdr bodys))
+               (append (map track (m 'e)) (cdr bodys))
                done-bodys
                val-idss
                val-keyss
