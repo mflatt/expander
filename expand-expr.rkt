@@ -91,7 +91,7 @@
        [else (raise-syntax-error #f "not an identifier" s p)])]
      [(pair? formals)
       (unless (identifier? (car formals))
-        (raise-syntax-error "not an identifier" s (car formals)))
+        (raise-syntax-error #f "not an identifier" s (car formals)))
       (cons (add-scope (car formals) sc)
             (loop (cdr formals)))]
      [(null? formals)
