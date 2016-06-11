@@ -117,7 +117,7 @@
      
      ;; Passes 1 and 2 are nested via `begin-for-syntax`:
      (define expression-expanded-bodys
-       (let phase-1-and-2-loop ([bodys bodys] [phase phase])
+       (let pass-1-and-2-loop ([bodys bodys] [phase phase])
 
          ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
          ;; Pass 1: partially expand to discover all bindings and install all 
@@ -139,7 +139,7 @@
                                    #:namespace m-ns
                                    #:self self
                                    #:requires-and-provides requires+provides
-                                   #:loop phase-1-and-2-loop))
+                                   #:loop pass-1-and-2-loop))
 
          ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
          ;; Pass 2: finish expanding expressions
@@ -298,7 +298,7 @@
                                 #:namespace m-ns
                                 #:self self
                                 #:requires-and-provides requires+provides
-                                #:loop phase-1-and-2-loop)
+                                #:loop pass-1-and-2-loop)
   ;; Table of symbol picked for each binding in this module:
   (define defined-syms (make-hasheq))
   
@@ -313,7 +313,7 @@
          (loop (append (m 'e) (cdr bodys)))]
         [(begin-for-syntax)
          (define m (match-syntax exp-body '(begin-for-syntax e ...)))
-         (define nested-bodys (phase-1-and-2-loop (m 'e) (add1 phase)))
+         (define nested-bodys (pass-1-and-2-loop (m 'e) (add1 phase)))
          (eval-nested-bodys nested-bodys (add1 phase) m-ns self)
          (cons
           (rebuild
