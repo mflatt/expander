@@ -191,7 +191,7 @@
      
      ;; Passes 1 and 2 are nested via `begin-for-syntax`:
      (define expression-expanded-bodys
-       (let phase-1-and-2-loop ([bodys bodys] [phase phase])
+       (let pass-1-and-2-loop ([bodys bodys] [phase phase])
 
          ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
          ;; Pass 1: partially expand to discover all bindings and install all 
@@ -232,7 +232,7 @@
                                    #:defined-syms defined-syms
                                    #:declared-keywords declared-keywords
                                    #:declared-submodule-names declared-submodule-names
-                                   #:loop phase-1-and-2-loop))
+                                   #:loop pass-1-and-2-loop))
 
          ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
          ;; Pass 2: finish expanding expressions
@@ -483,7 +483,7 @@
                                 #:defined-syms defined-syms
                                 #:declared-keywords declared-keywords
                                 #:declared-submodule-names declared-submodule-names
-                                #:loop phase-1-and-2-loop)
+                                #:loop pass-1-and-2-loop)
   (let loop ([tail? tail?] [bodys bodys])
     (cond
      [(null? bodys)
@@ -514,7 +514,7 @@
           (loop tail? (append (map track (m 'e)) (cdr bodys)))]
          [(begin-for-syntax)
           (define m (match-syntax exp-body '(begin-for-syntax e ...)))
-          (define nested-bodys (phase-1-and-2-loop (m 'e) (add1 phase)))
+          (define nested-bodys (pass-1-and-2-loop (m 'e) (add1 phase)))
           (define ct-m-ns (namespace->namespace-at-phase m-ns (add1 phase)))
           (eval-nested-bodys nested-bodys (add1 phase) ct-m-ns self partial-body-ctx)
           (cons
