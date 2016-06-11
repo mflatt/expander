@@ -79,9 +79,11 @@
                                  null))])
          (namespace-module-use->instance ns mu #:phase-shift (phase- (phase+ phase phase-shift)
                                                                      (module-use-phase mu)))))
-     
+
+     (define phase-ns (namespace->namespace-at-phase ns (phase+ phase phase-shift)))
+
      (define inst (make-instance-instance
-                   #:namespace (namespace->namespace-at-phase ns (phase+ phase phase-shift))
+                   #:namespace phase-ns
                    #:phase-shift phase-shift
                    #:self (namespace-mpi ns)
                    #:bulk-binding-registry (namespace-bulk-binding-registry ns)
@@ -97,16 +99,24 @@
      (cond
       [linklet
        (define i
-         (instantiate-linklet linklet
-                              (list* top-level-instance
-                                     link-instance
-                                     inst
-                                     imports)
-                              ;; Instantiation merges with the namespace's current instance:
-                              (namespace->instance ns (phase+ phase phase-shift))))
-       (if (eqv? phase orig-phase)
-           (instance-variable-value i 'body-thunk)
-           void)]
+         (parameterize ([current-namespace (if (zero-phase? phase)
+                                               (current-namespace)
+                                               phase-ns)])
+           (instantiate-linklet linklet
+                                (list* top-level-instance
+                                       link-instance
+                                       inst
+                                       imports)
+                                ;; Instantiation merges with the namespace's current instance:
+                                (namespace->instance ns (phase+ phase phase-shift)))))
+       (cond
+        [(eqv? phase orig-phase)
+         (let ([body-thunk (instance-variable-value i 'body-thunk)])
+           (if (zero-phase? phase)
+               body-thunk
+               (lambda () (parameterize ([current-namespace phase-ns])
+                       (body-thunk)))))]
+        [else void])]
       [else void]))))
 
 (define (link-instance-from-compiled-in-memory cim)

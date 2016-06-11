@@ -60,10 +60,10 @@
         (lambda (ns port mode)
           (write-string "#<namespace" port)
           (define n (namespace-mpi ns))
-          (when n
-            (fprintf port ":~.s" (format-resolved-module-path-name
-                                  (resolved-module-path-name
-                                   (module-path-index-resolve n)))))
+          (unless (top-level-module-path-index? n)
+            (fprintf port ":~a" (format-resolved-module-path-name
+                                 (resolved-module-path-name
+                                  (module-path-index-resolve n)))))
           (define phase (namespace-phase ns))
           (unless (zero-phase? phase)
             (fprintf port ":~s" phase))

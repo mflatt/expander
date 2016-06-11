@@ -857,7 +857,8 @@
        (void)]
       [else
        ;; an expression
-       (parameterize ([current-expand-context ctx])
+       (parameterize ([current-expand-context ctx]
+                      [current-namespace m-ns])
          (eval-top
           (compile-single body (make-compile-context
                                 #:namespace m-ns

@@ -653,7 +653,8 @@
                                       #:phase phase)))
   (define vals
     (call-with-values (lambda ()
-                        (parameterize ([current-expand-context ctx])
+                        (parameterize ([current-expand-context ctx]
+                                       [current-namespace ns])
                           (eval-top compiled ns)))
       list))
   (unless (= (length vals) (length ids))

@@ -37,7 +37,7 @@
         #:property prop:custom-write
         (lambda (r port mode)
           (write-string "#<resolved-module-path:" port)
-          (fprintf port "~.s" (format-resolved-module-path-name (resolved-module-path-name r)))
+          (fprintf port "~a" (format-resolved-module-path-name (resolved-module-path-name r)))
           (write-string ">" port))
         #:property prop:serialize
         (lambda (r ser state)
@@ -50,8 +50,11 @@
 (define (format-resolved-module-path-name p)
   (cond
    [(path? p) (path->string p)]
-   [(symbol? p) `(quote ,p)]
-   [else `(submod ,(format-resolved-module-path-name (car p)) ,@(cdr p))]))
+   [(symbol? p) (format "'~s" p)]
+   [else (format "(submod ~a~a)"
+                 (format-resolved-module-path-name (car p))
+                 (apply string-append (for/list ([i (cdr p)])
+                                        (format " ~s" i))))]))
 
 (define (resolved-module-path-root-name r)
   (define name (resolved-module-path-name r))
@@ -122,23 +125,23 @@
                         (cond
                          [(not r) null]
                          [(module-path-index-path r)
-                          (cons (module-path-index-path r)
+                          (cons (format "~.s" (module-path-index-path r))
                                 (loop (module-path-index-base r)))]
                          [(module-path-index-resolved r)
                           (list
-                           '+
+                           "+"
                            (format-resolved-module-path-name
                             (resolved-module-path-name
                              (module-path-index-resolved r))))]
                          [else null])))
             (fprintf port ":~.a" (apply string-append
-                                        (format "~.s" (car l))
+                                        (car l)
                                         (for/list ([i (in-list (cdr l))])
-                                          (format " ~.s" i))))]
+                                          (format " ~a" i))))]
            [(module-path-index-resolved r)
-            (fprintf port "=~.s" (format-resolved-module-path-name
-                                  (resolved-module-path-name
-                                   (module-path-index-resolved r))))])
+            (fprintf port "=~a" (format-resolved-module-path-name
+                                 (resolved-module-path-name
+                                  (module-path-index-resolved r))))])
           (write-string ">" port)))
 
 ;; Serialization of a module path index is handled specially, because they

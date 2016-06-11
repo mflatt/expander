@@ -91,7 +91,8 @@
                               [else
                                ;; For phase level 1 and up, set the expansion context
                                ;; to point back to the module's info:
-                               (parameterize ([current-expand-context (make-expand-context ns)])
+                               (parameterize ([current-expand-context (make-expand-context ns)]
+                                              [current-namespace ns])
                                  (instantiate-body))])))
                          #:cross-phase-persistent? (decl 'cross-phase-persistent?)))
 
