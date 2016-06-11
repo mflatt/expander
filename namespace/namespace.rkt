@@ -189,7 +189,7 @@
                          "unknown module" 
                          "module name" mod-name))
 
-(define (namespace-module-instantiate! ns mpi phase [min-phase 0])
+(define (namespace-module-instantiate! ns mpi phase [min-phase phase])
   (unless (module-path-index? mpi)
     (error "not a module path index:" mpi))
   (define name (module-path-index-resolve mpi #t))
@@ -236,7 +236,7 @@
     (instantiate! phase min-phase ns)]))
 
 (define (namespace-module-visit! ns mpi phase)
-  (namespace-module-instantiate! ns mpi phase 1))
+  (namespace-module-instantiate! ns mpi phase (add1 phase)))
 
 (define (namespace->module-namespace ns name 0-phase
                                      #:install!-namespace [install!-ns #f]
