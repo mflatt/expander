@@ -195,27 +195,15 @@
   (define name (module-path-index-resolve mpi #t))
   (define m (namespace->module ns name))
   (unless m (raise-unknown-module-error 'instantiate name))
-  (cond
-   [(and (module-cross-phase-persistent? m)
-         (or (not (zero-phase? phase))
-             (namespace-cross-phase-persistent-namespace ns)))
-    (or (namespace->module-namespace ns name phase)
-        (let ([c-ns (or (namespace-cross-phase-persistent-namespace ns)
-                        ns)])
-          (namespace-module-instantiate! c-ns mpi 0 0)
-          (define m-ns (namespace->module-namespace c-ns name 0 #:create-mpi mpi))
-          (hash-set! (namespace-module-instances ns) (cons name phase) m-ns)
-          (for ([(req-phase mods) (in-hash (module-requires m))])
-            (for ([mod (in-list mods)])
-              (define name (module-path-index-resolve mod))
-              (hash-set! (namespace-module-instances ns)
-                         (cons name (phase+ phase req-phase))
-                         (hash-ref (namespace-module-instances c-ns)
-                                   (cons name 0)))))
-          m-ns))]
-   [else
-    (define m-ns (namespace->module-namespace ns name phase #:create-mpi mpi))
+  (define (instantiate! phase min-phase ns)
+    ;; Get or create a namespace for the module+phase combination:
+    (define m-ns (namespace->module-namespace
+                  ns name phase
+                  #:create-mpi mpi
+                  #:add-as-cross-phase-persistent? (module-cross-phase-persistent? m)))
+    ;; If we haven't instantiated for this phase already, do so:
     (unless ((hash-ref (namespace-done-phases m-ns) phase +inf.0) . <= . min-phase)
+      ;; First, recur for required modules:
       (for ([(req-phase mods) (in-hash (module-requires m))])
         (for ([mod (in-list mods)])
           (namespace-module-instantiate! ns
@@ -224,6 +212,7 @@
                                                                   mpi)
                                          (phase+ phase req-phase)
                                          min-phase)))
+      ;; Run module body:
       (define phase-shift phase) ; base phase = phase shift for instantiation
       (define bulk-binding-registry (namespace-bulk-binding-registry m-ns))
       (for ([phase-level (in-range (module-min-phase-level m)
@@ -236,7 +225,15 @@
             (set-definitions-instantiated?! defs #t)
             (define p-ns (namespace->namespace-at-phase m-ns phase))
             ((module-instantiate m) p-ns phase-shift phase-level mpi bulk-binding-registry))))
-      (hash-set! (namespace-done-phases m-ns) phase min-phase))]))
+      ;; Record completion at requested phases:
+      (hash-set! (namespace-done-phases m-ns) phase min-phase)))
+  ;; If the module is cross-phase persistent, make sure it's instantiated
+  ;; at phase 0 and registered in `ns` as phaseless; otherwise
+  (cond
+   [(module-cross-phase-persistent? m)
+    (instantiate! 0 0 (or (namespace-cross-phase-persistent-namespace ns) ns))]
+   [else
+    (instantiate! phase min-phase ns)]))
 
 (define (namespace-module-visit! ns mpi phase)
   (namespace-module-instantiate! ns mpi phase 1))
@@ -244,8 +241,11 @@
 (define (namespace->module-namespace ns name 0-phase
                                      #:install!-namespace [install!-ns #f]
                                      #:create-mpi [create-mpi #f]
+                                     #:add-as-cross-phase-persistent? [add-as-cross-phase-persistent? #t]
                                      #:complain-on-failure? [complain-on-failure? #f])
   (or (hash-ref (namespace-module-instances ns) (cons name 0-phase) #f)
+      (let ([c-ns (or (namespace-cross-phase-persistent-namespace ns) ns)])
+        (hash-ref (namespace-module-instances c-ns) name #f))
       (and complain-on-failure?
            (error "no module instance found:" name 0-phase))
       (and install!-ns
@@ -253,7 +253,11 @@
                                     [phase-to-namespace (make-hasheqv)]
                                     [done-phases (make-hasheqv)])])
              (hash-set! (namespace-phase-to-namespace m-ns) 0-phase m-ns)
-             (hash-set! (namespace-module-instances ns) (cons name 0-phase) m-ns)
+             (hash-set! (namespace-module-instances ns)
+                        (if add-as-cross-phase-persistent?
+                            name
+                            (cons name 0-phase))
+                        m-ns)
              m-ns))
       (and create-mpi
            (let ([m (namespace->module ns name)])
@@ -268,7 +272,11 @@
                                        [phase-level-to-definitions (make-hasheqv)]
                                        [done-phases (make-hasheqv)]))
              (hash-set! (namespace-phase-to-namespace m-ns) 0-phase m-ns)
-             (hash-set! (namespace-module-instances ns) (cons name 0-phase) m-ns)
+             (hash-set! (namespace-module-instances ns)
+                        (if add-as-cross-phase-persistent?
+                            name
+                            (cons name 0-phase))
+                        m-ns)
              m-ns))))
 
 (define (namespace-same-instance? a-ns b-ns)

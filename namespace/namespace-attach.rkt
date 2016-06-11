@@ -95,4 +95,6 @@
       (declare-module! dest-namespace m mod-name)
       (when attach-instances?
         (define m-ns (namespace->module-namespace src-namespace mod-name phase))
-        (namespace->module-namespace dest-namespace mod-name phase #:install!-namespace m-ns)))))
+        (namespace->module-namespace dest-namespace mod-name phase
+                                     #:install!-namespace m-ns
+                                     #:add-as-cross-phase-persistent? (module-cross-phase-persistent? m))))))
