@@ -81,12 +81,12 @@
       (hash-update! todo mod-name (lambda (ht) (hash-set ht phase m-ns)) #hasheqv())
       
       (unless already?
-        (for* ([(req-phase reqs) (in-hash (module-requires m))]
-               [req (in-list reqs)])
+        (for* ([phase+reqs (in-list (module-requires m))]
+               [req (in-list (cdr phase+reqs))])
           (loop (module-path-index-shift req
                                          (module-self m)
                                          mpi)
-                (phase+ phase req-phase))))))
+                (phase+ phase (car phase+reqs)))))))
 
   (parameterize ([current-namespace dest-namespace]) ; for resolver notifications
     (for* ([(mod-name phases) (in-hash todo)]

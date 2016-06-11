@@ -484,6 +484,7 @@
                                 #:declared-keywords declared-keywords
                                 #:declared-submodule-names declared-submodule-names
                                 #:loop pass-1-and-2-loop)
+  (namespace-visit-available-modules! m-ns phase)
   (let loop ([tail? tail?] [bodys bodys])
     (cond
      [(null? bodys)
@@ -516,7 +517,9 @@
           (define m (match-syntax exp-body '(begin-for-syntax e ...)))
           (define nested-bodys (pass-1-and-2-loop (m 'e) (add1 phase)))
           (define ct-m-ns (namespace->namespace-at-phase m-ns (add1 phase)))
+          (namespace-run-available-modules! m-ns (add1 phase)) ; to support running `begin-for-syntax`
           (eval-nested-bodys nested-bodys (add1 phase) ct-m-ns self partial-body-ctx)
+          (namespace-visit-available-modules! m-ns phase) ; since we're shifting back a phase
           (cons
            (rebuild
             s
@@ -563,7 +566,7 @@
           (define ready-body (remove-use-site-scopes exp-body partial-body-ctx))
           (define m (match-syntax ready-body '(#%require req ...)))
           (parse-and-perform-requires! (m 'req) exp-body self
-                                       m-ns phase
+                                       m-ns phase #:run-phase phase
                                        requires+provides
                                        #:declared-submodule-names declared-submodule-names)
           (cons exp-body
@@ -925,6 +928,6 @@
   (lambda (s phase)
     (define m (match-syntax s '(#%require req)))
     (parse-and-perform-requires! (list (m 'req)) s self
-                                 m-ns phase
+                                 m-ns phase #:run-phase phase
                                  requires+provides
                                  #:declared-submodule-names declared-submodule-names)))

@@ -24,6 +24,7 @@
 
 (define (parse-and-perform-requires! reqs orig-s self m-ns phase-shift
                                      requires+provides
+                                     #:run-phase [run-phase (namespace-phase m-ns)]
                                      #:run? [run? #f]
                                      #:declared-submodule-names [declared-submodule-names #hasheq()])
   (let loop ([reqs reqs]
@@ -147,7 +148,9 @@
                         (resolved-module-path->module-path maybe-mp)
                         maybe-mp))
          (perform-require! mp #f self
-                           (or req top-req) m-ns phase-shift just-meta adjust
+                           (or req top-req) m-ns
+                           #:phase-shift phase-shift #:run-phase run-phase
+                           just-meta adjust
                            requires+provides
                            #:run? run?
                            #:declared-submodule-names declared-submodule-names)]))))
@@ -162,14 +165,18 @@
                                   in-stx m-ns
                                   requires+provides)
   (perform-require! mod-path #f self
-                    in-stx m-ns 0 'all #f
+                    in-stx m-ns
+                    #:phase-shift 0 #:run-phase 0
+                    'all #f
                     requires+provides
                     #:can-shadow? #t))
 
 ;; ----------------------------------------
 
 (define (perform-require! mod-path orig-s self
-                          in-stx m-ns phase-shift just-meta adjust
+                          in-stx m-ns
+                          #:phase-shift phase-shift #:run-phase run-phase
+                          just-meta adjust
                           requires+provides
                           #:run? [run? #f]
                           #:can-shadow? [can-shadow? #f]
@@ -236,9 +243,9 @@
                                              s bind-phase binding
                                              #:can-shadow? can-shadow?))
               adjusted-sym))
-  (namespace-module-visit! m-ns interned-mpi phase-shift)
+  (namespace-module-visit! m-ns interned-mpi phase-shift #:visit-phase run-phase)
   (when run?
-    (namespace-module-instantiate! m-ns interned-mpi phase-shift))
+    (namespace-module-instantiate! m-ns interned-mpi phase-shift #:run-phase run-phase))
   ;; check that we covered all expected ids:
   (define need-syms (cond
                     [(adjust-only? adjust)

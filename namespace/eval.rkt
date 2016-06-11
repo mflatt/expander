@@ -45,6 +45,7 @@
   ;; For historical reasons, an empty namespace isn't actually
   ;; empty; we always carry '#%kernel along
   (namespace-attach-module current-ns ''#%kernel ns)
+  (namespace-primitive-module-visit! ns '#%kernel)
   ns)
 
 (define (namespace-syntax-introduce s [ns (current-namespace)])

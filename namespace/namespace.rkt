@@ -32,6 +32,9 @@
 
          namespace-module-instantiate!
          namespace-module-visit!
+         namespace-primitive-module-visit!
+         namespace-visit-available-modules!
+         namespace-run-available-modules!
          namespace->module-namespace
          namespace-same-instance?
          
@@ -46,16 +49,18 @@
 
 (struct namespace (mpi                 ; module path index (that's already resolved); instance-specific for a module
                    root-expand-ctx     ; module context for top-level expansion
-                   phase               ; phase (not phase level! not base phase!) of this namespace
-                   0-phase             ; phase of module's phase-level 0
+                   phase               ; phase (not phase level!) of this namespace
+                   0-phase             ; phase of module instance's phase-level 0
                    phase-to-namespace  ; phase -> namespace for same module  [shared for the same module instance]
                    phase-level-to-definitions ; phase-level -> definitions [shared for the same module instance]
                    module-registry     ; module-registry of (resolved-module-path -> module) [shared among modules]
                    bulk-binding-registry ; (resolved-module-path -> bulk-provide) for resolving bulk bindings on unmarshal
                    submodule-declarations ; resolved-module-path -> module [shared during a module compilation]
-                   module-instances    ; (cons resolved-module-path 0-phase) -> namespace [shared among modules]
                    cross-phase-persistent-namespace ; #f or namespace for persistent instances [shared among modules]
-                   done-phases)        ; for module instances: phase -> phase (=> done for phase and higher)
+                   available-module-instances  ; phase -> list of module-instance [shared among modules]
+                   module-instances)  ; instance-key -> module-instance [shared among modules]
+        ;;                            ;   where an instance-key is either (cons resolved-module-path 0-phase)
+        ;;                            ;   or just a resolved-module-path, the latter for cross phase persistent modules
         #:property prop:custom-write
         (lambda (ns port mode)
           (write-string "#<namespace" port)
@@ -76,8 +81,14 @@
                      transformers   ; sym -> val
                      [instantiated? #:mutable]))
 
+(struct module-instance (namespace
+                         module
+                         [shifted-requires #:mutable]  ; computed on demand; shifted from `module-requires`
+                         phase-level-to-state          ; phase-level -> #f, 'available, or 'started
+                         [made-available? #:mutable])) ; no #f in `phase-level-to-state`?
+
 (struct module (self            ; module path index used for a self reference
-                requires        ; phase -> list of module-path-index
+                requires        ; list of (cons phase list-of-module-path-index)
                 provides        ; phase-level -> sym -> binding
                 min-phase-level ; phase-level
                 max-phase-level ; phase-level
@@ -107,13 +118,15 @@
                    (namespace-bulk-binding-registry share-from-ns)
                    (make-bulk-binding-registry))
                (make-hasheq)     ; submodule-declarations
-               (if share-from-ns
-                   (namespace-module-instances share-from-ns)
-                   (make-hash))
                (and share-from-ns
                     (or (namespace-cross-phase-persistent-namespace share-from-ns)
                         share-from-ns))
-               #f))
+               (if share-from-ns
+                   (namespace-available-module-instances share-from-ns)
+                   (make-hasheqv))
+               (if share-from-ns
+                   (namespace-module-instances share-from-ns)
+                   (make-hash))))
   (when register?
     (hash-set! (namespace-phase-to-namespace ns) phase ns))
   ns)
@@ -139,11 +152,14 @@
                                              (namespace-submodule-declarations ns)
                                              ;; Fresh set of submodules:
                                              (make-hash))]
-                 [module-instances (make-hash)]
-                 [done-phases (make-hasheqv)]))
+                 [available-module-instances (make-hash)]
+                 [module-instances (make-hash)]))
   (hash-set! (namespace-phase-to-namespace m-ns) phase m-ns)
-  (hash-set! (namespace-module-instances m-ns) (cons name phase) m-ns)
+  (hash-set! (namespace-module-instances m-ns) (cons name phase) (make-module-instance m-ns #f))
   m-ns)
+
+(define (make-module-instance m-ns m)
+  (module-instance m-ns m #f (make-hasheqv) #f))
 
 (define (namespace->module ns name)
   (or (hash-ref (namespace-submodule-declarations ns) name #f)
@@ -189,60 +205,152 @@
                          "unknown module" 
                          "module name" mod-name))
 
-(define (namespace-module-instantiate! ns mpi phase [min-phase phase])
+;; Create a module instance as needed, and then run the specified phase;
+;; see also `run-module-instance!`, below
+(define (namespace-module-instantiate! ns mpi instance-phase #:run-phase [run-phase (namespace-phase ns)]
+                                       #:otherwise-available? [otherwise-available? #t]
+                                       #:seen [seen #hasheq()])
   (unless (module-path-index? mpi)
     (error "not a module path index:" mpi))
   (define name (module-path-index-resolve mpi #t))
   (define m (namespace->module ns name))
   (unless m (raise-unknown-module-error 'instantiate name))
-  (define (instantiate! phase min-phase ns)
+  (define (instantiate! instance-phase run-phase ns)
     ;; Get or create a namespace for the module+phase combination:
-    (define m-ns (namespace->module-namespace
-                  ns name phase
-                  #:create-mpi mpi
-                  #:add-as-cross-phase-persistent? (module-cross-phase-persistent? m)))
-    ;; If we haven't instantiated for this phase already, do so:
-    (unless ((hash-ref (namespace-done-phases m-ns) phase +inf.0) . <= . min-phase)
-      ;; First, recur for required modules:
-      (for ([(req-phase mods) (in-hash (module-requires m))])
-        (for ([mod (in-list mods)])
-          (namespace-module-instantiate! ns
-                                         (module-path-index-shift mod
-                                                                  (module-self m)
-                                                                  mpi)
-                                         (phase+ phase req-phase)
-                                         min-phase)))
-      ;; Run module body:
-      (define phase-shift phase) ; base phase = phase shift for instantiation
-      (define bulk-binding-registry (namespace-bulk-binding-registry m-ns))
-      (for ([phase-level (in-range (module-min-phase-level m)
-                                   (add1 (module-max-phase-level m)))])
-        (define phase (phase+ phase-level phase-shift))
-        (when (and (not (label-phase? phase))
-                   (phase . >= . min-phase))
-          (define defs (namespace->definitions m-ns phase-level))
-          (unless (definitions-instantiated? defs)
-            (set-definitions-instantiated?! defs #t)
-            (define p-ns (namespace->namespace-at-phase m-ns phase))
-            ((module-instantiate m) p-ns phase-shift phase-level mpi bulk-binding-registry))))
-      ;; Record completion at requested phases:
-      (hash-set! (namespace-done-phases m-ns) phase min-phase)))
+    (define mi (namespace->module-instance
+                ns name instance-phase
+                #:create-mpi mpi
+                #:add-as-cross-phase-persistent? (module-cross-phase-persistent? m)))
+    (run-module-instance! mi ns #:run-phase run-phase
+                          #:otherwise-available? otherwise-available?
+                          #:seen seen))
   ;; If the module is cross-phase persistent, make sure it's instantiated
   ;; at phase 0 and registered in `ns` as phaseless; otherwise
   (cond
    [(module-cross-phase-persistent? m)
     (instantiate! 0 0 (or (namespace-cross-phase-persistent-namespace ns) ns))]
    [else
-    (instantiate! phase min-phase ns)]))
+    (instantiate! instance-phase run-phase ns)]))
 
-(define (namespace-module-visit! ns mpi phase)
-  (namespace-module-instantiate! ns mpi phase (add1 phase)))
+(define (namespace-module-visit! ns mpi instance-phase #:visit-phase [visit-phase (namespace-phase ns)])
+  (namespace-module-instantiate! ns mpi instance-phase #:run-phase (add1 visit-phase)))
+
+;; The `instance-phase` corresponds to the phase shift for the module
+;; instances. The module may have content at different phase levels,
+;; which are all consistently shifted. The `run-phase` is an absolute
+;; phase that should be immediately run; to put it another way, phase
+;; level `(phase- instance-phase run-phase)` within the instance
+;; should be run immediately. The instance should at most be made
+;; available at all other non-negative phases, but
+;; `#:otherwise-available?` controls that behavior.
+(define (run-module-instance! mi ns #:run-phase run-phase
+                              #:otherwise-available? otherwise-available?
+                              #:seen [seen #hasheq()])
+  ;; Nothing to do if we've run this phase already and made the
+  ;; instance sufficiently available:
+  (define m-ns (module-instance-namespace mi))
+  (define instance-phase (namespace-0-phase m-ns))
+  (define run-phase-level (phase- run-phase instance-phase))
+  (unless (and (eq? 'started (hash-ref (module-instance-phase-level-to-state mi) run-phase-level #f))
+               (or (not otherwise-available?)
+                   (module-instance-made-available? mi)))
+    ;; Something to do...
+    (define m (module-instance-module mi))
+    (define mpi (namespace-mpi m-ns))
+    (define phase-shift instance-phase) ; instance phase = phase shift
+    (define bulk-binding-registry (namespace-bulk-binding-registry m-ns))
+    
+    (when (hash-ref seen mi #f)
+      (error 'require "import cycle detected during module instantiation"))
+    
+    ;; If we haven't shifted required mpi's already, do that:
+    (unless (module-instance-shifted-requires mi)
+      (set-module-instance-shifted-requires!
+       mi
+       (for/list ([phase+mpis (in-list (module-requires m))])
+         (cons (car phase+mpis)
+               (for/list ([req-mpi (in-list (cdr phase+mpis))])
+                 (module-path-index-shift req-mpi
+                                          (module-self m)
+                                          mpi))))))
+    
+    ;; Recur for required modules:
+    (for ([phase+mpis (in-list (module-instance-shifted-requires mi))])
+      (define req-phase (car phase+mpis))
+      (for ([req-mpi (in-list (cdr phase+mpis))])
+        (namespace-module-instantiate! ns req-mpi (phase+ instance-phase req-phase)
+                                       #:run-phase run-phase
+                                       #:otherwise-available? otherwise-available?
+                                       #:seen (hash-set seen mpi #t))))
+    
+    ;; Run or make available phases of the module body:
+    (unless (label-phase? instance-phase)
+      (for ([phase-level (in-range (module-max-phase-level m) (sub1 (module-min-phase-level m)) -1)])
+        (define phase (phase+ phase-level phase-shift))
+        (cond
+         [(eqv? phase run-phase)
+          ;; This is the phase to make sure that we've run
+          (unless (eq? 'started (hash-ref (module-instance-phase-level-to-state mi) phase-level #f))
+            (hash-set! (module-instance-phase-level-to-state mi) phase-level 'started)
+            (define defs (namespace->definitions m-ns phase-level))
+            (unless (definitions-instantiated? defs)
+              (set-definitions-instantiated?! defs #t)
+              (define p-ns (namespace->namespace-at-phase m-ns phase))
+              ((module-instantiate m) p-ns phase-shift phase-level mpi bulk-binding-registry)))]
+         [(and otherwise-available?
+               (not (negative? phase))
+               (not (hash-ref (module-instance-phase-level-to-state mi) phase-level #f)))
+          ;; This is a phase to merely make available
+          (hash-update! (namespace-available-module-instances ns)
+                        phase
+                        (lambda (l) (cons mi l))
+                        null)
+          (hash-set! (module-instance-phase-level-to-state mi) phase-level 'available)])))
+
+    (when otherwise-available?
+      (set-module-instance-made-available?! mi #t))
+
+    ;; In case there's no such phase for this module instance, claim 'started
+    ;; to short-circuit future attempts:
+    (hash-set! (module-instance-phase-level-to-state mi) run-phase-level 'started)))
+
+(define (namespace-visit-available-modules! ns [run-phase (namespace-phase ns)])
+  (namespace-run-available-modules! ns (add1 run-phase)))
+
+(define (namespace-run-available-modules! ns [run-phase (namespace-phase ns)])
+  (let loop ()
+    (define mis (hash-ref (namespace-available-module-instances ns) run-phase null))
+    (unless (null? mis)
+      (hash-set! (namespace-available-module-instances ns) run-phase null)
+      (for ([mi (in-list (reverse mis))])
+        (run-module-instance! mi ns #:run-phase run-phase #:otherwise-available? #f))
+      ;; In case instantiation added more reflectively:
+      (loop))))
+
+(define (namespace-primitive-module-visit! ns name)
+  (define mi (hash-ref (namespace-module-instances ns) (make-resolved-module-path name)))
+  (run-module-instance! mi ns #:run-phase 1
+                        #:otherwise-available? #t))
 
 (define (namespace->module-namespace ns name 0-phase
                                      #:install!-namespace [install!-ns #f]
-                                     #:create-mpi [create-mpi #f]
                                      #:add-as-cross-phase-persistent? [add-as-cross-phase-persistent? #t]
-                                     #:complain-on-failure? [complain-on-failure? #f])
+                                     #:complain-on-failure? [complain-on-failure? #f]
+                                     #:check-available-at-phase-level [check-available-at-phase-level #f]
+                                     #:unavailable-callback [unavailable-callback void])
+  (define mi (namespace->module-instance ns name 0-phase
+                                         #:install!-namespace install!-ns
+                                         #:add-as-cross-phase-persistent? add-as-cross-phase-persistent?
+                                         #:complain-on-failure? complain-on-failure?))
+  (when (and mi check-available-at-phase-level)
+    (check-availablilty mi check-available-at-phase-level unavailable-callback))
+  (and mi (module-instance-namespace mi)))
+
+(define (namespace->module-instance ns name 0-phase
+                                    #:install!-namespace [install!-ns #f]
+                                    #:create-mpi [create-mpi #f]
+                                    #:add-as-cross-phase-persistent? [add-as-cross-phase-persistent? #t]
+                                    #:complain-on-failure? [complain-on-failure? #f])
   (or (hash-ref (namespace-module-instances ns) (cons name 0-phase) #f)
       (let ([c-ns (or (namespace-cross-phase-persistent-namespace ns) ns)])
         (hash-ref (namespace-module-instances c-ns) name #f))
@@ -250,15 +358,16 @@
            (error "no module instance found:" name 0-phase))
       (and install!-ns
            (let ([m-ns (struct-copy namespace install!-ns
-                                    [phase-to-namespace (make-hasheqv)]
-                                    [done-phases (make-hasheqv)])])
+                                    [phase-to-namespace (make-hasheqv)])])
              (hash-set! (namespace-phase-to-namespace m-ns) 0-phase m-ns)
+             (define mi (make-module-instance m-ns (namespace->module ns name)))
+             (hash-set! (module-instance-phase-level-to-state mi) 0 'started)
              (hash-set! (namespace-module-instances ns)
                         (if add-as-cross-phase-persistent?
                             name
                             (cons name 0-phase))
-                        m-ns)
-             m-ns))
+                        mi)
+             mi))
       (and create-mpi
            (let ([m (namespace->module ns name)])
              (unless m
@@ -269,15 +378,15 @@
                                        [phase 0-phase]
                                        [0-phase 0-phase]
                                        [phase-to-namespace (make-hasheqv)]
-                                       [phase-level-to-definitions (make-hasheqv)]
-                                       [done-phases (make-hasheqv)]))
+                                       [phase-level-to-definitions (make-hasheqv)]))
              (hash-set! (namespace-phase-to-namespace m-ns) 0-phase m-ns)
+             (define mi (make-module-instance m-ns m))
              (hash-set! (namespace-module-instances ns)
                         (if add-as-cross-phase-persistent?
                             name
                             (cons name 0-phase))
-                        m-ns)
-             m-ns))))
+                        mi)
+             mi))))
 
 (define (namespace-same-instance? a-ns b-ns)
   (eq? (namespace-phase-level-to-definitions a-ns)
@@ -319,6 +428,15 @@
 (define (namespace-get-transformer ns phase-level name fail-k)
   (define d (namespace->definitions ns phase-level))
   (hash-ref (definitions-transformers d) name fail-k))
+
+;; ----------------------------------------
+
+(define (check-availablilty mi check-available-at-phase-level unavailable-callback)
+  (define m (module-instance-module mi))
+  (when (and m
+             (<= (module-min-phase-level m) (add1 check-available-at-phase-level) (module-max-phase-level m))
+             (not (hash-ref (module-instance-phase-level-to-state mi) (add1 check-available-at-phase-level) #f)))
+    (unavailable-callback)))
 
 ;; ----------------------------------------
 

@@ -3,6 +3,7 @@
 (provide phase?
          phase+
          phase-
+         phase<?
          zero-phase?
          label-phase?
          phase?-string)
@@ -27,6 +28,12 @@
 
 (define (phase- a b)
   (and a b (- a b)))
+
+(define (phase<? a b)
+  (cond
+   [(not b) #f]
+   [(not a) #t]
+   [else (< a b)]))
 
 (define (zero-phase? a)
   (eq? a 0))

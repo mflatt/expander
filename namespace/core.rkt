@@ -56,7 +56,7 @@
    ns
    (make-module #:cross-phase-persistent? #t
                 core-mpi
-                #hasheq()
+                null
                 (hasheqv 0 (for/hasheq ([sym (in-sequences
                                               (in-hash-keys core-primitives)
                                               (in-hash-keys core-forms))])

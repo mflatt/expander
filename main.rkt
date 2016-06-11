@@ -112,4 +112,4 @@
 ;; Initial namespace
 
 (current-namespace (make-empty-kernel-namespace))
-(dynamic-require ''#%kernel #f)
+(dynamic-require ''#%kernel 0)

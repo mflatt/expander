@@ -32,13 +32,17 @@
   (define mod-name (module-path-index-resolve mpi #t))
   (define phase (namespace-phase ns))
   (cond
-   [(or (not sym)
-        (equal? sym 0)) ;; FIXME: 0 is different when we distinguish availability
-    (namespace-module-instantiate! ns mpi phase)]
+   [(not sym)
+    (namespace-module-instantiate! ns mpi phase #:run-phase phase
+                                   #:otherwise-available? #f)]
+   [(equal? sym 0)
+    (namespace-module-instantiate! ns mpi phase #:run-phase phase)]
    [(void? sym)
-    (namespace-module-visit! ns mpi phase)]
+    (namespace-module-visit! ns mpi phase #:visit-phase phase)]
    [else
-    (namespace-module-instantiate! ns mpi phase)
+    ;; FIXME: the old `dynamic-require` checks exports before
+    ;; instantiating modules
+    (namespace-module-instantiate! ns mpi phase #:run-phase phase)
     (define m (namespace->module ns mod-name))
     (define binding (hash-ref (hash-ref (module-provides m) 0 #hasheq())
                               sym
@@ -65,6 +69,7 @@
                               (lambda ()
                                 ;; Maybe syntax?
                                 (define missing (gensym 'missing))
+                                (namespace-module-visit! ns mpi phase #:visit-phase phase)
                                 (define t (namespace-get-transformer m-ns ex-phase ex-sym missing))
                                 (cond
                                  [(eq? t missing)
@@ -88,4 +93,3 @@
 ;; thunk and substituting a more specific error:
 (define (default-fail-thunk)
   (error "failed"))
-

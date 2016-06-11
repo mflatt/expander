@@ -610,13 +610,14 @@
                             #:context [context 'expression]
                             #:begin-form? [begin-form? #f])
   (define phase (add1 (expand-context-phase ctx)))
+  (define ns (namespace->namespace-at-phase (expand-context-namespace ctx)
+                                            phase))
+  (namespace-visit-available-modules! ns phase)
   (define trans-ctx (struct-copy expand-context ctx
                                  [context context]
                                  [scopes null]
                                  [phase phase]
-                                 [namespace (namespace->namespace-at-phase
-                                             (expand-context-namespace ctx)
-                                             phase)]
+                                 [namespace ns]
                                  [env empty-env]
                                  [only-immediate? #f]
                                  [post-expansion-scope #:parent root-expand-context #f]))

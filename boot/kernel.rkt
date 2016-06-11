@@ -53,7 +53,7 @@
    (make-module #:cross-phase-persistent? #t
                 #:primitive? primitive?
                 mpi
-                #hasheqv()
+                null
                 (hasheqv 0 (for/hash ([sym (in-hash-keys ht)])
                              (values sym
                                      (make-module-binding mpi 0 sym))))
@@ -74,7 +74,7 @@
    ns
    (make-module #:cross-phase-persistent? #t
                 mpi
-                (hasheqv 0 require-mpis)
+                (list (cons 0 require-mpis))
                 (if reexport?
                     (hasheqv 0
                              (for*/hash ([require-mpi (in-list require-mpis)]

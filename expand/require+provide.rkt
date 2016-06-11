@@ -33,7 +33,8 @@
 ;; ----------------------------------------
 
 (struct requires+provides (self       ; module-path-index to recognize definitions among requires
-                           require-mpis ; module-path-index to itself, as interned
+                           require-mpis ; module-path-index to itself as interned
+                           require-mpis-in-order ; require-phase -> list of module-path-index
                            requires   ; module-path-index -> require-phase -> list of (required id phase boolean)
                            provides   ; phase -> sym -> binding
                            phase-to-defined-syms ; phase -> sym -> boolean
@@ -42,6 +43,7 @@
 (define (make-requires+provides self)
   (requires+provides self
                      (make-hash)    ; require-mpis
+                     (make-hasheqv) ; require-mpis-in-order
                      (make-hash)    ; requires
                      (make-hasheqv) ; provides
                      (make-hasheqv) ; phase-to-defined-syms
@@ -60,14 +62,18 @@
                   (begin
                     (hash-set! (requires+provides-require-mpis r+p) mod-name mod-name)
                     mod-name)))
-  (hash-update! (requires+provides-requires r+p)
-                mpi
-                (lambda (at-mod)
-                  (hash-update at-mod
-                               phase-shift
-                               (lambda (l) l)
-                               null))
-                #hasheqv())
+  (unless (hash-ref (hash-ref (requires+provides-requires r+p) mpi #hasheqv()) phase-shift #f)
+    ;; Add to list of requires that are kept in order, so that order
+    ;; is preserved on instantiation
+    (hash-update! (requires+provides-require-mpis-in-order r+p)
+                  phase-shift
+                  (lambda (l) (cons mpi l))
+                  null)
+    ;; Init list of required identifiers:
+    (hash-update! (requires+provides-requires r+p)
+                  mpi
+                  (lambda (at-mod) (hash-set at-mod phase-shift null))
+                  #hasheqv()))
   (unless is-cross-phase-persistent?
     (set-requires+provides-can-cross-phase-persistent?! r+p #f))
   mpi)
@@ -237,15 +243,14 @@
 ;; for use by `compile`
 (define (attach-require-provide-properties r+p s old-self new-self)
   (define (extract-requires)
-    (define mht
-      (for/fold ([mht #hasheqv()]) ([(module-name ht) (in-hash (requires+provides-requires r+p))])
-        (for/fold ([mht mht]) ([phase (in-hash-keys ht)])
-          (if (eq? module-name old-self)
-              mht
-              (let ([module-name (module-path-index-shift module-name old-self new-self)])
-                (hash-update mht phase (lambda (s) (set-add s module-name)) (set)))))))
-    (for/hasheqv ([(phase mods) (in-hash mht)])
-      (values phase (set->list mods))))
+    ;; Extract from the in-order record, so that instantiation can use the original order
+    (define phase-to-mpis-in-order (requires+provides-require-mpis-in-order r+p))
+    (define phases-in-order (sort (hash-keys phase-to-mpis-in-order) phase<?))
+    (for/list ([phase (in-list phases-in-order)])
+      (cons phase
+            (for/list ([mpi (in-list (reverse (hash-ref phase-to-mpis-in-order phase)))]
+                       #:unless (eq? mpi old-self))
+              (module-path-index-shift mpi old-self new-self)))))
   (define (extract-provides)
     (shift-provides-module-path-index (provides-forward-free=id
                                        (requires+provides-provides r+p))

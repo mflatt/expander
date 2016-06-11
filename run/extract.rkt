@@ -201,10 +201,10 @@
                   null))
       
       (define dependencies
-        (for*/list ([(req-phase reqs) (in-hash reqs)]
-                    [req (in-list reqs)])
+        (for*/list ([phase+reqs (in-list reqs)]
+                    [req (in-list (cdr phase+reqs))])
           ;; we want whatever required module will have at this module's `phase`
-          (define at-phase (phase- phase req-phase))
+          (define at-phase (phase- phase (car phase+reqs)))
           (link (module-path-index->module-name req name)
                 at-phase)))
 

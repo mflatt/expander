@@ -5,12 +5,13 @@ See "demo.rkt" for examples.
 TODO:
  bug fix for local definition contexts (MB's example)
  load handler's direct loading of submodules
- lazy module instantiation
  preserved syntax properties
  taints
  expander observer
  continuation barrier on macro invocation
+ continuation prompt for module body
  enforced namespace constants
+ lock on namespace & registry
 
 ----------------------------------------
 

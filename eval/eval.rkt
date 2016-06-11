@@ -62,7 +62,7 @@
                  #:serializable? [serializable? #f])
   (define cs
     (parameterize ([current-bulk-binding-fallback-registry
-                  (namespace-bulk-binding-registry ns)])
+                    (namespace-bulk-binding-registry ns)])
       (per-top-level s ns
                      #:single (lambda (s ns) (list (compile-single s ns expand
                                                               serializable?)))
@@ -102,7 +102,8 @@
                                            s)))))
 
 (define (expand-single s ns)
-  ;; Ideally, this would be just
+  (namespace-visit-available-modules! ns)
+  ;; Ideally, the rest would be just
   ;; (expand-in-context s (make-expand-context ns))
   ;; but we have to handle lifted definitions
   (define ctx (make-expand-context ns))
@@ -139,6 +140,7 @@
     (define tl-ctx (struct-copy expand-context ctx
                                 [phase phase]
                                 [namespace ns]))
+    (namespace-visit-available-modules! ns)
     (define lift-ctx (make-lift-context (make-toplevel-lift tl-ctx)))
     (define exp-s
       (expand-in-context s (struct-copy expand-context tl-ctx
