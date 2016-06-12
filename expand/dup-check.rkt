@@ -1,7 +1,7 @@
 #lang racket/base
 (require "../syntax/syntax.rkt"
          "../syntax/scope.rkt"
-         "../syntax/syntax-error.rkt")
+         "../syntax/error.rkt")
 
 (provide make-check-no-duplicate-table
          check-no-duplicate-ids)

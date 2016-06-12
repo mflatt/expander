@@ -1,5 +1,5 @@
 #lang racket/base
-(require "../syntax/syntax-to-list.rkt"
+(require "../syntax/to-list.rkt"
          "../syntax/scope.rkt"
          "../common/phase.rkt"
          "../namespace/namespace.rkt"

@@ -1,7 +1,7 @@
 #lang racket/base
 (require "../eval/eval.rkt"
          "../eval/dynamic-require.rkt"
-         "../eval/compiled-reflect.rkt"
+         "../eval/reflect.rkt"
          (prefix-in wrapper: "../eval/main.rkt")
          "../namespace/namespace.rkt"
          "../namespace/eval.rkt"

@@ -4,8 +4,8 @@
          "../syntax/scope.rkt"
          "../syntax/match.rkt"
          "../common/phase.rkt"
-         "../syntax/syntax-track.rkt"
-         "../syntax/syntax-error.rkt"
+         "../syntax/track.rkt"
+         "../syntax/error.rkt"
          "../namespace/namespace.rkt"
          "../namespace/module.rkt"
          "../syntax/binding.rkt"
@@ -22,8 +22,8 @@
          "provide.rkt"
          "def-id.rkt"
          "../compile/main.rkt"
-         "../eval/compiled-top.rkt"
-         "../eval/compiled-module.rkt"
+         "../eval/top.rkt"
+         "../eval/module.rkt"
          "cross-phase.rkt"
          "../syntax/debug.rkt")
 

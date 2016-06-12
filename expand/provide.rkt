@@ -4,7 +4,7 @@
          "../syntax/scope.rkt"
          "../syntax/match.rkt"
          "../syntax/binding.rkt"
-         "../syntax/syntax-error.rkt"
+         "../syntax/error.rkt"
          "require+provide.rkt"
          "context.rkt"
          "../namespace/core.rkt"

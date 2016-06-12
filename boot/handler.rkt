@@ -2,7 +2,7 @@
 (require '#%paramz
          racket/private/collect
          "../syntax/checked-syntax.rkt"
-         "../syntax/syntax-error.rkt"
+         "../syntax/error.rkt"
          "../syntax/srcloc.rkt"
          "../namespace/namespace.rkt"
          "../eval/eval.rkt"

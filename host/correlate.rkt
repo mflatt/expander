@@ -1,7 +1,7 @@
 #lang racket/base
 (require "../syntax/syntax.rkt"
          "../syntax/scope.rkt"
-         "../syntax/syntax-to-list.rkt"
+         "../syntax/to-list.rkt"
          "../syntax/match.rkt"
          "../syntax/datum-map.rkt")
 

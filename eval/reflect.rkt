@@ -2,7 +2,7 @@
 (require "../compile/compiled-in-memory.rkt"
          "../host/linklet.rkt"
          "../common/contract.rkt"
-         "compiled-module.rkt")
+         "module.rkt")
 
 (provide compiled-expression?
 

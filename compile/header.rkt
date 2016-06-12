@@ -2,7 +2,7 @@
 (require "../syntax/scope.rkt"
          "module-use.rkt"
          "../common/module-path.rkt"
-         "compile-context.rkt"
+         "context.rkt"
          "built-in-symbol.rkt"
          "reserved-symbol.rkt"
          "namespace-scope.rkt"

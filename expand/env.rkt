@@ -1,7 +1,7 @@
 #lang racket/base
 (require "../common/memo.rkt"
          "../syntax/syntax.rkt"
-         "../syntax/syntax-error.rkt"
+         "../syntax/error.rkt"
          "../syntax/scope.rkt"
          "../common/phase.rkt"
          "../syntax/binding.rkt"

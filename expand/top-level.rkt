@@ -2,7 +2,7 @@
 (require "../syntax/scope.rkt"
          "../namespace/core.rkt"
          "../syntax/match.rkt"
-         "../syntax/syntax-error.rkt"
+         "../syntax/error.rkt"
          "../syntax/module-binding.rkt"
          "../namespace/namespace.rkt"
          "require+provide.rkt"

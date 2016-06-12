@@ -20,7 +20,7 @@
          "../expand/local-expand.rkt"
          "../syntax/taint.rkt"
          "../syntax/checked-syntax.rkt"
-         "../syntax/syntax-error.rkt"
+         "../syntax/error.rkt"
          "../common/module-path.rkt"
          "../namespace/variable-reference.rkt"
          "../expand/allowed-context.rkt")

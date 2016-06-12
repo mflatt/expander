@@ -4,7 +4,7 @@
          "../common/phase.rkt"
          "../syntax/scope.rkt"
          "../syntax/binding.rkt"
-         "../syntax/syntax-error.rkt"
+         "../syntax/error.rkt"
          "../namespace/namespace.rkt"
          "../common/module-path.rkt")
 

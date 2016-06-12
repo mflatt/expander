@@ -10,8 +10,8 @@
          "../namespace/core.rkt"
          "../common/module-path.rkt"
          "built-in-symbol.rkt"
-         "compile-context.rkt"
-         "compile-header.rkt"
+         "context.rkt"
+         "header.rkt"
          "reserved-symbol.rkt"
          "../host/correlate.rkt")
 

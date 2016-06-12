@@ -1,7 +1,7 @@
 #lang racket/base
 (require "syntax.rkt"
          "scope.rkt"
-         "syntax-error.rkt")
+         "error.rkt")
 
 (provide match-syntax
          try-match-syntax)

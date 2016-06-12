@@ -10,15 +10,15 @@
          (rename-in "../expand/expand.rkt" [expand expand-in-context])
          "../compile/main.rkt"
          "../compile/compiled-in-memory.rkt"
-         "compiled-top.rkt"
-         "compiled-module.rkt"
+         "top.rkt"
+         "module.rkt"
          "../common/module-path.rkt"
          "../host/linklet.rkt"
          "../syntax/bulk-binding.rkt"
          "../common/contract.rkt"
          "../namespace/eval.rkt"
          "../expand/lift-context.rkt"
-         "compiled-reflect.rkt")
+         "reflect.rkt")
 
 (provide eval
          compile

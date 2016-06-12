@@ -4,7 +4,7 @@
          "../syntax/scope.rkt"
          "../namespace/core.rkt"
          "context.rkt"
-         "../syntax/syntax-error.rkt")
+         "../syntax/error.rkt")
 
 (provide prop:expansion-contexts
 

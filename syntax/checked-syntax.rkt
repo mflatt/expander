@@ -3,7 +3,7 @@
          (rename-in "syntax.rkt"
                     [syntax->datum raw:syntax->datum]
                     [datum->syntax raw:datum->syntax])
-         (rename-in "syntax-to-list.rkt"
+         (rename-in "to-list.rkt"
                     [syntax->list raw:syntax->list])
          (rename-in "scope.rkt"
                     [syntax-e raw:syntax-e]
@@ -13,7 +13,7 @@
                     [free-identifier=? raw:free-identifier=?]
                     [identifier-binding raw:identifier-binding]
                     [identifier-binding-symbol raw:identifier-binding-symbol])
-         (rename-in "syntax-track.rkt"
+         (rename-in "track.rkt"
                     [syntax-track-origin raw:syntax-track-origin])
          "../expand/syntax-local.rkt"
          "srcloc.rkt"
