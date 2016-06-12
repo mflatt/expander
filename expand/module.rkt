@@ -719,7 +719,7 @@
         [(#%provide)
          (define m (match-syntax (car bodys) '(#%provide spec ...)))
          (define specs
-           (parse-and-expand-provides! (m 'spec)
+           (parse-and-expand-provides! (m 'spec) (car bodys)
                                        requires+provides self
                                        phase (struct-copy expand-context ctx
                                                           [context 'top-level]
