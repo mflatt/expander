@@ -139,16 +139,33 @@
            (error "no module instance found:" name 0-phase))))
 
 (define (namespace-install-module-namespace! ns name 0-phase m existing-m-ns)
-  (define m-ns (struct-copy namespace existing-m-ns
-                            [phase-to-namespace (make-hasheqv)]))
-  (hash-set! (namespace-phase-to-namespace m-ns) 0-phase m-ns)
+  (define m-ns (struct-copy namespace ns
+                            [mpi (namespace-mpi existing-m-ns)]
+                            [root-expand-ctx (namespace-root-expand-ctx existing-m-ns)]
+                            [phase (namespace-phase existing-m-ns)]
+                            [0-phase (namespace-0-phase existing-m-ns)]
+                            [phase-to-namespace (make-hasheqv)]
+                            [phase-level-to-definitions (if (module-cross-phase-persistent? m)
+                                                            (namespace-phase-level-to-definitions existing-m-ns)
+                                                            (make-hasheqv))]))
   (define mi (make-module-instance m-ns m))
-  (hash-set! (module-instance-phase-level-to-state mi) 0 'started)
-  (hash-set! (namespace-module-instances ns)
-             (if (module-cross-phase-persistent? m)
-                 name
-                 (cons name 0-phase))
-             mi))
+  (cond
+   [(module-cross-phase-persistent? m)
+    (hash-set! (namespace-phase-to-namespace m-ns) 0 m-ns)
+    (hash-set! (namespace-module-instances (or (namespace-cross-phase-persistent-namespace ns) ns))
+               name
+               mi)
+    ;; Cross-phase persistent modules normally have only phase 0,
+    ;; but '#%core also has phase 1
+    (hash-set! (module-instance-phase-level-to-state mi) 0 'started)
+    (hash-set! (module-instance-phase-level-to-state mi) 1 'started)]
+   [else
+    (hash-set! (namespace-phase-to-namespace m-ns) 0-phase m-ns)
+    (hash-set! (namespace-phase-level-to-definitions m-ns)
+               0-phase
+               (namespace->definitions existing-m-ns 0-phase))
+    (hash-set! (module-instance-phase-level-to-state mi) 0 'started)
+    (hash-set! (namespace-module-instances ns) (cons name 0-phase) mi)]))
 
 (define (namespace-create-module-instance! ns name 0-phase m mpi)
   (define m-ns (struct-copy namespace ns
@@ -281,11 +298,9 @@
           (unless (eq? 'started (hash-ref (module-instance-phase-level-to-state mi) phase-level #f))
             (hash-set! (module-instance-phase-level-to-state mi) phase-level 'started)
             (define defs (namespace->definitions m-ns phase-level))
-            (unless (definitions-instantiated? defs)
-              (set-definitions-instantiated?! defs #t)
-              (define p-ns (namespace->namespace-at-phase m-ns phase))
-              (define go (module-instantiate m))
-              (go (module-instance-data-box mi) p-ns phase-shift phase-level mpi bulk-binding-registry)))]
+            (define p-ns (namespace->namespace-at-phase m-ns phase))
+            (define go (module-instantiate m))
+            (go (module-instance-data-box mi) p-ns phase-shift phase-level mpi bulk-binding-registry))]
          [(and otherwise-available?
                (not (negative? run-phase))
                (not (hash-ref (module-instance-phase-level-to-state mi) phase-level #f)))

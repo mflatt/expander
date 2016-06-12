@@ -65,8 +65,7 @@
 (struct module-registry (declarations))
 
 (struct definitions (variables      ; linklet instance
-                     transformers   ; sym -> val
-                     [instantiated? #:mutable]))
+                     transformers)) ; sym -> val
 
 (define (make-namespace [share-from-ns #f]
                         #:root-expand-ctx [root-expand-ctx (make-root-expand-context)]
@@ -126,7 +125,7 @@
       (let ()
         (define p-ns (namespace->namespace-at-phase ns (phase+ (namespace-0-phase ns)
                                                                phase-level)))
-        (define d (definitions (make-instance p-ns) (make-hasheq) #f))
+        (define d (definitions (make-instance p-ns) (make-hasheq)))
         (hash-set! (namespace-phase-level-to-definitions ns) phase-level d)
         d)))
 
@@ -139,7 +138,7 @@
   (instance-unset-variable! (definitions-variables d) name))
 
 (define (namespace-set-transformer! ns phase-level name val)
-  (define d (namespace->definitions ns phase-level))
+  (define d (namespace->definitions ns (add1 phase-level)))
   (hash-set! (definitions-transformers d) name val))
 
 (define (namespace-get-variable ns phase-level name fail-k)
@@ -147,12 +146,16 @@
   (instance-variable-value (definitions-variables d) name fail-k))
   
 (define (namespace-get-transformer ns phase-level name fail-k)
-  (define d (namespace->definitions ns phase-level))
+  (define d (namespace->definitions ns (add1 phase-level)))
   (hash-ref (definitions-transformers d) name fail-k))
 
 (define (namespace->instance ns phase-shift)
   (definitions-variables (namespace->definitions ns phase-shift)))
 
 (define (namespace-same-instance? a-ns b-ns)
-  (eq? (namespace-phase-level-to-definitions a-ns)
-       (namespace-phase-level-to-definitions b-ns)))
+  (eq? (hash-ref (namespace-phase-level-to-definitions a-ns)
+                 (namespace-0-phase a-ns)
+                 'no-a)
+       (hash-ref (namespace-phase-level-to-definitions b-ns)
+                 (namespace-0-phase b-ns)
+                 'no-b)))

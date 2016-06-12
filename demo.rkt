@@ -1275,6 +1275,7 @@
 'ok-instance
 
 (namespace-attach-module demo-ns ''provides-random-r other-ns) ; re-attach ok
+'ok-reattach
 
 (define third-ns (make-namespace))
 (namespace-attach-module-declaration demo-ns ''provides-random-r third-ns)
