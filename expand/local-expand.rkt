@@ -95,7 +95,8 @@
                                                            intdefs)]
                                  [use-site-scopes
                                   #:parent root-expand-context
-                                  (and (list? context)
+                                  (and (or (eq? context 'module)
+                                           (list? context))
                                        (or (root-expand-context-use-site-scopes ctx)
                                            (box null)))]
                                  [frame-id #:parent root-expand-context
