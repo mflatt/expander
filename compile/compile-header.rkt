@@ -65,9 +65,10 @@
   (null? (unbox syntax-literals)))
 
 ;; Generate on-demand deserialization (shared across instances) and
-;; shifting (not shared);
-;; the result defines `syntax-literals-id` and `get-syntax-literal!-id`
-(define (generate-lazy-syntax-literals! syntax-literals-boxes mpis self)
+;; shifting (not shared); the result defines `syntax-literals-id` and
+;; `get-syntax-literal!-id`
+(define (generate-lazy-syntax-literals! syntax-literals-boxes mpis self
+                                        #:skip-deserialize? [skip-deserialize? #f])
   (define syntax-literalss (map unbox syntax-literals-boxes))
   (cond
    [(andmap null? syntax-literalss)
@@ -79,17 +80,19 @@
       (define-values (,get-syntax-literal!-id)
         (lambda (phase pos)
           (begin
-            (if (vector-ref ,deserialized-syntax-id phase)
-                (void)
-                (vector-copy! ,deserialized-syntax-id
-                              '0
-                              ,(generate-deserialize (vector->immutable-vector
-                                                      (list->vector
-                                                       (map
-                                                        vector->immutable-vector
-                                                        (map list->vector
-                                                             (map reverse syntax-literalss)))))
-                                                     mpis)))
+            ,@(if skip-deserialize?
+                  null
+                  `((if (vector-ref ,deserialized-syntax-id phase)
+                        (void)
+                        (vector-copy! ,deserialized-syntax-id
+                                      '0
+                                      ,(generate-deserialize (vector->immutable-vector
+                                                              (list->vector
+                                                               (map
+                                                                vector->immutable-vector
+                                                                (map list->vector
+                                                                     (map reverse syntax-literalss)))))
+                                                             mpis)))))
             (let-values ([(stx)
                           (syntax-module-path-index-shift
                            (syntax-shift-phase-level

@@ -25,7 +25,8 @@
 ;; `compiled-in-memory`
 (define (compile-module s cctx
                         #:self [given-self #f]
-                        #:as-submodule? [as-submodule? #f])
+                        #:as-submodule? [as-submodule? #f]
+                        #:serializable? [serializable? (not as-submodule?)])
   (define m (match-syntax s '(module name initial-require
                               (#%module-begin body ...))))
   (define enclosing-self (compile-context-module-self cctx))
@@ -92,10 +93,12 @@
   (define pre-submodules (compile-submodules 'module
                                              #:bodys bodys
                                              #:as-submodule? as-submodule?
+                                             #:serializable? serializable?
                                              #:cctx body-cctx))
   (define post-submodules (compile-submodules 'module*
                                               #:bodys bodys
                                               #:as-submodule? as-submodule?
+                                              #:serializable? serializable?
                                               #:cctx body-cctx))
   
   (define (get-submodule-linklet-directory p)
@@ -158,7 +161,8 @@
                  ,@(if root-ctx-syntax-literals
                        `(get-encoded-root-expand-ctx)
                        null))
-       ,@(generate-lazy-syntax-literals! all-syntax-literalss mpis self)
+       ,@(generate-lazy-syntax-literals! all-syntax-literalss mpis self
+                                         #:skip-deserialize? (not serializable?))
        ,@(if root-ctx-syntax-literals
              `((define-values (get-encoded-root-expand-ctx)
                  (lambda ()
@@ -170,24 +174,29 @@
   ;; objects, it provides a shared vector for all instances, while
   ;; the unmarshaling of data is left to each body.
   (define data-linklet
-    (compile-linklet
-     `(linklet
-       #:import ([deserialize ,@deserialize-imports])
-       #:export ([,mpi-vector-id mpi-vector]
-                 deserialized-syntax)
-       (define-values (,mpi-vector-id)
-         ,(generate-module-path-index-deserialize mpis))
-       (define-values (deserialized-syntax)
-         (make-vector ,(+ 2 max-phase) #f)))))
+    (and serializable?
+         (compile-linklet
+          `(linklet
+            #:import ([deserialize ,@deserialize-imports])
+            #:export ([,mpi-vector-id mpi-vector]
+                      deserialized-syntax)
+            (define-values (,mpi-vector-id)
+              ,(generate-module-path-index-deserialize mpis))
+            (define-values (deserialized-syntax)
+              (make-vector ,(+ 2 max-phase) #f))))))
+  
+  (define combined-linklets
+    (let* ([linklets (hash-set body-linklets #".decl" declaration-linklet)]
+           [linklets (if data-linklet
+                         (hash-set linklets #".data" data-linklet)
+                         linklets)]
+           [linklets (hash-set linklets #".stx" syntax-literals-linklet)])
+      linklets))
 
-  ;; Combine everything in a linklet directosy
+  ;; Combine with submodules in a linklet directory
   (define ld
     (hash->linklet-directory
-     (for/fold ([ht (hash-set (hash-set (hash-set body-linklets #".decl" declaration-linklet)
-                                        #".data"
-                                        data-linklet)
-                              #".stx"
-                              syntax-literals-linklet)])
+     (for/fold ([ht combined-linklets])
                ([sm (in-list (append pre-submodules post-submodules))])
        (hash-set ht
                  (encode-linklet-directory-key (car sm))
@@ -210,6 +219,7 @@
 (define (compile-submodules form-name
                             #:bodys bodys
                             #:as-submodule? as-submodule?
+                            #:serializable? serializable?
                             #:cctx body-cctx)
   (cond
    [as-submodule?
@@ -230,7 +240,8 @@
               (syntax-shift-phase-level (car bodys) (phase- 0 phase))]
              [else (car bodys)]))
           (cons (cons (syntax-e (sm-m 'name))
-                      (compile-module s-shifted body-cctx))
+                      (compile-module s-shifted body-cctx
+                                      #:serializable? serializable?))
                 (loop (cdr bodys) phase))]
          [(eq? f 'begin-for-syntax)
           (define m (match-syntax (car bodys) `(begin-for-syntax e ...)))
