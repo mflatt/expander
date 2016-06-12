@@ -7,6 +7,7 @@
          "../syntax/syntax-track.rkt"
          "../syntax/syntax-error.rkt"
          "../namespace/namespace.rkt"
+         "../namespace/module.rkt"
          "../syntax/binding.rkt"
          "dup-check.rkt"
          "free-id-set.rkt"

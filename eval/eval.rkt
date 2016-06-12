@@ -2,6 +2,7 @@
 (require "../syntax/module-binding.rkt"
          "../syntax/checked-syntax.rkt"
          "../namespace/namespace.rkt"
+         "../namespace/module.rkt"
          "../namespace/core.rkt"
          "../common/phase.rkt"
          "../syntax/match.rkt"

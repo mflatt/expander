@@ -4,6 +4,7 @@
          "../common/phase.rkt"
          "../syntax/scope.rkt"
          "../namespace/namespace.rkt"
+         "../namespace/module.rkt"
          "../syntax/binding.rkt"
          "../syntax/match.rkt"
          "../namespace/core.rkt"

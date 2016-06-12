@@ -1,6 +1,7 @@
 #lang racket/base
 (require "../common/phase.rkt"
          "../namespace/namespace.rkt"
+         "../namespace/module.rkt"
          "../compile/module-use.rkt"
          "../host/linklet.rkt"
          "../compile/serialize.rkt"

@@ -3,6 +3,7 @@
          "../syntax/module-binding.rkt"
          "../syntax/checked-syntax.rkt"
          "../namespace/namespace.rkt"
+         "../namespace/module.rkt"
          "../common/module-path.rkt"
          "../namespace/eval.rkt"
          "eval.rkt")

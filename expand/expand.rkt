@@ -4,6 +4,7 @@
          "../syntax/scope.rkt"
          "../syntax/match.rkt"
          "../namespace/namespace.rkt"
+         "../namespace/module.rkt"
          "../syntax/binding.rkt"
          "env.rkt"
          "../syntax/syntax-track.rkt"

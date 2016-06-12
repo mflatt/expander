@@ -3,6 +3,7 @@
          "../syntax/syntax.rkt"
          "../namespace/core.rkt"
          "../namespace/namespace.rkt"
+         "../namespace/module.rkt"
          "../syntax/binding.rkt"
          "core-primitive.rkt"
          "../common/module-path.rkt"

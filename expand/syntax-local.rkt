@@ -14,6 +14,7 @@
          "require+provide.rkt"
          "../common/module-path.rkt"
          "../namespace/namespace.rkt"
+         "../namespace/module.rkt"
          "../common/contract.rkt"
          "../syntax/debug.rkt")
 

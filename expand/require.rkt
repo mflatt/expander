@@ -7,6 +7,7 @@
          "../syntax/binding.rkt"
          "../syntax/syntax-error.rkt"
          "../namespace/namespace.rkt"
+         "../namespace/module.rkt"
          "../syntax/match.rkt"
          "require+provide.rkt"
          "../common/module-path.rkt"

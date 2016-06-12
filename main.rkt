@@ -5,7 +5,7 @@
          "eval/dynamic-require.rkt"
          "namespace/eval.rkt"
          (prefix-in wrapper: "eval/main.rkt")
-         "namespace/namespace-attach.rkt"
+         "namespace/attach.rkt"
          "namespace/core.rkt"
          "boot/kernel.rkt"
          "boot/utils-primitive.rkt"

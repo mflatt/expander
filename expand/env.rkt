@@ -6,6 +6,7 @@
          "../common/phase.rkt"
          "../syntax/binding.rkt"
          "../namespace/namespace.rkt"
+         "../namespace/module.rkt"
          "set-bang-trans.rkt"
          "rename-trans.rkt"
          "../common/module-path.rkt")

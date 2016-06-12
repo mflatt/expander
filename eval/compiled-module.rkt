@@ -1,5 +1,6 @@
 #lang racket/base
 (require "../namespace/namespace.rkt"
+         "../namespace/module.rkt"
          "../common/phase.rkt"
          "../compile/module-use.rkt"
          "../common/module-path.rkt"

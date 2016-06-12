@@ -5,8 +5,9 @@
          "../syntax/binding.rkt"
          "../expand/env.rkt"
          "../syntax/match.rkt"
+         "../common/module-path.rkt"
          "namespace.rkt"
-         "../common/module-path.rkt")
+         "module.rkt")
 
 (provide core-stx
          

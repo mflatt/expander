@@ -6,7 +6,8 @@
          "../syntax/syntax-error.rkt"
          (only-in "../syntax/scope.rkt" add-scopes push-scope)
          "namespace.rkt"
-         "namespace-attach.rkt"
+         "module.rkt"
+         "attach.rkt"
          "core.rkt"
          "../common/phase.rkt"
          "../expand/require+provide.rkt"
