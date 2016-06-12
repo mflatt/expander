@@ -174,6 +174,7 @@
          (define m (match-syntax exp-s '(begin-for-syntax e ...)))
          (define next-phase (add1 phase))
          (define next-ns (namespace->namespace-at-phase ns next-phase))
+         (namespace-visit-available-modules! next-ns) ; to match old behavior for empty body
          (define l
            (for/list ([s (in-list (m 'e))])
              (loop s next-phase next-ns)))
