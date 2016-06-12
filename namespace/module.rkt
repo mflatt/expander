@@ -23,6 +23,7 @@
 
          namespace-module-instantiate!
          namespace-module-visit!
+         namespace-module-make-available!
          namespace-primitive-module-visit!
          namespace-visit-available-modules!
          namespace-run-available-modules!
@@ -191,6 +192,7 @@
 ;; Create a module instance as needed, and then run the specified phase;
 ;; see also `run-module-instance!`, below
 (define (namespace-module-instantiate! ns mpi instance-phase #:run-phase [run-phase (namespace-phase ns)]
+                                       #:skip-run? [skip-run? #f]
                                        #:otherwise-available? [otherwise-available? #t]
                                        #:seen [seen #hasheq()])
   (unless (module-path-index? mpi)
@@ -205,6 +207,7 @@
                 #:create-mpi mpi
                 #:add-as-cross-phase-persistent? (module-cross-phase-persistent? m)))
     (run-module-instance! mi ns #:run-phase run-phase
+                          #:skip-run? skip-run?
                           #:otherwise-available? otherwise-available?
                           #:seen seen))
   ;; If the module is cross-phase persistent, make sure it's instantiated
@@ -218,15 +221,19 @@
 (define (namespace-module-visit! ns mpi instance-phase #:visit-phase [visit-phase (namespace-phase ns)])
   (namespace-module-instantiate! ns mpi instance-phase #:run-phase (add1 visit-phase)))
 
+(define (namespace-module-make-available! ns mpi instance-phase #:visit-phase [visit-phase (namespace-phase ns)])
+  (namespace-module-instantiate! ns mpi instance-phase #:run-phase (add1 visit-phase) #:skip-run? #t))
+
 ;; The `instance-phase` corresponds to the phase shift for the module
 ;; instances. The module may have content at different phase levels,
 ;; which are all consistently shifted. The `run-phase` is an absolute
-;; phase that should be immediately run; to put it another way, phase
-;; level `(phase- instance-phase run-phase)` within the instance
-;; should be run immediately. The instance should at most be made
-;; available at all other non-negative phases, but
-;; `#:otherwise-available?` controls that behavior.
+;; phase that should be immediately run, unless `skip-run?` is treu;
+;; to put it another way, phase level `(phase- instance-phase
+;; run-phase)` within the instance should be run immediately.
+;; Normally, the instance is made available at all other non-negative
+;; phases, but `#:otherwise-available?` controls that behavior.
 (define (run-module-instance! mi ns #:run-phase run-phase
+                              #:skip-run? skip-run? 
                               #:otherwise-available? otherwise-available?
                               #:seen [seen #hasheq()])
   ;; Nothing to do if we've run this phase already and made the
@@ -234,7 +241,8 @@
   (define m-ns (module-instance-namespace mi))
   (define instance-phase (namespace-0-phase m-ns))
   (define run-phase-level (phase- run-phase instance-phase))
-  (unless (and (eq? 'started (hash-ref (module-instance-phase-level-to-state mi) run-phase-level #f))
+  (unless (and (or skip-run?
+                   (eq? 'started (hash-ref (module-instance-phase-level-to-state mi) run-phase-level #f)))
                (or (not otherwise-available?)
                    (module-instance-made-available? mi)))
     ;; Something to do...
@@ -263,6 +271,7 @@
       (for ([req-mpi (in-list (cdr phase+mpis))])
         (namespace-module-instantiate! ns req-mpi (phase+ instance-phase req-phase)
                                        #:run-phase run-phase
+                                       #:skip-run? skip-run?
                                        #:otherwise-available? otherwise-available?
                                        #:seen (hash-set seen mpi #t))))
     
@@ -271,7 +280,8 @@
       (for ([phase-level (in-range (module-max-phase-level m) (sub1 (module-min-phase-level m)) -1)])
         (define phase (phase+ phase-level phase-shift))
         (cond
-         [(eqv? phase run-phase)
+         [(and (not skip-run?)
+               (eqv? phase run-phase))
           ;; This is the phase to make sure that we've run
           (unless (eq? 'started (hash-ref (module-instance-phase-level-to-state mi) phase-level #f))
             (hash-set! (module-instance-phase-level-to-state mi) phase-level 'started)
@@ -281,7 +291,7 @@
               (define p-ns (namespace->namespace-at-phase m-ns phase))
               ((module-instantiate m) p-ns phase-shift phase-level mpi bulk-binding-registry)))]
          [(and otherwise-available?
-               (not (negative? phase))
+               (not (negative? run-phase))
                (not (hash-ref (module-instance-phase-level-to-state mi) phase-level #f)))
           ;; This is a phase to merely make available
           (hash-update! (namespace-available-module-instances ns)
@@ -293,9 +303,10 @@
     (when otherwise-available?
       (set-module-instance-made-available?! mi #t))
 
-    ;; In case there's no such phase for this module instance, claim 'started
-    ;; to short-circuit future attempts:
-    (hash-set! (module-instance-phase-level-to-state mi) run-phase-level 'started)))
+    (unless skip-run?
+      ;; In case there's no such phase for this module instance, claim 'started
+      ;; to short-circuit future attempts:
+      (hash-set! (module-instance-phase-level-to-state mi) run-phase-level 'started))))
 
 (define (namespace-visit-available-modules! ns [run-phase (namespace-phase ns)])
   (namespace-run-available-modules! ns (add1 run-phase)))
@@ -306,14 +317,13 @@
     (unless (null? mis)
       (hash-set! (namespace-available-module-instances ns) run-phase null)
       (for ([mi (in-list (reverse mis))])
-        (run-module-instance! mi ns #:run-phase run-phase #:otherwise-available? #f))
+        (run-module-instance! mi ns #:run-phase run-phase #:skip-run? #f #:otherwise-available? #f))
       ;; In case instantiation added more reflectively:
       (loop))))
 
 (define (namespace-primitive-module-visit! ns name)
   (define mi (hash-ref (namespace-module-instances ns) (make-resolved-module-path name)))
-  (run-module-instance! mi ns #:run-phase 1
-                        #:otherwise-available? #t))
+  (run-module-instance! mi ns #:run-phase 1 #:skip-run? #f #:otherwise-available? #t))
 
 ;; ----------------------------------------
 

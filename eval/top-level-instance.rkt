@@ -30,6 +30,7 @@
  (lambda (stx ns)
    (define reqs (cdr (syntax->list stx)))
    (parse-and-perform-requires! #:run? #t
+                                #:visit? #f
                                 reqs
                                 #f ; no syntax errors should happen
                                 #f ; no enclosing module

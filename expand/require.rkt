@@ -27,6 +27,7 @@
                                      requires+provides
                                      #:run-phase [run-phase (namespace-phase m-ns)]
                                      #:run? [run? #f]
+                                     #:visit? [visit? #t]
                                      #:declared-submodule-names [declared-submodule-names #hasheq()])
   (let loop ([reqs reqs]
              [top-req #f]
@@ -154,6 +155,7 @@
                            just-meta adjust
                            requires+provides
                            #:run? run?
+                           #:visit? visit?
                            #:declared-submodule-names declared-submodule-names)]))))
 
 (define (ids->sym-set ids)
@@ -179,6 +181,7 @@
                           #:phase-shift phase-shift #:run-phase run-phase
                           just-meta adjust
                           requires+provides
+                          #:visit? [visit? #t]
                           #:run? [run? #f]
                           #:can-shadow? [can-shadow? #f]
                           #:declared-submodule-names [declared-submodule-names #hasheq()])
@@ -244,9 +247,13 @@
                                              s bind-phase binding
                                              #:can-shadow? can-shadow?))
               adjusted-sym))
-  (namespace-module-visit! m-ns interned-mpi phase-shift #:visit-phase run-phase)
+  (when visit?
+    (namespace-module-visit! m-ns interned-mpi phase-shift #:visit-phase run-phase))
   (when run?
     (namespace-module-instantiate! m-ns interned-mpi phase-shift #:run-phase run-phase))
+  (when (not (or visit? run?))
+    ;; make the module available:
+    (namespace-module-make-available! m-ns interned-mpi phase-shift #:visit-phase run-phase))
   ;; check that we covered all expected ids:
   (define need-syms (cond
                     [(adjust-only? adjust)

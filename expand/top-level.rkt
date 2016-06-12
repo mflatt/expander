@@ -54,6 +54,7 @@
                                   (add-scope req sc))
                                 s
                                 #f ; no enclosing module
+                                #:visit? #f
                                 (expand-context-namespace ctx)
                                 (expand-context-phase ctx)
                                 (make-requires+provides #f))
