@@ -39,13 +39,15 @@
   (define todo (make-hasheq)) ; module name -> phase -> namespace
   
   (define initial-phase phase) ; phase to attach instances
+  
+  (define missing (gensym 'missing))
 
   (let loop ([mpi (module-path-index-join mod-path #f)]
              [phase phase])
     (define mod-name (parameterize ([current-namespace src-namespace])
                        (module-path-index-resolve mpi)))
     
-    (unless (hash-ref (hash-ref todo mod-name #hasheqv()) phase #f)
+    (when (eq? missing (hash-ref (hash-ref todo mod-name #hasheqv()) phase missing))
       (define m (namespace->module src-namespace mod-name))
       (unless m
         (raise-arguments-error who
@@ -60,7 +62,7 @@
 
       (define-values (m-ns already?)
         (cond
-         [attach-instances?
+         [(and attach-instances? (eqv? phase initial-phase))
           (define m-ns (namespace->module-namespace src-namespace mod-name phase))
           (unless m-ns
             (raise-arguments-error who
@@ -77,7 +79,7 @@
 
           (values m-ns (and already-m-ns #t))]
          [else
-          (values #t (and already-m #t))]))
+          (values #f (and already-m #t))]))
 
       (hash-update! todo mod-name (lambda (ht) (hash-set ht phase m-ns)) #hasheqv())
       
@@ -91,11 +93,10 @@
 
   (parameterize ([current-namespace dest-namespace]) ; for resolver notifications
     (for* ([(mod-name phases) (in-hash todo)]
-           [(phase ns) (in-hash phases)])
+           [(phase m-ns) (in-hash phases)])
       (define m (namespace->module src-namespace mod-name))
       (declare-module! dest-namespace m mod-name)
-      (when attach-instances?
-        (define m-ns (namespace->module-namespace src-namespace mod-name phase))
+      (when m-ns
         (namespace->module-namespace dest-namespace mod-name phase
                                      #:install!-namespace m-ns
                                      #:add-as-cross-phase-persistent? (module-cross-phase-persistent? m))))))
