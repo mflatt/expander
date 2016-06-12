@@ -52,7 +52,7 @@
                                [v (in-value (hash-ref h (encode-linklet-directory-key phase-level) #f))]
                                #:when v)
                      (values phase-level (eval-linklet v))))
-  (define root-ctx-linklet (eval-linklet (hash-ref h #".root-ctx")))
+  (define syntax-literals-linklet (eval-linklet (hash-ref h #".stx")))
    
   (define m (make-module original-self
                          (decl 'requires)
@@ -61,10 +61,11 @@
                          min-phase
                          max-phase
                          #:cross-phase-persistent? (decl 'cross-phase-persistent?)
-                         (lambda (ns phase-shift phase-level self bulk-binding-registry)
-                           (init-root-expand-context! ns 
-                                                      root-ctx-linklet data-instance
-                                                      phase-shift original-self self bulk-binding-registry)
+                         (lambda (data-box ns phase-shift phase-level self bulk-binding-registry)
+                           (define syntax-literals-instance
+                             (init-syntax-literals! data-box ns
+                                                    syntax-literals-linklet data-instance
+                                                    phase-shift original-self self bulk-binding-registry))
                            (define cu (hash-ref evaled-h phase-level #f))
                            (when cu
                              (define imports
@@ -84,8 +85,8 @@
                                 #:set-transformer! (lambda (name val)
                                                      (namespace-set-transformer! ns (sub1 phase-level) name val))))
                              (define (instantiate-body)
-                               (instantiate-linklet cu (list* deserialize-instance
-                                                              data-instance
+                               (instantiate-linklet cu (list* data-instance
+                                                              syntax-literals-instance
                                                               inst
                                                               imports)
                                                     (namespace->instance ns phase-level)))
@@ -110,10 +111,10 @@
 
 ;; ----------------------------------------
 
-(define (init-root-expand-context! ns
-                                   root-ctx-linklet data-instance
-                                   phase-shift original-self self bulk-binding-registry)
-  (unless (namespace-get-root-expand-ctx ns)
+(define (init-syntax-literals! data-box ns
+                               syntax-literals-linklet data-instance
+                               phase-shift original-self self bulk-binding-registry)
+  (unless (unbox data-box)
     (define inst
       (make-instance-instance
        #:namespace ns
@@ -123,14 +124,19 @@
        #:set-transformer! (lambda (name val) (error "shouldn't get here for the root-ctx linklet"))))
     
     (define root-ctx-instance
-      (instantiate-linklet root-ctx-linklet (list deserialize-instance
-                                                  data-instance
-                                                  inst)))
+      (instantiate-linklet syntax-literals-linklet
+                           (list deserialize-instance
+                                 data-instance
+                                 inst)))
+    
+    (set-box! data-box root-ctx-instance)
 
     (define encoded-root-expand-ctx (instance-variable-value root-ctx-instance
                                                              'encoded-root-expand-ctx))
 
-    (namespace-set-root-expand-ctx! ns (root-expand-context-decode-for-module encoded-root-expand-ctx))))
+    (namespace-set-root-expand-ctx! ns (root-expand-context-decode-for-module encoded-root-expand-ctx)))
+  
+  (unbox data-box))
 
 ;; ----------------------------------------
 

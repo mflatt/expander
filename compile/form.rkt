@@ -72,7 +72,7 @@
 
   ;; Register root-expand-context, if any, encoded as a syntax object
   (define encoded-root-expand-header
-    (let ([h (find-or-create-header! 'root-ctx) ])
+    (let ([h (find-or-create-header! 'root-ctx)])
       (add-syntax-literal! h encoded-root-expand-ctx)
       h))
 
@@ -196,26 +196,16 @@
     (for/hash ([phase (in-list phases-in-order)])
       (define bodys (hash-ref phase-to-body phase))
       (define li (hash-ref phase-to-link-info phase))
-      (define embed-syntax-literals? (compile-context-lazy-syntax-literals? cctx))
-      (define syntax-literals (and embed-syntax-literals?
-                                   (header-syntax-literals (hash-ref phase-to-header phase))))
       (define binding-sym-to-define-sym
         (header-binding-sym-to-define-sym (hash-ref phase-to-header phase)))
       (values
        (encode-linklet-directory-key phase)
        (compile-linklet
         `(linklet
-          #:import (,@(if embed-syntax-literals?
-                          ;; For modules, put syntax literal deserialization in the
-                          ;; module, using a `declaration` import to hold deserialization
-                          ;; results for sharing across module instances
-                          `([deserialize ,@(if (empty-syntax-literals? syntax-literals)
-                                               null
-                                               deserialize-imports)]
-                            [data (mpi-vector ,mpi-vector-id)
-                                  (deserialized-syntax ,deserialized-syntax-id)])
-                          ;; For top-level forms, import values that may or may not have
-                          ;; been serialized and (eagerly) deserialized
+          #:import (,@(if (compile-context-module-self cctx)
+                          `([data (mpi-vector ,mpi-vector-id)]
+                            [syntax-literals (syntax-literalss ,syntax-literalss-id)
+                                             (get-syntax-literal! ,get-syntax-literal!-id)])
                           `([top-level (top-level-bind! ,top-level-bind!-id)
                                        (top-level-require! ,top-level-require!-id)]
                             [link (mpi-vector ,mpi-vector-id)
@@ -230,9 +220,6 @@
                     ,@(if (eqv? phase phase-in-body-thunk)
                           `([,body-thunk-id body-thunk])
                           null))
-          ,@(if embed-syntax-literals?
-                (generate-lazy-syntax-literals! syntax-literals mpis phase self)
-                null)
           ,@(if (eqv? phase phase-in-body-thunk)
                 `[(define-values (,body-thunk-id)
                     (lambda () (begin (void) ,@(reverse bodys))))]

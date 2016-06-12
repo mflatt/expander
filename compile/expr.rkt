@@ -192,6 +192,6 @@
   (define pos (add-syntax-literal! (compile-context-header cctx) q))
   (cond
    [(compile-context-lazy-syntax-literals? cctx)
-    (generate-lazy-syntax-literal-lookup pos)]
+    (generate-lazy-syntax-literal-lookup phase pos)]
    [else
     (generate-eager-syntax-literal-lookup phase pos)]))

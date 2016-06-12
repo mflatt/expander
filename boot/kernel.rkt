@@ -59,7 +59,7 @@
                              (values sym
                                      (make-module-binding mpi 0 sym))))
                 0 0
-                (lambda (ns phase-shift phase-level self bulk-binding-registry)
+                (lambda (data-box ns phase-shift phase-level self bulk-binding-registry)
                   (when (= 0 phase-level)
                     (for ([(sym val) (in-hash ht)])
                       (namespace-set-variable! ns 0 sym val)))))

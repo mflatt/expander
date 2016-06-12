@@ -64,10 +64,11 @@
                          module                        ; can be #f for the module being expanded
                          [shifted-requires #:mutable]  ; computed on demand; shifted from `module-requires`
                          phase-level-to-state          ; phase-level -> #f, 'available, or 'started
-                         [made-available? #:mutable])) ; no #f in `phase-level-to-state`?
+                         [made-available? #:mutable]   ; no #f in `phase-level-to-state`?
+                         data-box))                    ; for use by module implementation
 
 (define (make-module-instance m-ns m)
-  (module-instance m-ns m #f (make-hasheqv) #f))
+  (module-instance m-ns m #f (make-hasheqv) #f (box #f)))
 
 ;; ----------------------------------------
 
@@ -283,7 +284,8 @@
             (unless (definitions-instantiated? defs)
               (set-definitions-instantiated?! defs #t)
               (define p-ns (namespace->namespace-at-phase m-ns phase))
-              ((module-instantiate m) p-ns phase-shift phase-level mpi bulk-binding-registry)))]
+              (define go (module-instantiate m))
+              (go (module-instance-data-box mi) p-ns phase-shift phase-level mpi bulk-binding-registry)))]
          [(and otherwise-available?
                (not (negative? run-phase))
                (not (hash-ref (module-instance-phase-level-to-state mi) phase-level #f)))

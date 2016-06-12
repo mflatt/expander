@@ -65,41 +65,47 @@
   (null? (unbox syntax-literals)))
 
 ;; Generate on-demand deserialization (shared across instances) and
-;; shifting (not shared) for a particular phase of syntax literals;
-;; the result defines `syntax-literals-id` and `get-syntax-literals!-id`
-(define (generate-lazy-syntax-literals! syntax-literals-box mpis phase self)
-  (define syntax-literals (unbox syntax-literals-box))
-  (define len (length syntax-literals))
+;; shifting (not shared);
+;; the result defines `syntax-literals-id` and `get-syntax-literal!-id`
+(define (generate-lazy-syntax-literals! syntax-literals-boxes mpis self)
+  (define syntax-literalss (map unbox syntax-literals-boxes))
   (cond
-   [(zero? len) null]
+   [(andmap null? syntax-literalss)
+    null]
    [else
-    `((define-values (,syntax-literals-id) (make-vector ,len #f))
+    `((define-values (,syntax-literalss-id)
+        (vector ,@(for/list ([syntax-literals (in-list syntax-literalss)])
+                    `(make-vector ,(length syntax-literals) #f))))
       (define-values (,get-syntax-literal!-id)
-        (lambda (pos)
+        (lambda (phase pos)
           (begin
-            (if (vector-ref ,deserialized-syntax-id ,phase)
+            (if (vector-ref ,deserialized-syntax-id phase)
                 (void)
-                (vector-set! ,deserialized-syntax-id
-                             ,phase
-                             ,(generate-deserialize (vector->immutable-vector
-                                                     (list->vector (reverse syntax-literals)))
-                                                    mpis)))
+                (vector-copy! ,deserialized-syntax-id
+                              '0
+                              ,(generate-deserialize (vector->immutable-vector
+                                                      (list->vector
+                                                       (map
+                                                        vector->immutable-vector
+                                                        (map list->vector
+                                                             (map reverse syntax-literalss)))))
+                                                     mpis)))
             (let-values ([(stx)
                           (syntax-module-path-index-shift
                            (syntax-shift-phase-level
-                            (vector-ref (vector-ref ,deserialized-syntax-id ,phase) pos)
+                            (vector-ref (vector-ref ,deserialized-syntax-id phase) pos)
                             ,phase-shift-id)
                            ,(add-module-path-index! mpis self)
                            ,self-id)])
               (begin
-                (vector-set! ,syntax-literals-id pos stx)
+                (vector-set! (vector-ref ,syntax-literalss-id phase) pos stx)
                 stx))))))]))
 
-(define (generate-lazy-syntax-literal-lookup pos)
-  `(let-values ([(stx) (vector-ref ,syntax-literals-id ,pos)])
+(define (generate-lazy-syntax-literal-lookup phase pos)
+  `(let-values ([(stx) ,(generate-eager-syntax-literal-lookup phase pos)])
     (if stx
         stx
-        (,get-syntax-literal!-id ',pos))))
+        (,get-syntax-literal!-id ',phase ',pos))))
 
 ;; Generate immediate deserializartion and shifting of a set of syntax
 ;; objects across multiple phases; the result is an expression for a

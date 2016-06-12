@@ -83,6 +83,11 @@
                                               #f]
                                              [else #f]))))
   
+  (define all-syntax-literalss
+    (if root-ctx-syntax-literals
+        (append syntax-literalss (list root-ctx-syntax-literals))
+        syntax-literalss))
+  
   ;; Compile submodules; each list is (cons linklet-directory-key compiled-in-memory)
   (define pre-submodules (compile-submodules 'module
                                              #:bodys bodys
@@ -120,8 +125,7 @@
     (compile-linklet
      `(linklet
        #:import ([deserialize ,@deserialize-imports]
-                 [data (mpi-vector ,mpi-vector-id)
-                       deserialized-syntax])
+                 [data (mpi-vector ,mpi-vector-id)])
        #:export (self-mpi
                  default-name
                  root-module-name
@@ -138,21 +142,29 @@
                  language-info)
        ,@declaration-body)))
   
-  ;; Assemble a linklet that deserializes an encoding of the root
-  ;; expand context, so that `module->namespace` can have the same
-  ;; scopes as literal syntax objects in the module
-  (define root-ctx-linklet
+  ;; Assemble a linklet that deserializes syntax objects on demand.
+  ;; Include an encoding of the root expand context, if any, so that
+  ;; `module->namespace` can have the same scopes as literal syntax
+  ;; objects in the module.
+  (define syntax-literals-linklet
     (compile-linklet
      `(linklet
        #:import ([deserialize ,@deserialize-imports]
                  [data (mpi-vector ,mpi-vector-id)
                        (deserialized-syntax ,deserialized-syntax-id)]
                  [instance ,@instance-imports])
-       #:export (encoded-root-expand-ctx)
-       ,@(generate-lazy-syntax-literals! root-ctx-syntax-literals mpis (add1 max-phase) self)
-       (define-values (encoded-root-expand-ctx) ,(generate-lazy-syntax-literal-lookup 0)))))
+       #:export ([,syntax-literalss-id syntax-literalss]
+                 [,get-syntax-literal!-id get-syntax-literal!]
+                 ,@(if root-ctx-syntax-literals
+                       `(encoded-root-expand-ctx)
+                       null))
+       ,@(generate-lazy-syntax-literals! all-syntax-literalss mpis self)
+       ,@(if root-ctx-syntax-literals
+             `((define-values (encoded-root-expand-ctx)
+                 ,(generate-lazy-syntax-literal-lookup (add1 max-phase) 0)))
+             null))))
 
-  ;; The data linklet houses serialized data for use by the
+  ;; The data linklet houses deserialized data for use by the
   ;; declaration and module-body linklets. In the case of syntax
   ;; objects, it provides a shared vector for all instances, while
   ;; the unmarshaling of data is left to each body.
@@ -173,8 +185,8 @@
      (for/fold ([ht (hash-set (hash-set (hash-set body-linklets #".decl" declaration-linklet)
                                         #".data"
                                         data-linklet)
-                              #".root-ctx"
-                              root-ctx-linklet)])
+                              #".stx"
+                              syntax-literals-linklet)])
                ([sm (in-list (append pre-submodules post-submodules))])
        (hash-set ht
                  (encode-linklet-directory-key (car sm))
@@ -186,10 +198,7 @@
                       max-phase
                       phase-to-link-module-uses
                       (mpis-as-vector mpis)
-                      (syntax-literals-as-vectors (if root-ctx-syntax-literals
-                                                      (append syntax-literalss (list root-ctx-syntax-literals))
-                                                      syntax-literalss)
-                                                  0)
+                      (syntax-literals-as-vectors all-syntax-literalss 0)
                       (map cdr pre-submodules)
                       (map cdr post-submodules)))
 
