@@ -34,9 +34,7 @@
          
          namespace-mapped-symbols
 
-         namespace-base-phase
-
-         module-declared?)
+         namespace-base-phase)
 
 (define (make-empty-namespace)
   (define current-ns (current-namespace))
@@ -200,21 +198,3 @@
 (define (namespace-base-phase [ns (current-namespace)])
   (check 'namespace-base-phase namespace? ns)
   (namespace-phase ns))
-
-(define (module-declared? mod [load? #f])
-  (unless (or (module-path? mod)
-              (module-path-index? mod)
-              (resolved-module-path? mod))
-    (raise-argument-error 'module-declared? 
-                          "(or/c module-path? module-path-index? resolved-module-path?)"
-                          mod))
-  (define ns (current-namespace))
-  (cond
-   [(resolved-module-path? mod)
-    (and (namespace->module ns mod) #t)]
-   [else
-    (define mpi (if (module-path-index? mod)
-                    mod
-                    (module-path-index-join mod #f)))
-    (define name (module-path-index-resolve mpi #t))
-    (and (namespace->module ns name) #t)]))

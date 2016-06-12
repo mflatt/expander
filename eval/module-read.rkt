@@ -1,6 +1,7 @@
 #lang racket/base
 (require "../syntax/checked-syntax.rkt"
          "eval.rkt"
+         "compiled-reflect.rkt"
          "../namespace/eval.rkt")
 
 (provide with-module-reading-parameterization

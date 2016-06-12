@@ -38,6 +38,7 @@
                                (syntax-e (m 'name))))
   (define requires (syntax-property s 'module-requires))
   (define provides (syntax-property s 'module-provides))
+  (define language-info (filter-language-info (syntax-property s 'module-language)))
   (define bodys (m 'body))
 
   (define mpis (make-module-path-index-table))
@@ -107,7 +108,8 @@
       (define-values (max-phase) ,max-phase)
       (define-values (phase-to-link-modules) ,phase-to-link-module-uses-expr)
       (define-values (pre-submodules) ',(map car pre-submodules))
-      (define-values (post-submodules) ',(map car post-submodules))))
+      (define-values (post-submodules) ',(map car post-submodules))
+      (define-values (language-info) ',language-info)))
   
   ;; Assemble the declaration linking unit, which is instanted
   ;; once for a module declaration and shared among instances
@@ -129,7 +131,8 @@
                  max-phase
                  phase-to-link-modules
                  pre-submodules
-                 post-submodules)
+                 post-submodules
+                 language-info)
        ,@declaration-body)))
   
   ;; The data linklet houses serialized data for use by the
@@ -203,3 +206,12 @@
                   (loop (cdr bodys) phase))]
          [else
           (loop (cdr bodys) phase)])]))]))
+
+;; ----------------------------------------
+
+(define (filter-language-info li)
+  (and (vector? li)
+       (= 3 (vector-length li))
+       (module-path? (vector-ref li 0))
+       (symbol? (vector-ref li 1))
+       li))

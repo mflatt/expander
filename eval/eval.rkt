@@ -17,13 +17,12 @@
          "../syntax/bulk-binding.rkt"
          "../common/contract.rkt"
          "../namespace/eval.rkt"
-         "../expand/lift-context.rkt")
+         "../expand/lift-context.rkt"
+         "compiled-reflect.rkt")
 
 (provide eval
          compile
-         expand
-
-         compiled-module-expression?)
+         expand)
 
 ;; This `eval` is suitable as an eval handler that will be called by
 ;; the `eval` and `eval-syntax` of '#%kernel
@@ -49,13 +48,6 @@
     (eval-module c #:namespace ns)]
    [else
     (eval-top c ns eval-compiled)]))
-
-(define (compiled-module-expression? c)
-  (define ld (if (compiled-in-memory? c)
-                 (compiled-in-memory-linklet-directory c)
-                 c))
-  (and (linklet-directory? ld)
-       (hash-ref (linklet-directory->hash ld) #".decl" #f)))
 
 ;; This `compile` is suitable as a compile handler that will be called
 ;; by the `compile` and `compile-syntax` of '#%kernel

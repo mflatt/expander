@@ -1,10 +1,12 @@
 #lang racket/base
 (require "../eval/eval.rkt"
          "../eval/dynamic-require.rkt"
+         "../eval/compiled-reflect.rkt"
          (prefix-in wrapper: "../eval/main.rkt")
          "../namespace/namespace.rkt"
          "../namespace/eval.rkt"
-         "../namespace/attach.rkt")
+         "../namespace/attach.rkt"
+         "../namespace/module-reflect.rkt")
 
 (provide main-primitives)
 
@@ -17,7 +19,10 @@
           'expand-syntax wrapper:expand-syntax
           'dynamic-require dynamic-require
 
+          'compiled-expression? compiled-expression?
           'compiled-module-expression? compiled-module-expression?
+          'module-compiled-name module-compiled-name
+          'module-compiled-language-info module-compiled-language-info
 
           'make-empty-namespace make-empty-namespace
 
@@ -37,5 +42,6 @@
           'namespace-mapped-symbols namespace-mapped-symbols 
           'namespace-base-phase namespace-base-phase          
           
-          'module-declared? module-declared?))
+          'module-declared? module-declared?
+          'module->language-info module->language-info))
 

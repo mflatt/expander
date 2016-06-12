@@ -6,6 +6,7 @@
          "namespace/eval.rkt"
          (prefix-in wrapper: "eval/main.rkt")
          "namespace/attach.rkt"
+         "namespace/module-reflect.rkt"
          "namespace/core.rkt"
          "boot/kernel.rkt"
          "boot/main-primitive.rkt"

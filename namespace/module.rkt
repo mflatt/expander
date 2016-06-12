@@ -30,11 +30,15 @@
 
          namespace-module-use->instance)
 
+(module+ for-module-reflect
+  (provide (struct-out module)))
+
 ;; ----------------------------------------
 
 (struct module (self            ; module path index used for a self reference
                 requires        ; list of (cons phase list-of-module-path-index)
                 provides        ; phase-level -> sym -> binding
+                language-info   ; #f or vector
                 min-phase-level ; phase-level
                 max-phase-level ; phase-level
                 ;; expected to be consistent with provides and {min,max}-phase-level:
@@ -46,10 +50,11 @@
 (define (make-module self requires provides
                      min-phase-level max-phase-level
                      instantiate
+                     #:language-info [language-info #f]
                      #:primitive? [primitive? #f]
                      #:cross-phase-persistent? [cross-phase-persistent? primitive?]
                      #:root-expand-ctx [root-expand-ctx (make-root-expand-context)])
-  (module self requires provides
+  (module self requires provides language-info
           min-phase-level max-phase-level
           instantiate
           primitive?

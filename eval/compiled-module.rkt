@@ -7,33 +7,20 @@
          "../compile/serialize.rkt"
          "../host/linklet.rkt"
          "../compile/instance.rkt"
-         (only-in "compiled-top.rkt" eval-linklets)
          "../compile/compiled-in-memory.rkt"
          "../expand/context.rkt")
 
-;; Run a reprsentation of top-level code as produced by `compile-module`;
+;; Run a representation of top-level code as produced by `compile-module`;
 ;; see "compile.rkt" and "compile-module.rkt"
 
-(provide eval-module)
+(provide eval-module
+         compiled-module->declaration-instance)
 
 (define (eval-module c
                      #:namespace [ns (current-namespace)]
                      #:as-submodule? [as-submodule? #f])
-  (define ld (if (compiled-in-memory? c)
-                 (compiled-in-memory-linklet-directory c)
-                 c))
-  (define h (eval-linklets (linklet-directory->hash ld)))
-
-  (define data-instance
-    (if (compiled-in-memory? c)
-        (make-data-instance-from-compiled-in-memory c)
-        (instantiate-linklet (hash-ref h #".data")
-                             (list deserialize-instance))))
-
-  (define declaration-instance
-    (instantiate-linklet (hash-ref h #".decl")
-                         (list deserialize-instance
-                               data-instance)))
+  (define-values (h data-instance declaration-instance)
+    (compiled-module->h+data-instance+declaration-instance c))
   
   (define (decl key)
     (instance-variable-value declaration-instance key))
@@ -55,14 +42,23 @@
   (define root-module-name (instance-variable-value declaration-instance 'root-module-name))
   
   (define original-self (decl 'self-mpi))
+  
+  (define min-phase (decl 'min-phase))
+  (define max-phase (decl 'max-phase))
+  (define evaled-h (for*/hash ([phase-level (in-range min-phase (add1 max-phase))]
+                               [v (in-value (hash-ref h (encode-linklet-directory-key phase-level) #f))]
+                               #:when v)
+                     (values phase-level (eval-linklet v))))
+                     
    
   (define m (make-module original-self
                          (decl 'requires)
                          (decl 'provides)
-                         (decl 'min-phase)
-                         (decl 'max-phase)
+                         #:language-info (decl 'language-info)
+                         min-phase
+                         max-phase
                          (lambda (ns phase-shift phase-level self bulk-binding-registry)
-                           (define cu (hash-ref h (encode-linklet-directory-key phase-level) #f))
+                           (define cu (hash-ref evaled-h phase-level #f))
                            (when cu
                              (define imports
                                (for/list ([mu (in-list (hash-ref (decl 'phase-to-link-modules) phase-level))])
@@ -105,6 +101,32 @@
 
   (unless as-submodule?
     (declare-submodules (decl 'post-submodules) #f)))
+
+;; ----------------------------------------
+
+(define (compiled-module->h+data-instance+declaration-instance c)
+  (define ld (if (compiled-in-memory? c)
+                 (compiled-in-memory-linklet-directory c)
+                 c))
+  (define h (linklet-directory->hash ld))
+
+  (define data-instance
+    (if (compiled-in-memory? c)
+        (make-data-instance-from-compiled-in-memory c)
+        (instantiate-linklet (eval-linklet (hash-ref h #".data"))
+                             (list deserialize-instance))))
+
+  (define declaration-instance
+    (instantiate-linklet (eval-linklet (hash-ref h #".decl"))
+                         (list deserialize-instance
+                               data-instance)))
+  
+  (values h data-instance declaration-instance))
+
+(define (compiled-module->declaration-instance c)
+  (define-values (h data-instance declaration-instance)
+    (compiled-module->h+data-instance+declaration-instance c))
+  declaration-instance)
 
 ;; ----------------------------------------
 

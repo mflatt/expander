@@ -10,11 +10,10 @@
          "../compile/compiled-in-memory.rkt"
          "top-level-instance.rkt")
 
-;; Run a reprsentation of top-level code as produced by `compile-top`;
+;; Run a representation of top-level code as produced by `compile-top`;
 ;; see "compile.rkt" and "compile-top.rkt"
 
-(provide eval-top
-         eval-linklets)
+(provide eval-top)
 
 (define (eval-top c ns [eval-compiled eval-top])
   (define ld (if (compiled-in-memory? c)
@@ -53,11 +52,11 @@
   (define ld (if (compiled-in-memory? c)
                  (compiled-in-memory-linklet-directory c)
                  c))
-  (define h (eval-linklets (linklet-directory->hash ld)))
+  (define h (linklet-directory->hash ld))
   (define link-instance
     (if (compiled-in-memory? c)
         (link-instance-from-compiled-in-memory c)
-        (instantiate-linklet (hash-ref h #".link")
+        (instantiate-linklet (eval-linklet (hash-ref h #".link"))
                              (list deserialize-instance
                                    (make-eager-instance-instance
                                     #:namespace ns
@@ -95,7 +94,7 @@
                                                                     val))))
 
      (define linklet
-       (hash-ref h (encode-linklet-directory-key phase) #f))
+       (eval-linklet (hash-ref h (encode-linklet-directory-key phase) #f)))
      
      (cond
       [linklet
@@ -133,12 +132,3 @@
   (instance-set-variable-value! link-instance 'syntax-literalss
                                 (compiled-in-memory-syntax-literalss cim))
   link-instance)
-
-;; ----------------------------------------
-
-(define (eval-linklets h)
-  (for/hash ([(name v) (in-hash h)])
-    (values name
-            (if (linklet-directory? v)
-                v
-                (eval-linklet v)))))
