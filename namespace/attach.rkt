@@ -97,6 +97,5 @@
       (define m (namespace->module src-namespace mod-name))
       (declare-module! dest-namespace m mod-name)
       (when m-ns
-        (namespace->module-namespace dest-namespace mod-name phase
-                                     #:install!-namespace m-ns
-                                     #:add-as-cross-phase-persistent? (module-cross-phase-persistent? m))))))
+        (or (namespace->module-namespace dest-namespace mod-name phase)
+            (namespace-install-module-namespace! dest-namespace mod-name phase m m-ns))))))

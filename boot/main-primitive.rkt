@@ -43,5 +43,6 @@
           'namespace-base-phase namespace-base-phase          
           
           'module-declared? module-declared?
-          'module->language-info module->language-info))
+          'module->language-info module->language-info
+          'module->namespace module->namespace))
 

@@ -39,7 +39,8 @@
                   max-phase
                   phase-to-link-module-uses
                   phase-to-link-module-uses-expr
-                  syntax-literalss)
+                  syntax-literalss
+                  no-root-context-syntax-literals)
     (compile-forms (list s) cctx mpis
                    #:phase-in-body-thunk phase
                    #:other-form-callback compile-top-level-require))

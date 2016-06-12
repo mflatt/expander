@@ -45,7 +45,9 @@
          deserialize-representative-scope-fill!
          deserialize-multi-scope
          deserialize-shifted-multi-scope
-         deserialize-bulk-binding-at)
+         deserialize-bulk-binding-at
+         
+         generalize-scope)
 
 (module+ for-debug
   (provide (struct-out scope)
@@ -225,15 +227,12 @@
   (make-struct-type-property 'bulk-binding))
 
 ;; Value of `prop:bulk-binding`
-(struct bulk-binding-class (get-symbols ; bulk-binding syntax -> sym -> binding-info
+(struct bulk-binding-class (get-symbols ; bulk-binding list-of-shift -> sym -> binding-info
                             create))    ; bul-binding -> binding-info sym -> binding
-(define (bulk-binding-symbols b s bulk-binding-registry extra-shifts)
-  ;; Providing the identifier `s` supports access to the bulk-binding
-  ;; registry and module path index shifts for unmarshaling, but `s`
-  ;; can be #f if the bulk binding was just created
+(define (bulk-binding-symbols b s extra-shifts)
+  ;; Providing the identifier `s` supports its shifts
   ((bulk-binding-class-get-symbols (bulk-binding-ref b))
    b 
-   (or bulk-binding-registry (and s (syntax-bulk-binding-registry s)))
    (append extra-shifts (if s (syntax-mpi-shifts s) null))))
 (define (bulk-binding-create b)
   (bulk-binding-class-create (bulk-binding-ref b)))
@@ -589,7 +588,6 @@
                  #:ambiguous-value [ambiguous-value #f]
                  #:exactly? [exactly? #f]
                  ;; For resolving bulk bindings in `free-identifier=?` chains:
-                 #:bulk-binding-registry [bulk-binding-registry #f]
                  #:extra-shifts [extra-shifts null])
   (unless (identifier? s)
     (raise-argument-error 'resolve "identifier?" s))
@@ -609,10 +607,7 @@
                                (for*/fold ([bindings bindings])
                                           ([bulk-at (in-list (scope-bulk-bindings sc))]
                                            [bulk (in-value (bulk-binding-at-bulk bulk-at))]
-                                           [syms (in-value
-                                                  (bulk-binding-symbols bulk s
-                                                                        bulk-binding-registry
-                                                                        extra-shifts))]
+                                           [syms (in-value (bulk-binding-symbols bulk s extra-shifts))]
                                            [b-info (in-value (hash-ref syms sym #f))]
                                            #:when (and b-info
                                                        (not (hash-ref bindings (bulk-binding-at-scopes bulk-at) #f))))
@@ -651,7 +646,7 @@
 ;; The bindings of `bulk at `scopes` should shadow any existing
 ;; mappings in `sym-bindings`
 (define (remove-matching-bindings! sc scopes bulk)
-  (define bulk-symbols (bulk-binding-symbols bulk #f #f null))
+  (define bulk-symbols (bulk-binding-symbols bulk #f null))
   (define bindings (scope-bindings sc))
   (define new-bindings
     (cond

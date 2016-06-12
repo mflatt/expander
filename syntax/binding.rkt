@@ -120,9 +120,8 @@
 ;; Adjust `s` (recursively) so that if `resolve+shift` would
 ;;  report `form-mpi`, the same operation on the result will
 ;;  report `to-mpi`
-(define (syntax-module-path-index-shift s from-mpi to-mpi [bulk-binding-registry #f])
-  (if (and (eq? from-mpi to-mpi)
-           (not bulk-binding-registry))
+(define (syntax-module-path-index-shift s from-mpi to-mpi)
+  (if (eq? from-mpi to-mpi)
       s
       (let ([shift (cons from-mpi to-mpi)])
         (define-memo-lite (add-shift shifts)
@@ -132,9 +131,7 @@
                     (lambda (s d)
                       (struct-copy syntax s
                                    [content d]
-                                   [mpi-shifts (add-shift (syntax-mpi-shifts s))]
-                                   [bulk-binding-registry (or bulk-binding-registry
-                                                              (syntax-bulk-binding-registry s))]))
+                                   [mpi-shifts (add-shift (syntax-mpi-shifts s))]))
                     syntax-e))))
 
 ;; Use `resolve` instead of `resolve+shift` when the module of a
@@ -148,19 +145,15 @@
                        #:immediate? [immediate? exactly?]
                        #:unbound-sym? [unbound-sym? #f]
                        ;; For resolving bulk bindings in `free-identifier=?` chains:
-                       #:bulk-binding-registry [bulk-binding-registry #f]
                        #:extra-shifts [extra-shifts null])
   (define immediate-b (resolve s phase
                                #:ambiguous-value ambiguous-value
                                #:exactly? exactly?
-                               #:bulk-binding-registry bulk-binding-registry
                                #:extra-shifts extra-shifts))
   (define b (if (and immediate-b
                      (not immediate?)
                      (binding-free=id immediate-b))
                 (resolve+shift (binding-free=id immediate-b) phase
-                               #:bulk-binding-registry (or bulk-binding-registry
-                                                           (syntax-bulk-binding-registry s))
                                #:extra-shifts (append extra-shifts (syntax-mpi-shifts s))
                                #:ambiguous-value ambiguous-value
                                #:exactly? exactly?

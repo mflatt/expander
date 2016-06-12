@@ -192,9 +192,6 @@
   (define pos (add-syntax-literal! (compile-context-header cctx) q))
   (cond
    [(compile-context-lazy-syntax-literals? cctx)
-    `(let-values ([(stx) (vector-ref ,syntax-literals-id ,pos)])
-      (if stx
-          stx
-          (,get-syntax-literal!-id ',pos)))]
+    (generate-lazy-syntax-literal-lookup pos)]
    [else
-    `(vector-ref (vector-ref ,syntax-literalss-id ',phase) ',pos)]))
+    (generate-eager-syntax-literal-lookup phase pos)]))

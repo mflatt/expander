@@ -11,7 +11,9 @@
 
 (provide make-module-namespace
          raise-unknown-module-error
+
          namespace->module-namespace
+         namespace-install-module-namespace!
          
          make-module
          declare-module!
@@ -44,22 +46,19 @@
                 ;; expected to be consistent with provides and {min,max}-phase-level:
                 instantiate     ; namespace phase phase-level ->
                 primitive?      ; inline variable values in compiled code?
-                cross-phase-persistent?
-                root-expand-ctx)) ; preserve module's expand-context for `module->namespace`
+                cross-phase-persistent?))
 
 (define (make-module self requires provides
                      min-phase-level max-phase-level
                      instantiate
                      #:language-info [language-info #f]
                      #:primitive? [primitive? #f]
-                     #:cross-phase-persistent? [cross-phase-persistent? primitive?]
-                     #:root-expand-ctx [root-expand-ctx (make-root-expand-context)])
+                     #:cross-phase-persistent? [cross-phase-persistent? primitive?])
   (module self requires provides language-info
           min-phase-level max-phase-level
           instantiate
           primitive?
-          cross-phase-persistent?
-          root-expand-ctx))
+          cross-phase-persistent?))
 
 (struct module-instance (namespace
                          module                        ; can be #f for the module being expanded
@@ -131,55 +130,47 @@
 
 (define (namespace->module-instance ns name 0-phase
                                     #:install!-namespace [install!-ns #f]
-                                    #:create-mpi [create-mpi #f]
-                                    #:add-as-cross-phase-persistent? [add-as-cross-phase-persistent? #t]
                                     #:complain-on-failure? [complain-on-failure? #f])
   (or (hash-ref (namespace-module-instances ns) (cons name 0-phase) #f)
       (let ([c-ns (or (namespace-cross-phase-persistent-namespace ns) ns)])
         (hash-ref (namespace-module-instances c-ns) name #f))
       (and complain-on-failure?
-           (error "no module instance found:" name 0-phase))
-      (and install!-ns
-           (let ([m-ns (struct-copy namespace install!-ns
-                                    [phase-to-namespace (make-hasheqv)])])
-             (hash-set! (namespace-phase-to-namespace m-ns) 0-phase m-ns)
-             (define mi (make-module-instance m-ns (namespace->module ns name)))
-             (hash-set! (module-instance-phase-level-to-state mi) 0 'started)
-             (hash-set! (namespace-module-instances ns)
-                        (if add-as-cross-phase-persistent?
-                            name
-                            (cons name 0-phase))
-                        mi)
+           (error "no module instance found:" name 0-phase))))
+
+(define (namespace-install-module-namespace! ns name 0-phase m existing-m-ns)
+  (define m-ns (struct-copy namespace existing-m-ns
+                            [phase-to-namespace (make-hasheqv)]))
+  (hash-set! (namespace-phase-to-namespace m-ns) 0-phase m-ns)
+  (define mi (make-module-instance m-ns m))
+  (hash-set! (module-instance-phase-level-to-state mi) 0 'started)
+  (hash-set! (namespace-module-instances ns)
+             (if (module-cross-phase-persistent? m)
+                 name
+                 (cons name 0-phase))
              mi))
-      (and create-mpi
-           (let ([m (namespace->module ns name)])
-             (unless m
-               (error "no module declared to instantiate:" name))
-             (define m-ns (struct-copy namespace ns
-                                       [mpi create-mpi]
-                                       [root-expand-ctx (module-root-expand-ctx m)]
-                                       [phase 0-phase]
-                                       [0-phase 0-phase]
-                                       [phase-to-namespace (make-hasheqv)]
-                                       [phase-level-to-definitions (make-hasheqv)]))
-             (hash-set! (namespace-phase-to-namespace m-ns) 0-phase m-ns)
-             (define mi (make-module-instance m-ns m))
-             (hash-set! (namespace-module-instances ns)
-                        (if add-as-cross-phase-persistent?
-                            name
-                            (cons name 0-phase))
-                        mi)
-             mi))))
+
+(define (namespace-create-module-instance! ns name 0-phase m mpi)
+  (define m-ns (struct-copy namespace ns
+                            [mpi mpi]
+                            [root-expand-ctx (box #f)] ; maybe set to non-#f by running phase 0
+                            [phase 0-phase]
+                            [0-phase 0-phase]
+                            [phase-to-namespace (make-hasheqv)]
+                            [phase-level-to-definitions (make-hasheqv)]))
+  (hash-set! (namespace-phase-to-namespace m-ns) 0-phase m-ns)
+  (define mi (make-module-instance m-ns m))
+  (hash-set! (namespace-module-instances ns)
+             (if (module-cross-phase-persistent? m)
+                 name
+                 (cons name 0-phase))
+             mi)
+  mi)
 
 (define (namespace->module-namespace ns name 0-phase
-                                     #:install!-namespace [install!-ns #f]
-                                     #:add-as-cross-phase-persistent? [add-as-cross-phase-persistent? #t]
                                      #:complain-on-failure? [complain-on-failure? #f]
                                      #:check-available-at-phase-level [check-available-at-phase-level #f]
                                      #:unavailable-callback [unavailable-callback void])
   (define mi (namespace->module-instance ns name 0-phase
-                                         #:install!-namespace install!-ns
-                                         #:add-as-cross-phase-persistent? add-as-cross-phase-persistent?
                                          #:complain-on-failure? complain-on-failure?))
   (when (and mi check-available-at-phase-level)
     (check-availablilty mi check-available-at-phase-level unavailable-callback))
@@ -207,10 +198,8 @@
   (unless m (raise-unknown-module-error 'instantiate name))
   (define (instantiate! instance-phase run-phase ns)
     ;; Get or create a namespace for the module+phase combination:
-    (define mi (namespace->module-instance
-                ns name instance-phase
-                #:create-mpi mpi
-                #:add-as-cross-phase-persistent? (module-cross-phase-persistent? m)))
+    (define mi (or (namespace->module-instance ns name instance-phase)
+                   (namespace-create-module-instance! ns name instance-phase m mpi)))
     (run-module-instance! mi ns #:run-phase run-phase
                           #:skip-run? skip-run?
                           #:otherwise-available? otherwise-available?

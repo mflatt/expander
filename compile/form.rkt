@@ -27,6 +27,7 @@
 ;; linklet directory to cover all phases covered by the forms
 (define (compile-forms bodys cctx mpis
                        #:phase-in-body-thunk [phase-in-body-thunk #f] ; phase, if any, to export `body-thunk`
+                       #:encoded-root-expand-ctx [encoded-root-expand-ctx #f] ; encoded root context, if any
                        #:compiled-expression-callback [compiled-expression-callback void]
                        #:other-form-callback [other-form-callback void])
   (define phase (compile-context-phase cctx))
@@ -68,6 +69,12 @@
           [(begin-for-syntax)
            (define m (match-syntax body `(begin-for-syntax e ...)))
            (loop! (m 'e) (add1 phase) (find-or-create-header! (add1 phase)))]))))
+
+  ;; Register root-expand-context, if any, encoded as a syntax object
+  (define encoded-root-expand-header
+    (let ([h (find-or-create-header! 'root-ctx) ])
+      (add-syntax-literal! h encoded-root-expand-ctx)
+      h))
 
   ;; Compile each form in `bodys`, recording results in `phase-to-body`
   (let loop! ([bodys bodys] [phase phase] [header (find-or-create-header! phase)])
@@ -183,7 +190,7 @@
       (define-values (link-module-uses imports def-decls)
         (generate-links+imports header phase cctx))
       (values phase (link-info link-module-uses imports def-decls))))
-
+  
   ;; Generate the phase-specific linking units
   (define body-linklets
     (for/hash ([phase (in-list phases-in-order)])
@@ -254,7 +261,9 @@
           max-phase
           phase-to-link-module-uses
           phase-to-link-module-uses-expr
-          syntax-literalss))
+          syntax-literalss
+          (and encoded-root-expand-header
+               (header-syntax-literals encoded-root-expand-header))))
 
 ;; ----------------------------------------
 
@@ -270,7 +279,7 @@
   ;; The binding that we install at run time should not include
   ;; the temporary binding scope that the expander added:
   (define top-level-bind-scope (root-expand-context-top-level-bind-scope
-                                (namespace-root-expand-ctx
+                                (namespace-get-root-expand-ctx
                                  (compile-context-namespace cctx))))
   ;; For installing a binding:
   (define self-expr (add-module-path-index! mpis self))

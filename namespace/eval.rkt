@@ -50,7 +50,7 @@
 (define (namespace-syntax-introduce s [ns (current-namespace)])
   (check 'namespace-syntax-introduce syntax? s)
   (check 'namespace-syntax-introduce namespace? ns)
-  (define root-ctx (namespace-root-expand-ctx ns))
+  (define root-ctx (namespace-get-root-expand-ctx ns))
   (define post-scope (root-expand-context-post-expansion-scope root-ctx))
   (define other-namespace-scopes (for/list ([sc (in-list (root-expand-context-module-scopes root-ctx))]
                                             #:unless (equal? sc post-scope))
@@ -95,7 +95,7 @@
   (parse-and-perform-requires! #:run? #t
                                (list (add-scopes (datum->syntax #f req)
                                                  (root-expand-context-module-scopes
-                                                  (namespace-root-expand-ctx ns))))
+                                                  (namespace-get-root-expand-ctx ns))))
                                #f
                                #f ns
                                (namespace-phase ns)

@@ -43,7 +43,7 @@
                                             name))     ; #f or identifier to name the expression
 
 (define (make-expand-context ns)
-  (define root-ctx (namespace-root-expand-ctx ns))
+  (define root-ctx (namespace-get-root-expand-ctx ns))
   (expand-context (root-expand-context-module-scopes root-ctx)
                   (root-expand-context-post-expansion-scope root-ctx)
                   (root-expand-context-top-level-bind-scope root-ctx)

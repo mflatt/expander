@@ -1,9 +1,14 @@
 #lang racket/base
-(require "../syntax/syntax.rkt"
-         "../syntax/scope.rkt")
+(require "../common/set.rkt"
+         "../syntax/syntax.rkt"
+         "../syntax/scope.rkt"
+         "../common/phase.rkt")
 
 (provide (struct-out root-expand-context)
-         make-root-expand-context)
+         make-root-expand-context
+         
+         root-expand-context-encode-for-module
+         root-expand-context-decode-for-module)
 
 ;; A `root-expand-context` is a subset of `expand-context` that is
 ;; preserved from a module's expansion for later use in a namespace
@@ -35,3 +40,69 @@
                        (make-hasheqv)  ; defined-syms
                        (gensym)        ; frame-id
                        (box 0)))       ; counter
+
+
+;; ----------------------------------------
+
+;; Encode information in a syntax object that can be serialized and deserialized
+(define (root-expand-context-encode-for-module ctx)
+  (datum->syntax
+   #f
+   (vector (add-scopes empty-syntax (root-expand-context-module-scopes ctx))
+           (add-scope empty-syntax (root-expand-context-post-expansion-scope ctx))
+           (root-expand-context-all-scopes-stx ctx)
+           (add-scopes empty-syntax (unbox (root-expand-context-use-site-scopes ctx)))
+           (for/hasheqv ([(phase ht) (in-hash (root-expand-context-defined-syms ctx))]) ; make immutable
+             (values phase ht))
+           (root-expand-context-frame-id ctx)
+           (unbox (root-expand-context-counter ctx)))))
+
+;; Encode information in a syntax object that can be serialized and deserialized
+(define (root-expand-context-decode-for-module vec-s)
+  (define vec (and (syntax? vec-s) (syntax-e vec-s)))
+  (unless (and (vector? vec)
+               (= (vector-length vec) 7)
+               (syntax? (vector-ref vec 0))
+               (syntax-with-one-scope? (vector-ref vec 1))
+               (syntax? (vector-ref vec 2))
+               (syntax? (vector-ref vec 3))
+               (defined-syms-hash? (syntax-e (vector-ref vec 4)))
+               (symbol? (syntax-e (vector-ref vec 5)))
+               (exact-nonnegative-integer? (syntax-e (vector-ref vec 6))))
+    (error 'root-expand-context-decode-for-module
+           "bad encoding: ~s"
+           vec-s))
+  (root-expand-context (extract-scope-list (vector-ref vec 0)) ; module-scopes
+                       (extract-scope (vector-ref vec 1))      ; post-expansion-scope
+                       (new-scope 'module)                     ; top-level-bind-scope
+                       (vector-ref vec 2)                      ; all-scopes-stx
+                       (box (extract-scope-list (vector-ref vec 3))) ; use-site-scopes
+                       (unpack-defined-syms (vector-ref vec 4)) ; defined-syms
+                       (syntax-e (vector-ref vec 5))           ; frame-id
+                       (box (syntax-e (vector-ref vec 6)))))   ; counter
+
+(define (defined-syms-hash? v)
+  (and (for/and ([(phase ht-s) (in-hash v)])
+         (and (phase? phase)
+              (hash? (syntax-e ht-s))
+              (for/and ([(sym id) (in-hash (syntax-e ht-s))])
+                (and (symbol? sym)
+                     (identifier? id)))))))
+
+(define (extract-scope-list stx)
+  (map generalize-scope (set->list (syntax-scope-set stx 0))))
+
+(define (syntax-with-one-scope? stx)
+  (and (syntax? stx)
+       (= 1 (set-count (syntax-scope-set stx 0)))))
+
+(define (extract-scope stx)
+  (define s (syntax-scope-set stx 0))
+  (generalize-scope (set-first s)))
+
+(define (unpack-defined-syms v)
+  (hash-copy ; make mutable
+   (for/hasheqv ([(phase ht-s) (in-hash (syntax-e v))])
+     (values phase
+             (for/hash ([(sym id) (in-hash (syntax-e ht-s))])
+               (values sym id))))))

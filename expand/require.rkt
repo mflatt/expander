@@ -294,5 +294,6 @@
     ;; Add bulk binding after all filtering
     (when can-bulk?
       (add-bulk-binding! in-stx
-                         (bulk-binding provides self mpi provide-phase-level phase-shift)
+                         (bulk-binding provides self mpi provide-phase-level phase-shift
+                                       (namespace-bulk-binding-registry ns))
                          phase))))

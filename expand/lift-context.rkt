@@ -71,7 +71,7 @@
     ;; scope) so that the binding has a specific phase:
     (define post-scope
       (root-expand-context-post-expansion-scope
-       (namespace-root-expand-ctx
+       (namespace-get-root-expand-ctx
         (expand-context-namespace ctx))))
     (define tl-ids (for/list ([id (in-list ids)])
                      (add-scope id post-scope)))

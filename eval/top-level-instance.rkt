@@ -21,7 +21,7 @@
    (define phase (phase+ orig-phase phase-shift))
    (define b (make-module-binding mpi phase sym
                                   #:frame-id (root-expand-context-frame-id
-                                              (namespace-root-expand-ctx ns))))
+                                              (namespace-get-root-expand-ctx ns))))
    (add-binding! id b phase)))
 
 (instance-set-variable-value!

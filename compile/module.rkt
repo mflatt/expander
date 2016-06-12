@@ -38,6 +38,7 @@
                                (syntax-e (m 'name))))
   (define requires (syntax-property s 'module-requires))
   (define provides (syntax-property s 'module-provides))
+  (define encoded-root-expand-ctx (syntax-property s 'root-expand-context)) ; for `module->namespace`
   (define language-info (filter-language-info (syntax-property s 'module-language)))
   (define bodys (m 'body))
 
@@ -67,8 +68,10 @@
                   max-phase
                   phase-to-link-module-uses
                   phase-to-link-module-uses-expr
-                  syntax-literalss)
+                  syntax-literalss
+                  root-ctx-syntax-literals)
     (compile-forms bodys body-cctx mpis
+                   #:encoded-root-expand-ctx encoded-root-expand-ctx
                    #:compiled-expression-callback check-side-effects!
                    #:other-form-callback (lambda (body cctx)
                                            (case (core-form-sym body (compile-context-phase cctx))
@@ -79,7 +82,7 @@
                                                   (set! cross-phase-persistent? #t)))
                                               #f]
                                              [else #f]))))
-
+  
   ;; Compile submodules; each list is (cons linklet-directory-key compiled-in-memory)
   (define pre-submodules (compile-submodules 'module
                                              #:bodys bodys
@@ -110,7 +113,7 @@
       (define-values (pre-submodules) ',(map car pre-submodules))
       (define-values (post-submodules) ',(map car post-submodules))
       (define-values (language-info) ',language-info)))
-  
+
   ;; Assemble the declaration linking unit, which is instanted
   ;; once for a module declaration and shared among instances
   (define declaration-linklet
@@ -135,6 +138,20 @@
                  language-info)
        ,@declaration-body)))
   
+  ;; Assemble a linklet that deserializes an encoding of the root
+  ;; expand context, so that `module->namespace` can have the same
+  ;; scopes as literal syntax objects in the module
+  (define root-ctx-linklet
+    (compile-linklet
+     `(linklet
+       #:import ([deserialize ,@deserialize-imports]
+                 [data (mpi-vector ,mpi-vector-id)
+                       (deserialized-syntax ,deserialized-syntax-id)]
+                 [instance ,@instance-imports])
+       #:export (encoded-root-expand-ctx)
+       ,@(generate-lazy-syntax-literals! root-ctx-syntax-literals mpis (add1 max-phase) self)
+       (define-values (encoded-root-expand-ctx) ,(generate-lazy-syntax-literal-lookup 0)))))
+
   ;; The data linklet houses serialized data for use by the
   ;; declaration and module-body linklets. In the case of syntax
   ;; objects, it provides a shared vector for all instances, while
@@ -148,14 +165,16 @@
        (define-values (,mpi-vector-id)
          ,(generate-module-path-index-deserialize mpis))
        (define-values (deserialized-syntax)
-         (make-vector ,(add1 max-phase) #f)))))
+         (make-vector ,(+ 2 max-phase) #f)))))
 
   ;; Combine everything in a linklet directosy
   (define ld
     (hash->linklet-directory
-     (for/fold ([ht (hash-set (hash-set body-linklets #".decl" declaration-linklet)
-                              #".data"
-                              data-linklet)])
+     (for/fold ([ht (hash-set (hash-set (hash-set body-linklets #".decl" declaration-linklet)
+                                        #".data"
+                                        data-linklet)
+                              #".root-ctx"
+                              root-ctx-linklet)])
                ([sm (in-list (append pre-submodules post-submodules))])
        (hash-set ht
                  (encode-linklet-directory-key (car sm))
@@ -167,7 +186,10 @@
                       max-phase
                       phase-to-link-module-uses
                       (mpis-as-vector mpis)
-                      (syntax-literals-as-vectors syntax-literalss 0)
+                      (syntax-literals-as-vectors (if root-ctx-syntax-literals
+                                                      (append syntax-literalss (list root-ctx-syntax-literals))
+                                                      syntax-literalss)
+                                                  0)
                       (map cdr pre-submodules)
                       (map cdr post-submodules)))
 

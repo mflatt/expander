@@ -32,10 +32,7 @@
                                    (for*/fold ([bindings bindings])
                                               ([bulk-at (in-list (scope-bulk-bindings sc))]
                                                [bulk (in-value (bulk-binding-at-bulk bulk-at))]
-                                               [syms (in-value
-                                                      (bulk-binding-symbols bulk s
-                                                                            #f
-                                                                            null))]
+                                               [syms (in-value (bulk-binding-symbols bulk s null))]
                                                [b-info (in-value (hash-ref syms sym #f))]
                                                #:when (and b-info
                                                            (not (hash-ref bindings (bulk-binding-at-scopes bulk-at) #f))))

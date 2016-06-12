@@ -3,13 +3,13 @@
          "syntax.rkt"
          "scope.rkt" ; defines `prop:bulk-binding`
          "binding.rkt"
-         "../common/module-path.rkt")
+         "../common/module-path.rkt"
+         (only-in "../compile/reserved-symbol.rkt" bulk-binding-registry-id))
 
 (provide provide-binding-to-require-binding
 
          make-bulk-binding-registry
          register-bulk-provide!
-         current-bulk-binding-fallback-registry
 
          bulk-binding
          
@@ -60,20 +60,21 @@
                       [self #:mutable]     ; the providing module's self
                       mpi                  ; this binding's view of the providing module
                       provide-phase-level  ; providing module's import phase
-                      phase-shift)         ; providing module's instantiation phase
+                      phase-shift          ; providing module's instantiation phase
+                      bulk-binding-registry) ; a registry for findingbulk bindings lazily
         #:property prop:bulk-binding
         (bulk-binding-class
-         (lambda (b reg mpi-shifts)
+         (lambda (b mpi-shifts)
            (or (bulk-binding-provides b)
                ;; Here's where we find provided bindings for unmarshaled syntax
                (let ([mod-name (module-path-index-resolve
                                (apply-syntax-shifts
                                 (bulk-binding-mpi b)
                                 mpi-shifts))])
-                 (unless reg
+                 (unless (bulk-binding-registry b)
                    (error "namespace mismatch: no bulk-binding registry available:"
                           mod-name))
-                 (define table (bulk-binding-registry-table reg))
+                 (define table (bulk-binding-registry-table (bulk-binding-bulk-binding-registry b)))
                  (define bulk-provide (hash-ref table mod-name #f))
                  (unless bulk-provide
                    (error "namespace mismatch: bulk bindings not found in registry for module:"
@@ -99,17 +100,11 @@
           `(deserialize-bulk-binding
             ,(ser (bulk-binding-mpi b))
             ,(ser (bulk-binding-provide-phase-level b))
-            ,(ser (bulk-binding-phase-shift b)))))
+            ,(ser (bulk-binding-phase-shift b))
+            ,bulk-binding-registry-id)))
 
-(define (deserialize-bulk-binding mpi provide-phase-level phase-shift)
-  (bulk-binding #f #f mpi provide-phase-level phase-shift))
-
-;; Although a bulk binding registry is associated to a syntax object
-;; when a module is run, it's possible for a scope that contains a
-;; bulk binding to get added to another syntax object that doesn't
-;; have the binding. So, have the expander set a fallback.
-(define current-bulk-binding-fallback-registry
-  (make-parameter #f))
+(define (deserialize-bulk-binding mpi provide-phase-level phase-shift bulk-binding-registry)
+  (bulk-binding #f #f mpi provide-phase-level phase-shift bulk-binding-registry))
 
 ;; ----------------------------------------
 

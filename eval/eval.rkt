@@ -27,20 +27,18 @@
 ;; This `eval` is suitable as an eval handler that will be called by
 ;; the `eval` and `eval-syntax` of '#%kernel
 (define (eval s [ns (current-namespace)] [compile compile])
-  (parameterize ([current-bulk-binding-fallback-registry
-                  (namespace-bulk-binding-registry ns)])
-    (cond
-     [(or (compiled-in-memory? s)
-          (linklet-directory? s))
-      (eval-compiled s ns)]
-     [(and (syntax? s)
-           (or (compiled-in-memory? (syntax-e s))
-               (linklet-directory? (syntax-e s))))
-      (eval-compiled (syntax->datum s) ns)]
-     [else
-      (per-top-level s ns 
-                     #:single (lambda (s ns)
-                                (eval-compiled (compile s ns) ns)))])))
+  (cond
+   [(or (compiled-in-memory? s)
+        (linklet-directory? s))
+    (eval-compiled s ns)]
+   [(and (syntax? s)
+         (or (compiled-in-memory? (syntax-e s))
+             (linklet-directory? (syntax-e s))))
+    (eval-compiled (syntax->datum s) ns)]
+   [else
+    (per-top-level s ns 
+                   #:single (lambda (s ns)
+                              (eval-compiled (compile s ns) ns)))]))
 
 (define (eval-compiled c ns)
   (cond
@@ -54,12 +52,10 @@
 (define (compile s [ns (current-namespace)] [expand expand]
                  #:serializable? [serializable? #f])
   (define cs
-    (parameterize ([current-bulk-binding-fallback-registry
-                    (namespace-bulk-binding-registry ns)])
-      (per-top-level s ns
-                     #:single (lambda (s ns) (list (compile-single s ns expand
-                                                              serializable?)))
-                     #:combine append)))
+    (per-top-level s ns
+                   #:single (lambda (s ns) (list (compile-single s ns expand
+                                                            serializable?)))
+                   #:combine append))
   (if (= 1 (length cs))
       (car cs)
       (compiled-tops->compiled-top cs)))
@@ -83,16 +79,14 @@
 ;; This `expand` is suitable as an expand handler (if such a thing
 ;; existed) to be called by `expand` and `expand-syntax`.
 (define (expand s [ns (current-namespace)])
-  (parameterize ([current-bulk-binding-fallback-registry
-                  (namespace-bulk-binding-registry ns)])
-    (per-top-level s ns
-                   #:single expand-single
-                   #:combine cons
-                   #:wrap (lambda (form-id s r)
-                            (datum->syntax s
-                                           (cons form-id r)
-                                           s
-                                           s)))))
+  (per-top-level s ns
+                 #:single expand-single
+                 #:combine cons
+                 #:wrap (lambda (form-id s r)
+                          (datum->syntax s
+                                         (cons form-id r)
+                                         s
+                                         s))))
 
 (define (expand-single s ns)
   (namespace-visit-available-modules! ns)

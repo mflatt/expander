@@ -13,7 +13,9 @@
          
          add-syntax-literal!
          generate-eager-syntax-literals!
+         generate-eager-syntax-literal-lookup
          generate-lazy-syntax-literals!
+         generate-lazy-syntax-literal-lookup
          syntax-literals-as-vectors
          empty-syntax-literals
          empty-syntax-literals?
@@ -88,11 +90,16 @@
                             (vector-ref (vector-ref ,deserialized-syntax-id ,phase) pos)
                             ,phase-shift-id)
                            ,(add-module-path-index! mpis self)
-                           ,self-id
-                           ,bulk-binding-registry-id)])
+                           ,self-id)])
               (begin
                 (vector-set! ,syntax-literals-id pos stx)
                 stx))))))]))
+
+(define (generate-lazy-syntax-literal-lookup pos)
+  `(let-values ([(stx) (vector-ref ,syntax-literals-id ,pos)])
+    (if stx
+        stx
+        (,get-syntax-literal!-id ',pos))))
 
 ;; Generate immediate deserializartion and shifting of a set of syntax
 ;; objects across multiple phases; the result is an expression for a
@@ -120,11 +127,13 @@
                          stx
                          (- ,base-phase ,dest-phase-id))
                         ,(add-module-path-index! mpis self)
-                        ,self-id
-                        ,bulk-binding-registry-id)
+                        ,self-id)
                        ns-scope-s ,ns-id))
                     stxs)))
             (cdr ns+stxss))))))
+
+(define (generate-eager-syntax-literal-lookup phase pos)
+  `(vector-ref (vector-ref ,syntax-literalss-id ',phase) ',pos))
 
 ;; Genereate a vector for a set of syntax objects across multiple
 ;; phases; the result is a vector of vectors like the one generated and

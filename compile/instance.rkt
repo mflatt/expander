@@ -19,11 +19,14 @@
                                 #:phase-shift phase-shift
                                 #:self self 
                                 #:bulk-binding-registry bulk-binding-registry
-                                #:set-transformer! set-transformer!)
+                                #:set-transformer! set-transformer!
+                                #:record-root-context! [record-root-context! #f])
   (define i (make-instance 'instance))
   (instance-set-variable-value! i 'namespace ns)
   (instance-set-variable-value! i 'phase-shift phase-shift)
   (instance-set-variable-value! i 'self self)
   (instance-set-variable-value! i 'bulk-binding-registry bulk-binding-registry)
   (instance-set-variable-value! i 'set-transformer! set-transformer!)
+  (when record-root-context!
+    (instance-set-variable-value! i 'record-root-context! record-root-context!))
   i)

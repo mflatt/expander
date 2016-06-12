@@ -295,7 +295,8 @@
                                             #:requires-and-provides requires+provides
                                             #:namespace m-ns
                                             #:self self
-                                            #:enclosing enclosing-self)))
+                                            #:enclosing enclosing-self
+                                            #:root-ctx root-ctx)))
      
      (define fully-expanded-bodys
        (cond
@@ -352,17 +353,19 @@
    ;; "self", so that we can reocognize it for compilation or to shift
    ;; back on any future re-expansion:
    (define generic-self (make-generic-self-module-path-index self))
-
-   (attach-require-provide-properties
-    requires+provides
-    (syntax-module-path-index-shift
+   
+   (define result-module-s
      (rebuild
       s
-      `(,(m 'module) ,(m 'id:module-name) ,initial-require-s ,expanded-mb))
-     self
-     generic-self)
-    self
-    generic-self))
+      `(,(m 'module) ,(m 'id:module-name) ,initial-require-s ,expanded-mb)))
+   (define shifted-result-s
+     (syntax-module-path-index-shift result-module-s self generic-self))
+   (define r+p-result-s
+    (attach-require-provide-properties requires+provides shifted-result-s self generic-self))
+   (define ex-ctx-result-s
+     (attach-root-expand-context-properties r+p-result-s root-ctx))
+   
+   ex-ctx-result-s)
 
 ;; ----------------------------------------
 
@@ -750,16 +753,19 @@
                                       #:requires-and-provides requires+provides
                                       #:namespace m-ns
                                       #:self self
-                                      #:enclosing enclosing-self)
-  (define tmp-mod (attach-require-provide-properties
-                   requires+provides
-                   (datum->syntax
-                    #f
-                    `(,(datum->syntax core-stx 'module) ,(m 'id:module-name) ,(m 'initial-require)
-                      (,(mb-m '#%module-begin)
-                       ,@fully-expanded-bodys-except-post-submodules)))
-                   self
-                   self))
+                                      #:enclosing enclosing-self
+                                      #:root-ctx root-ctx)
+  (define tmp-mod (attach-root-expand-context-properties
+                   (attach-require-provide-properties
+                    requires+provides
+                    (datum->syntax
+                     #f
+                     `(,(datum->syntax core-stx 'module) ,(m 'id:module-name) ,(m 'initial-require)
+                       (,(mb-m '#%module-begin)
+                        ,@fully-expanded-bodys-except-post-submodules)))
+                    self
+                    self)
+                   root-ctx))
   
   (define root-module-name (resolved-module-path-root-name
                             (module-path-index-resolve self)))
@@ -773,6 +779,10 @@
                      #:self self
                      #:as-submodule? #t)
      #:as-submodule? #t)))
+
+(define (attach-root-expand-context-properties s root-ctx)
+  ;; For `module->namespace`
+  (syntax-property s 'root-expand-context (root-expand-context-encode-for-module root-ctx)))
 
 ;; ----------------------------------------
 

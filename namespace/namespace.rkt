@@ -12,7 +12,8 @@
          namespace-module-registry
          namespace-phase
          namespace-0-phase
-         namespace-root-expand-ctx
+         namespace-get-root-expand-ctx
+         namespace-set-root-expand-ctx!
          namespace->namespace-at-phase
          namespace->module
          namespace-mpi
@@ -34,7 +35,7 @@
            namespace->definitions))
 
 (struct namespace (mpi                 ; module path index (that's already resolved); instance-specific for a module
-                   root-expand-ctx     ; module context for top-level expansion
+                   root-expand-ctx     ; box of module context for top-level expansion; mutable => set by module
                    phase               ; phase (not phase level!) of this namespace
                    0-phase             ; phase of module instance's phase-level 0
                    phase-to-namespace  ; phase -> namespace for same module  [shared for the same module instance]
@@ -75,7 +76,7 @@
                     0))
   (define ns
     (namespace top-level-module-path-index
-               root-expand-ctx
+               (box root-expand-ctx)
                phase
                phase
                (make-hasheqv)    ; phase-to-namespace
@@ -101,6 +102,12 @@
   ns)
 
 (define current-namespace (make-parameter (make-namespace)))
+
+(define (namespace-get-root-expand-ctx ns)
+  (unbox (namespace-root-expand-ctx ns)))
+
+(define (namespace-set-root-expand-ctx! ns root-ctx)
+  (set-box! (namespace-root-expand-ctx ns) root-ctx))
 
 (define (namespace->module ns name)
   (or (hash-ref (namespace-submodule-declarations ns) name #f)
