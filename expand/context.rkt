@@ -1,5 +1,6 @@
 #lang racket/base
-(require "../syntax/syntax.rkt"
+(require racket/promise
+         "../syntax/syntax.rkt"
          "../syntax/scope.rkt"
          "../syntax/binding.rkt"
          "env.rkt"
@@ -12,6 +13,7 @@
          make-expand-context
          copy-root-expand-context
          current-expand-context
+         get-current-expand-context
          
          as-expression-context
          as-tail-context
@@ -86,7 +88,15 @@
                [frame-id #:parent root-expand-context (root-expand-context-frame-id root-ctx)]
                [counter #:parent root-expand-context (root-expand-context-counter root-ctx)]))
 
+;; An expand-context or a delayed expand context (so use `force`):
 (define current-expand-context (make-parameter #f))
+
+(define (get-current-expand-context [who 'unexpected]
+                                     #:fail-ok? [fail-ok? #f])
+  (or (force (current-expand-context))
+      (if fail-ok?
+          #f
+          (error who "not currently expanding"))))
 
 ;; ----------------------------------------
 

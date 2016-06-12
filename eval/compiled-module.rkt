@@ -1,5 +1,6 @@
 #lang racket/base
-(require "../namespace/namespace.rkt"
+(require racket/promise
+         "../namespace/namespace.rkt"
          "../namespace/module.rkt"
          "../common/phase.rkt"
          "../compile/module-use.rkt"
@@ -96,7 +97,7 @@
                               [else
                                ;; For phase level 1 and up, set the expansion context
                                ;; to point back to the module's info:
-                               (parameterize ([current-expand-context (make-expand-context ns)]
+                               (parameterize ([current-expand-context (delay (make-expand-context ns))]
                                               [current-namespace ns])
                                  (instantiate-body))])))))
 
@@ -131,11 +132,12 @@
     
     (set-box! data-box root-ctx-instance)
 
-    (define encoded-root-expand-ctx (instance-variable-value root-ctx-instance
-                                                             'encoded-root-expand-ctx))
+    (define get-encoded-root-expand-ctx
+      (instance-variable-value root-ctx-instance 'get-encoded-root-expand-ctx))
 
-    (namespace-set-root-expand-ctx! ns (root-expand-context-decode-for-module encoded-root-expand-ctx)))
-  
+    (namespace-set-root-expand-ctx! ns (delay (root-expand-context-decode-for-module
+                                               (get-encoded-root-expand-ctx)))))
+
   (unbox data-box))
 
 ;; ----------------------------------------

@@ -37,7 +37,8 @@
   (define exp-s (do-local-expand 'local-expand s 'expression null #f))
   (values exp-s (already-expanded
                  exp-s
-                 (root-expand-context-all-scopes-stx (current-expand-context)))))
+                 (root-expand-context-all-scopes-stx
+                  (get-current-expand-context 'syntax-local-expand-expression)))))
 
 ;; ----------------------------------------
 

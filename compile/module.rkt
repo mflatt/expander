@@ -156,12 +156,13 @@
        #:export ([,syntax-literalss-id syntax-literalss]
                  [,get-syntax-literal!-id get-syntax-literal!]
                  ,@(if root-ctx-syntax-literals
-                       `(encoded-root-expand-ctx)
+                       `(get-encoded-root-expand-ctx)
                        null))
        ,@(generate-lazy-syntax-literals! all-syntax-literalss mpis self)
        ,@(if root-ctx-syntax-literals
-             `((define-values (encoded-root-expand-ctx)
-                 ,(generate-lazy-syntax-literal-lookup (add1 max-phase) 0)))
+             `((define-values (get-encoded-root-expand-ctx)
+                 (lambda ()
+                   ,(generate-lazy-syntax-literal-lookup (add1 max-phase) 0))))
              null))))
 
   ;; The data linklet houses deserialized data for use by the

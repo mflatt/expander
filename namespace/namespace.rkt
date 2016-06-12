@@ -1,5 +1,6 @@
 #lang racket/base
-(require "../common/phase.rkt"
+(require racket/promise
+         "../common/phase.rkt"
          "../syntax/scope.rkt"
          "../syntax/bulk-binding.rkt"
          "../common/module-path.rkt"
@@ -35,7 +36,7 @@
            namespace->definitions))
 
 (struct namespace (mpi                 ; module path index (that's already resolved); instance-specific for a module
-                   root-expand-ctx     ; box of module context for top-level expansion; mutable => set by module
+                   root-expand-ctx     ; delay of box of context for top-level expansion; set by module instantiation
                    phase               ; phase (not phase level!) of this namespace
                    0-phase             ; phase of module instance's phase-level 0
                    phase-to-namespace  ; phase -> namespace for same module  [shared for the same module instance]
@@ -103,7 +104,7 @@
 (define current-namespace (make-parameter (make-namespace)))
 
 (define (namespace-get-root-expand-ctx ns)
-  (unbox (namespace-root-expand-ctx ns)))
+  (force (unbox (namespace-root-expand-ctx ns))))
 
 (define (namespace-set-root-expand-ctx! ns root-ctx)
   (set-box! (namespace-root-expand-ctx ns) root-ctx))

@@ -18,8 +18,7 @@
          "../common/contract.rkt"
          "../syntax/debug.rkt")
 
-(provide get-current-expand-context
-         flip-introduction-scopes
+(provide flip-introduction-scopes
          
          syntax-transforming?
          syntax-transforming-with-lifts?
@@ -57,32 +56,28 @@
 
 ;; ----------------------------------------
 
-(define (get-current-expand-context who)
-  (or (current-expand-context)
-      (error who "not currently expanding")))
-
 (define (flip-introduction-scopes s ctx)
   (flip-scopes s (expand-context-current-introduction-scopes ctx)))
 
 ;; ----------------------------------------
 
 (define (syntax-transforming?)
-  (and (current-expand-context) #t))
+  (and (get-current-expand-context #:fail-ok? #t) #t))
 
 (define (syntax-transforming-with-lifts?)
-  (define ctx (current-expand-context))
+  (define ctx (get-current-expand-context #:fail-ok? #t))
   (and ctx
        (expand-context-lifts ctx)
        #t))
 
 (define (syntax-transforming-module-expression?)
-  (define ctx (current-expand-context))
+  (define ctx (get-current-expand-context #:fail-ok? #t))
   (and ctx
        (expand-context-lifts-to-module ctx)
        #t))
 
 (define (syntax-local-transforming-module-provides?)
-  (define ctx (current-expand-context))
+  (define ctx (get-current-expand-context #:fail-ok? #t))
   (and ctx
        (expand-context-requires+provides ctx)
        #t))
@@ -104,7 +99,7 @@
   (remove-use-site-scopes id ctx))
 
 (define (syntax-local-phase-level)
-  (define ctx (current-expand-context))
+  (define ctx (get-current-expand-context #:fail-ok? #t))
   (if ctx
       (expand-context-phase ctx)
       0))
@@ -292,7 +287,7 @@
 (define (syntax-local-module-defined-identifiers)
   (unless (syntax-local-transforming-module-provides?)
     (raise-arguments-error 'syntax-local-module-defined-identifiers "not currently transforming module provides"))
-  (define ctx (current-expand-context))
+  (define ctx (get-current-expand-context 'syntax-local-module-defined-identifiers))
   (requireds->phase-ht (extract-module-definitions (expand-context-requires+provides ctx))))
   
   
@@ -303,7 +298,7 @@
     (raise-argument-error 'syntax-local-module-required-identifiers (format "(or/c ~a #t)" phase?-string) phase-level))
   (unless (syntax-local-transforming-module-provides?)
     (raise-arguments-error 'syntax-local-module-required-identifiers "not currently transforming module provides"))
-  (define ctx (current-expand-context))
+  (define ctx (get-current-expand-context 'syntax-local-module-required-identifiers))
   (define requires+provides (expand-context-requires+provides ctx))
   (define mpi (and mod-path
                    (module-path-index-join mod-path (requires+provides-self requires+provides))))
