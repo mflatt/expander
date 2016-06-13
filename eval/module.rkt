@@ -141,12 +141,17 @@
     
     (set-box! data-box root-ctx-instance)
 
+    (define get-encoded-root-expand-ctx
+      (instance-variable-value root-ctx-instance 'get-encoded-root-expand-ctx))
+    
     (cond
-     [(instance-variable-value root-ctx-instance 'get-encoded-root-expand-ctx)
+     [(eq? get-encoded-root-expand-ctx 'empty)
+      ;; A `#:empty-namespace` declaration requested a namespace with no initial bindings
+      (namespace-set-root-expand-ctx! ns (delay (make-root-expand-context)))]
+     [(procedure? get-encoded-root-expand-ctx)
       ;; Root expand context has been preserved; deserialize it on demand
-      => (lambda (get-encoded-root-expand-ctx)
-           (namespace-set-root-expand-ctx! ns (delay (root-expand-context-decode-for-module
-                                                      (get-encoded-root-expand-ctx)))))]
+      (namespace-set-root-expand-ctx! ns (delay (root-expand-context-decode-for-module
+                                                 (get-encoded-root-expand-ctx))))]
      [else
       ;; Root expand context has not been preserved, because it canbe reconstructed
       ;; from module metadata; do that on demand

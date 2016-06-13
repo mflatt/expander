@@ -39,10 +39,12 @@
                                (syntax-e (m 'name))))
   (define requires (syntax-property s 'module-requires))
   (define provides (syntax-property s 'module-provides))
-  (define encoded-root-expand-ctx (syntax-property s 'module-root-expand-context)) ; for `module->namespace`
+  (define encoded-root-expand-ctx-box (box (syntax-property s 'module-root-expand-context))) ; for `module->namespace`
   (define body-context-simple? (syntax-property s 'module-body-context-simple?))
   (define language-info (filter-language-info (syntax-property s 'module-language)))
   (define bodys (m 'body))
+  
+  (define empty-result-for-module->namespace? #f)
 
   (define mpis (make-module-path-index-table))
   
@@ -73,7 +75,7 @@
                   syntax-literalss
                   root-ctx-syntax-literals)
     (compile-forms bodys body-cctx mpis
-                   #:encoded-root-expand-ctx encoded-root-expand-ctx
+                   #:encoded-root-expand-ctx-box encoded-root-expand-ctx-box
                    #:root-ctx-only-if-syntax? body-context-simple?
                    #:compiled-expression-callback check-side-effects!
                    #:other-form-callback (lambda (body cctx)
@@ -82,7 +84,10 @@
                                               (define m (match-syntax body '(#%declare kw ...)))
                                               (for ([kw (in-list (m 'kw))])
                                                 (when (eq? (syntax-e kw) '#:cross-phase-persistent)
-                                                  (set! cross-phase-persistent? #t)))
+                                                  (set! cross-phase-persistent? #t))
+                                                (when (eq? (syntax-e kw) '#:empty-namespace)
+                                                  (set! empty-result-for-module->namespace? #t)
+                                                  (set-box! encoded-root-expand-ctx-box #t)))
                                               #f]
                                              [else #f]))))
   
@@ -164,10 +169,14 @@
        ,@(generate-lazy-syntax-literals! all-syntax-literalss mpis self
                                          #:skip-deserialize? (not serializable?))
        (define-values (get-encoded-root-expand-ctx)
-         ,(if root-ctx-syntax-literals
-              `(lambda ()
-                ,(generate-lazy-syntax-literal-lookup (add1 max-phase) 0))
-              `'#f)))))
+         ,(cond
+           [root-ctx-syntax-literals
+            `(lambda ()
+              ,(generate-lazy-syntax-literal-lookup (add1 max-phase) 0))]
+           [empty-result-for-module->namespace?
+            `'empty]
+           [else
+            `'#f])))))
 
   ;; The data linklet houses deserialized data for use by the
   ;; declaration and module-body linklets. In the case of syntax

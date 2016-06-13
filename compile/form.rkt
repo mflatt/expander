@@ -27,7 +27,7 @@
 ;; linklet directory to cover all phases covered by the forms
 (define (compile-forms bodys cctx mpis
                        #:phase-in-body-thunk [phase-in-body-thunk #f] ; phase, if any, to export `body-thunk`
-                       #:encoded-root-expand-ctx [encoded-root-expand-ctx #f] ; encoded root context, if any
+                       #:encoded-root-expand-ctx-box [encoded-root-expand-ctx-box #f] ; encoded root context, if any
                        #:root-ctx-only-if-syntax? [root-ctx-only-if-syntax? #f]
                        #:compiled-expression-callback [compiled-expression-callback void]
                        #:other-form-callback [other-form-callback void])
@@ -175,13 +175,14 @@
   ;; Register root-expand-context, if any, encoded as a syntax object;
   ;; see also "../eval/root-context.rkt"
   (define encoded-root-expand-header
-    (and encoded-root-expand-ctx
+    (and encoded-root-expand-ctx-box
+         (unbox encoded-root-expand-ctx-box) ; box => can be cleared by a callback
          (not (and root-ctx-only-if-syntax?
                    (not saw-define-syntaxes?)
                    (for/and ([h (in-hash-values phase-to-header)])
                      (header-empty-syntax-literals? h))))
          (let ([h (find-or-create-header! 'root-ctx)])
-           (add-syntax-literal! h encoded-root-expand-ctx)
+           (add-syntax-literal! h (unbox encoded-root-expand-ctx-box))
            h)))
 
   ;; Collect resulting phases

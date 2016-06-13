@@ -12,7 +12,8 @@ TODO:
  continuation prompt for module body
  enforced namespace constants
  lock on namespace & registry
- compacted/simplified representation for `module->namespace`
+ inspectors
+ protected exports
 
 ----------------------------------------
 
