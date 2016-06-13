@@ -136,9 +136,13 @@
     (hash-update! (requires+provides-requires r+p)
                   (module-binding-nominal-module b)
                   (lambda (at-mod)
-                    (hash-set at-mod
-                              (module-binding-nominal-require-phase b)
-                              null))
+                    (hash-update at-mod
+                                 (module-binding-nominal-require-phase b)
+                                 (lambda (l)
+                                   (for/list ([r (in-list l)]
+                                              #:unless (free-identifier=? (required-id r) id phase phase))
+                                     r))
+                                 null))
                   #hasheqv())))
 
 ;; Check whether an identifier has a binding that is from a non-shadowable
