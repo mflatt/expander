@@ -46,12 +46,13 @@
 
 ;; ----------------------------------------
 
-(struct lift-context (convert ; takes a list of ids and rhs to produce a lifted
-                      lifts)) ; box of list of lifted
-(struct lifted (ids rhs))
+(struct lift-context (convert       ; takes a list of ids and rhs to produce a lifted-bind
+                      lifts         ; box of list of lifted-binds and maybe other forms
+                      module*-ok?)) ; if used to capture module lifts, allow `module*`?
+(struct lifted-bind (ids rhs))
 
-(define (make-lift-context convert)
-  (lift-context convert (box null)))
+(define (make-lift-context convert #:module*-ok? [module*-ok? #f])
+  (lift-context convert (box null) module*-ok?))
 
 (define (add-lifted! lifts ids rhs phase)
   (define-values (lifted-ids lifted) ((lift-context-convert lifts) ids rhs phase))
@@ -66,7 +67,7 @@
     (for ([id (in-list ids)])
       (define key (add-local-binding! id phase counter))
       (set-box! lift-env (hash-set (unbox lift-env) key variable)))
-    (values ids (list ids rhs))))
+    (values ids (lifted-bind ids rhs))))
 
 (define (make-toplevel-lift ctx)
   (lambda (ids rhs phase)
@@ -80,20 +81,22 @@
                      (add-scope id post-scope)))
     ;; Bind the identifier:
     (select-defined-syms-and-bind!/ctx tl-ids ctx)
-    (values tl-ids (list tl-ids rhs))))
+    (values tl-ids (lifted-bind tl-ids rhs))))
 
 (define (wrap-lifts-as-let lifts body s phase)
   (datum->syntax
    s
    (for/fold ([body body]) ([lift (in-list (reverse lifts))])
+     (unless (lifted-bind? lift)
+       (error "non-bindings in `lift-context`"))
      (list (datum->syntax
             (syntax-shift-phase-level core-stx phase)
             'let-values)
-           (list lift)
+           (list (list (lifted-bind-ids lift)
+                       (lifted-bind-rhs lift)))
            body))))
 
-(define (wrap-lifts-as-begin lifts body s phase
-                             #:adjust-defn [adjust-defn values])
+(define (wrap-lifts-as-begin lifts body s phase)
   (datum->syntax
    #f
    (cons (datum->syntax
@@ -101,16 +104,16 @@
           'begin)
          (append
           (for/list ([lift (in-list lifts)])
-            (define ids (car lift))
-            (define rhs (cadr lift))
-            (adjust-defn
-             (datum->syntax
-              #f
-              (list (datum->syntax
-                     (syntax-shift-phase-level core-stx phase)
-                     'define-values)
-                    ids
-                    rhs))))
+            (cond
+             [(lifted-bind? lift)
+              (datum->syntax
+               #f
+               (list (datum->syntax
+                      (syntax-shift-phase-level core-stx phase)
+                      'define-values)
+                     (lifted-bind-ids lift)
+                     (lifted-bind-rhs lift)))]
+             [else lift]))
           (list body)))))
 
 ;; ----------------------------------------
@@ -125,12 +128,22 @@
   (box-clear! (module-lift-context-lifts module-lifts)))
 
 (define (add-lifted-module! module-lifts s phase)
-  (unless (module-lift-context-module*-ok? module-lifts)
+  (unless (or (and (module-lift-context? module-lifts)
+                   (module-lift-context-module*-ok? module-lifts))
+              (and (lift-context? module-lifts)
+                   (lift-context-module*-ok? module-lifts)))
     (case (core-form-sym s phase)
       [(module*)
        (error "cannot lift `module*` outside of a module:" s)]))
-  (box-cons! (module-lift-context-lifts module-lifts)
-             s))
+  (cond
+   [(module-lift-context? module-lifts)
+    (box-cons! (module-lift-context-lifts module-lifts) s)]
+   [(lift-context? module-lifts)
+    ;; Top-level expansion uses a `lift-context` for both, which keeps
+    ;; modules and other lifts in order
+    (box-cons! (lift-context-lifts module-lifts) s)]
+   [else
+    (error "unrecognized lift-context type for module lift")]))
 
 ;; ----------------------------------------
 

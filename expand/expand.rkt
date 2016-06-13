@@ -572,15 +572,21 @@
   ;; Expand `s`, but loop to handle lifted expressions
   (let loop ([s s])
     (define lift-env (and local? (box empty-env)))
+    (define lift-ctx (make-lift-context
+                      (if local?
+                          (make-local-lift lift-env (root-expand-context-counter ctx))
+                          (make-toplevel-lift ctx))
+                      #:module*-ok? (and (not local?) (eq? context 'module))))
     (define capture-ctx (struct-copy expand-context ctx
-                                     [lifts (make-lift-context
-                                             (if local?
-                                                 (make-local-lift lift-env (root-expand-context-counter ctx))
-                                                 (make-toplevel-lift ctx)))]
+                                     [lifts lift-ctx]
                                      [lift-envs (if local?
                                                     (cons lift-env
                                                           (expand-context-lift-envs ctx))
-                                                    (expand-context-lift-envs ctx))]))
+                                                    (expand-context-lift-envs ctx))]
+                                     [module-lifts (if (or local?
+                                                           (not (memq context '(top-level module))))
+                                                       (expand-context-module-lifts ctx)
+                                                       lift-ctx)]))
     (define exp-s (expand s capture-ctx))
     (define lifts (get-and-clear-lifts! (expand-context-lifts capture-ctx)))
     (cond

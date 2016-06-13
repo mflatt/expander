@@ -18,6 +18,8 @@
          "../common/contract.rkt"
          "../namespace/eval.rkt"
          "../expand/lift-context.rkt"
+         "../expand/require.rkt"
+         "../expand/require+provide.rkt"
          "reflect.rkt")
 
 (provide eval
@@ -63,20 +65,20 @@
 
 (define (compile-single s ns expand serializable?)
   (define exp-s (expand s ns))
-  (case (core-form-sym exp-s (namespace-phase ns))
-    [(module)
-     (compile-module exp-s (make-compile-context #:namespace ns)
-                     #:serializable? serializable?)]
-    [(begin)
-     ;; expansion must have captured lifts
-     (define m (match-syntax exp-s '(begin e ...)))
-     (compiled-tops->compiled-top
-      (for/list ([e (in-list (m 'e))])
-        (compile-top e (make-compile-context #:namespace ns)
-                     #:serializable? serializable?)))]
-    [else
-     (compile-top exp-s (make-compile-context #:namespace ns)
-                  #:serializable? serializable?)]))
+  (let loop ([exp-s exp-s])
+    (case (core-form-sym exp-s (namespace-phase ns))
+      [(module)
+       (compile-module exp-s (make-compile-context #:namespace ns)
+                       #:serializable? serializable?)]
+      [(begin)
+       ;; expansion must have captured lifts
+       (define m (match-syntax exp-s '(begin e ...)))
+       (compiled-tops->compiled-top
+        (for/list ([e (in-list (m 'e))])
+          (loop e)))]
+      [else
+       (compile-top exp-s (make-compile-context #:namespace ns)
+                    #:serializable? serializable?)])))
 
 ;; This `expand` is suitable as an expand handler (if such a thing
 ;; existed) to be called by `expand` and `expand-syntax`.
@@ -91,29 +93,18 @@
                                          s))))
 
 (define (expand-single s ns)
-  (namespace-visit-available-modules! ns)
-  ;; Ideally, the rest would be just
-  ;; (expand-in-context s (make-expand-context ns))
-  ;; but we have to handle lifted definitions
-  (define ctx (make-expand-context ns))
-  (define lift-ctx (make-lift-context (make-toplevel-lift ctx)))
-  (define exp-s
-    (expand-in-context s (struct-copy expand-context ctx
-                                      [lifts lift-ctx])))
-  (define lifts (get-and-clear-lifts! lift-ctx))
+  (define-values (require-lifts lifts exp-s)
+    (expand-capturing-lifts s (make-expand-context ns)))
   (cond
-   [(null? lifts) exp-s]
+   [(and (null? require-lifts) (null? lifts)) exp-s]
    [else
-    (wrap-lifts-as-begin lifts exp-s s (namespace-phase ns)
-                         #:adjust-defn
-                         (lambda (defn)
-                           (expand-single defn ns)))]))
+    (wrap-lifts-as-begin (append require-lifts
+                                 (for/list ([form (in-list lifts)])
+                                   (expand-single form ns)))
+                         exp-s
+                         s (namespace-phase ns))]))
 
-;; Add scopes to `s` if it's not syntax:
-(define (maybe-intro s ns)
-  (if (syntax? s)
-      s
-      (namespace-syntax-introduce (datum->syntax #f s) ns)))
+;; ----------------------------------------
 
 ;; Top-level compilation and evaluation, which involves partial
 ;; expansion to detect `begin` and `begin-for-syntax` to interleave
@@ -129,17 +120,13 @@
     (define tl-ctx (struct-copy expand-context ctx
                                 [phase phase]
                                 [namespace ns]))
-    (namespace-visit-available-modules! ns)
-    (define lift-ctx (make-lift-context (make-toplevel-lift tl-ctx)))
-    (define exp-s
-      (expand-in-context s (struct-copy expand-context tl-ctx
-                                        [only-immediate? #t]
-                                        [phase phase]
-                                        [namespace ns]
-                                        [lifts lift-ctx])))
-    (define lifts (get-and-clear-lifts! lift-ctx))
+    (define-values (require-lifts lifts exp-s)
+      (expand-capturing-lifts s (struct-copy expand-context tl-ctx
+                                             [only-immediate? #t]
+                                             [phase phase]
+                                             [namespace ns])))
     (cond
-     [(null? lifts)
+     [(and (null? require-lifts) (null? lifts))
       (case (core-form-sym exp-s phase)
         [(begin)
          (define m (match-syntax exp-s '(begin e ...)))
@@ -174,5 +161,41 @@
          (single exp-s ns)])]
      [else
       ;; Fold in lifted definitions and try again
-      (define new-s (wrap-lifts-as-begin lifts exp-s s phase))
+      (define new-s (wrap-lifts-as-begin (append require-lifts lifts)
+                                         exp-s
+                                         s phase))
       (loop new-s phase ns)])))
+
+;; Add scopes to `s` if it's not syntax:
+(define (maybe-intro s ns)
+  (if (syntax? s)
+      s
+      (namespace-syntax-introduce (datum->syntax #f s) ns)))
+
+;; ----------------------------------------
+
+(define (expand-capturing-lifts s ctx)
+  (define ns (expand-context-namespace ctx))
+  (namespace-visit-available-modules! ns)
+  
+  (define lift-ctx (make-lift-context (make-toplevel-lift ctx)))
+  (define require-lift-ctx (make-require-lift-context
+                            (make-parse-top-lifted-require ns)))
+  (define exp-s
+    (expand-in-context s (struct-copy expand-context ctx
+                                      [lifts lift-ctx]
+                                      [module-lifts lift-ctx]
+                                      [require-lifts require-lift-ctx])))
+  (values (get-and-clear-require-lifts! require-lift-ctx)
+          (get-and-clear-lifts! lift-ctx)
+          exp-s))
+
+(define (make-parse-top-lifted-require ns)
+  (lambda (s phase)
+    ;; We don't "hide" this require in the same way as
+    ;; a top-level `#%require`, because it's already
+    ;; hidden in the sense of having an extra scope
+    (define m (match-syntax s '(#%require req)))
+    (parse-and-perform-requires! (list (m 'req)) s
+                                 ns phase #:run-phase phase
+                                 (make-requires+provides #f))))

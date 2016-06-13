@@ -24,8 +24,9 @@
 
 (define layers '(raw phaseless path))
 
-(define (parse-and-perform-requires! reqs orig-s self m-ns phase-shift
+(define (parse-and-perform-requires! reqs orig-s m-ns phase-shift
                                      requires+provides
+                                     #:self [self #f]
                                      #:run-phase [run-phase (namespace-phase m-ns)]
                                      #:run? [run? #f]
                                      #:visit? [visit? #t]

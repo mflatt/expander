@@ -33,7 +33,6 @@
                                 #:visit? #f
                                 reqs
                                 #f ; no syntax errors should happen
-                                #f ; no enclosing module
                                 ns
                                 (namespace-phase ns)
                                 (make-requires+provides #f))))

@@ -568,7 +568,7 @@
          [(#%require)
           (define ready-body (remove-use-site-scopes exp-body partial-body-ctx))
           (define m (match-syntax ready-body '(#%require req ...)))
-          (parse-and-perform-requires! (m 'req) exp-body self
+          (parse-and-perform-requires! (m 'req) exp-body #:self self
                                        m-ns phase #:run-phase phase
                                        requires+provides
                                        #:declared-submodule-names declared-submodule-names)
@@ -939,7 +939,7 @@
                                    #:declared-submodule-names declared-submodule-names)
   (lambda (s phase)
     (define m (match-syntax s '(#%require req)))
-    (parse-and-perform-requires! (list (m 'req)) s self
+    (parse-and-perform-requires! (list (m 'req)) s #:self self
                                  m-ns phase #:run-phase phase
                                  requires+provides
                                  #:declared-submodule-names declared-submodule-names)))

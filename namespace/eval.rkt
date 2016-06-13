@@ -97,7 +97,7 @@
                                                  (root-expand-context-module-scopes
                                                   (namespace-get-root-expand-ctx ns))))
                                #f
-                               #f ns
+                               ns
                                (namespace-phase ns)
                                (make-requires+provides #f)))
 

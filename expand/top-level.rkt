@@ -53,7 +53,6 @@
    (parse-and-perform-requires! (for/list ([req (in-list (m 'req))])
                                   (add-scope req sc))
                                 s
-                                #f ; no enclosing module
                                 #:visit? #f
                                 (expand-context-namespace ctx)
                                 (expand-context-phase ctx)
