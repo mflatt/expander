@@ -22,12 +22,15 @@
          get-and-clear-module-lifts!
          add-lifted-module!
          
-         make-lift-to-module-context
+         make-require-lift-context
+         add-lifted-require!
+         get-and-clear-require-lifts!
+         
+         make-to-module-lift-context
          make-shared-module-ends
-         lift-to-module-context-end-as-expressions?
-         get-and-clear-ends!
-         get-and-clear-requires-and-provides!
-         add-lifted-to-module-require!
+         to-module-lift-context-end-as-expressions?
+         get-and-clear-end-lifts!
+         get-and-clear-provide-lifts!
          add-lifted-to-module-provide!
          add-lifted-to-module-end!)
 
@@ -131,37 +134,45 @@
 
 ;; ----------------------------------------
 
-(struct lift-to-module-context (do-require requires
-                                provides
-                                end-as-expressions? ends))
+(struct require-lift-context (do-require  ; callback to process a lifted require
+                              requires))  ; records lifted requires
 
-(define (make-lift-to-module-context do-require
-                                     #:shared-module-ends ends
+(define (make-require-lift-context do-require)
+  (require-lift-context do-require (box null)))
+
+(define (get-and-clear-require-lifts! require-lifts)
+  (box-clear! (require-lift-context-requires require-lifts)))
+
+(define (add-lifted-require! require-lifts s phase)
+  ((require-lift-context-do-require require-lifts) s phase)
+  (box-cons! (require-lift-context-requires require-lifts)
+             s))
+
+;; ----------------------------------------
+
+(struct to-module-lift-context (provides
+                                end-as-expressions?
+                                ends))
+
+(define (make-to-module-lift-context #:shared-module-ends ends
                                      #:end-as-expressions? end-as-expressions?)
-  (lift-to-module-context do-require (box null)
-                          (box null) 
-                          end-as-expressions? ends))
+  (to-module-lift-context (box null) 
+                          end-as-expressions?
+                          ends))
 
 (define (make-shared-module-ends)
   (box null))
 
-(define (get-and-clear-ends! lifts-to-module)
-  (box-clear! (lift-to-module-context-ends lifts-to-module)))
+(define (get-and-clear-end-lifts! to-module-lifts)
+  (box-clear! (to-module-lift-context-ends to-module-lifts)))
 
-(define (get-and-clear-requires-and-provides! lifts-to-module)
-  (append
-   (box-clear! (lift-to-module-context-requires lifts-to-module))
-   (box-clear! (lift-to-module-context-provides lifts-to-module))))
+(define (get-and-clear-provide-lifts! to-module-lifts)
+  (box-clear! (to-module-lift-context-provides to-module-lifts)))
 
-(define (add-lifted-to-module-require! lifts-to-module s phase)
-  ((lift-to-module-context-do-require lifts-to-module) s phase)
-  (box-cons! (lift-to-module-context-requires lifts-to-module)
+(define (add-lifted-to-module-provide! to-module-lifts s phase)
+  (box-cons! (to-module-lift-context-provides to-module-lifts)
              s))
 
-(define (add-lifted-to-module-provide! lifts-to-module s phase)
-  (box-cons! (lift-to-module-context-provides lifts-to-module)
-             s))
-
-(define (add-lifted-to-module-end! lifts-to-module s phase)
-  (box-cons! (lift-to-module-context-ends lifts-to-module)
+(define (add-lifted-to-module-end! to-module-lifts s phase)
+  (box-cons! (to-module-lift-context-ends to-module-lifts)
              s))

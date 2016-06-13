@@ -39,8 +39,9 @@
                                             declared-submodule-names ; mutable hash table: symbol -> 'module or 'module*
                                             lifts      ; #f or lift-context, which contains a list of lifteds
                                             lift-envs  ; list of box of env for lifts to locals
-                                            module-lifts ; lifted modules
-                                            lifts-to-module ; more lifts: requires, provides, etc.
+                                            module-lifts    ; lifted `module`s
+                                            require-lifts   ; lifted `require`s
+                                            to-module-lifts ; lifted `provide` and end declarations
                                             requires+provides ; enclosing module's requires+provides during `provide`
                                             name))     ; #f or identifier to name the expression
 
@@ -73,7 +74,8 @@
                   #f   ; lifts
                   '()  ; lift-envs
                   #f   ; module-lifts
-                  #f   ; lifts-for-module
+                  #f   ; require-lifts
+                  #f   ; lifts-to-module
                   #f   ; requires+provides
                   #f)) ; name
 

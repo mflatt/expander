@@ -73,7 +73,7 @@
 (define (syntax-transforming-module-expression?)
   (define ctx (get-current-expand-context #:fail-ok? #t))
   (and ctx
-       (expand-context-lifts-to-module ctx)
+       (expand-context-to-module-lifts ctx)
        #t))
 
 (define (syntax-local-transforming-module-provides?)
@@ -222,33 +222,34 @@
 
 ;; ----------------------------------------
 
-(define (do-local-lift-to-module who add! s filter
+(define (do-local-lift-to-module who get add! s filter
                                  #:intro? [intro? #t]
                                  #:more-checks [more-checks void])
   (check who syntax? s)
   (more-checks)
   (define ctx (get-current-expand-context who))
   (define phase (expand-context-phase ctx))
-  (define lifts-to-module (expand-context-lifts-to-module ctx))
-  (add! lifts-to-module
+  (define lift-ctx (get ctx))
+  (add! lift-ctx
         (filter (if intro?
                     (flip-introduction-scopes s ctx)
                     s)
                 phase
-                (lift-to-module-context-end-as-expressions? lifts-to-module))
+                lift-ctx)
         phase))
 
 (define (syntax-local-lift-require s use-s)
   (define sc (new-scope 'macro))
   (do-local-lift-to-module 'syntax-local-lift-module-require
-                           add-lifted-to-module-require!
+                           expand-context-require-lifts
+                           add-lifted-require!
                            s #:intro? #f
                            #:more-checks
                            (lambda ()
                              (check 'syntax-local-lift-module-require
                                     syntax?
                                     use-s))
-                           (lambda (s phase end-as-expressions?)
+                           (lambda (s phase require-lift-ctx)
                              (wrap-form '#%require
                                         (add-scope s sc)
                                         phase)))
@@ -256,17 +257,19 @@
 
 (define (syntax-local-lift-provide s)
   (do-local-lift-to-module 'syntax-local-lift-module-end-declaration
+                           expand-context-to-module-lifts
                            add-lifted-to-module-provide!
                            s
-                           (lambda (s phase end-as-expressions?)
+                           (lambda (s phase to-module-lift-ctx)
                              (wrap-form '#%provide s phase))))
 
 (define (syntax-local-lift-module-end-declaration s)
   (do-local-lift-to-module 'syntax-local-lift-module-end-declaration
+                           expand-context-to-module-lifts
                            add-lifted-to-module-end!
                            s
-                           (lambda (orig-s phase end-as-expressions?)
-                             (define s (if end-as-expressions?
+                           (lambda (orig-s phase to-module-lift-ctx)
+                             (define s (if (to-module-lift-context-end-as-expressions? to-module-lift-ctx)
                                            (wrap-form '#%expression orig-s phase)
                                            orig-s))
                              (for/fold ([s s]) ([phase (in-range phase 0 -1)])

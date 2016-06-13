@@ -211,12 +211,12 @@
                                                                                 inside-scope initial-require-s
                                                                                 defined-syms requires+provides))]
                                                [module-lifts (make-module-lift-context #t)]
-                                               [lifts-to-module
-                                                (make-lift-to-module-context
-                                                 (make-parse-lifted-require m-ns self requires+provides
-                                                                            #:declared-submodule-names declared-submodule-names)
-                                                 #:shared-module-ends module-ends
-                                                 #:end-as-expressions? #f)]))
+                                               [require-lifts (make-require-lift-context
+                                                               (make-parse-lifted-require m-ns self requires+provides
+                                                                                          #:declared-submodule-names declared-submodule-names))]
+                                               [to-module-lifts (make-to-module-lift-context
+                                                                 #:shared-module-ends module-ends
+                                                                 #:end-as-expressions? #f)]))
 
          (define partially-expanded-bodys
            (partially-expand-bodys bodys
@@ -242,12 +242,8 @@
                                        [only-immediate? #f]
                                        [frame-id #:parent root-expand-context #f]
                                        [post-expansion-scope #:parent root-expand-context #f]
-                                       [lifts-to-module
-                                        (make-lift-to-module-context
-                                         (make-parse-lifted-require m-ns self requires+provides
-                                                                    #:declared-submodule-names declared-submodule-names)
-                                         #:shared-module-ends module-ends
-                                         #:end-as-expressions? #t)]))
+                                       [to-module-lifts (make-to-module-lift-context #:shared-module-ends module-ends
+                                                                                     #:end-as-expressions? #t)]))
          
          (finish-expanding-body-expressons partially-expanded-bodys
                                            #:tail? (zero? phase)
@@ -498,7 +494,9 @@
         ;; Were at the very end of the module; if there are any lifted-to-end
         ;; declarations, keep going
         (define bodys
-          (get-and-clear-ends! (expand-context-lifts-to-module partial-body-ctx)))
+          (append
+           (get-and-clear-end-lifts! (expand-context-to-module-lifts partial-body-ctx))
+           (get-and-clear-provide-lifts! (expand-context-to-module-lifts partial-body-ctx))))
         (if (null? bodys)
             null
             (loop #t (add-post-expansion-scope bodys partial-body-ctx)))]
@@ -506,8 +504,8 @@
      [else
       (define exp-body (expand (car bodys) partial-body-ctx))
       (append
-       ;; Save any requires and provides lifted during partial expansion
-       (get-and-clear-requires-and-provides! (expand-context-lifts-to-module partial-body-ctx))
+       ;; Save any requires lifted during partial expansion
+       (get-and-clear-require-lifts! (expand-context-require-lifts partial-body-ctx))
        ;; Ditto for expressions
        (get-and-clear-lifts! (expand-context-lifts partial-body-ctx))
        ;; Ditto for modules, which need to be processed
@@ -651,7 +649,9 @@
         ;; Were at the very end of the module, again, so check for lifted-to-end
         ;; declarations
         (define bodys
-          (get-and-clear-ends! (expand-context-lifts-to-module body-ctx)))
+          (append
+           (get-and-clear-end-lifts! (expand-context-to-module-lifts body-ctx))
+           (get-and-clear-provide-lifts! (expand-context-to-module-lifts body-ctx))))
         (if (null? bodys)
             null
             (loop #t bodys))]
@@ -672,9 +672,9 @@
       (define lifts
         ;; If there were any lifts, the right-hand sides need to be expanded
         (loop #f (get-and-clear-lifts! (expand-context-lifts body-ctx))))
-      (define lifted-requires-and-provides
+      (define lifted-requires
         ;; Get any requires and provides, keeping them as-is
-        (get-and-clear-requires-and-provides! (expand-context-lifts-to-module body-ctx)))
+        (get-and-clear-require-lifts! (expand-context-require-lifts body-ctx)))
       (define lifted-modules
         ;; If there were any module lifts, the `module` forms need to
         ;; be expanded
@@ -685,7 +685,7 @@
                                        body-ctx
                                        #:declared-submodule-names declared-submodule-names))
       (append
-       lifted-requires-and-provides
+       lifted-requires
        lifts
        lifted-modules
        (cons exp-body
