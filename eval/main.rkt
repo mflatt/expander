@@ -5,6 +5,9 @@
          "../namespace/namespace.rkt"
          "../common/contract.rkt")
 
+;; These wrappers implement the protocol for whether to use
+;; `namespace-synatx-introduce` on the argument to `eval`, etc.
+
 (provide eval
          eval-syntax
          
@@ -12,7 +15,10 @@
          compile-syntax
          
          expand
-         expand-syntax)
+         expand-syntax
+         
+         expand-to-top-form
+         expand-syntax-to-top-form)
 
 (define (eval s [ns (current-namespace)])
   (check 'eval namespace? ns)
@@ -38,6 +44,13 @@
 (define (expand-syntax s)
   (check 'expand syntax? s)
   (direct:expand s))
+
+(define (expand-to-top-form s)
+  (direct:expand-to-top-form (intro s)))
+
+(define (expand-syntax-to-top-form s)
+  (check 'expand syntax? s)
+  (direct:expand-to-top-form s))
 
 
 (define (intro given-s [ns (current-namespace)])

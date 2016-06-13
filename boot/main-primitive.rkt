@@ -17,6 +17,8 @@
           'compile-syntax wrapper:compile-syntax
           'expand wrapper:expand
           'expand-syntax wrapper:expand-syntax
+          'expand-to-top-form wrapper:expand-to-top-form
+          'expand-syntax-to-top-form wrapper:expand-syntax-to-top-form
           'dynamic-require dynamic-require
 
           'compiled-expression? compiled-expression?
