@@ -66,7 +66,7 @@
 (define (correlated->datum e)
   (datum-map e (lambda (tail? d)
                  (if (syntax? d)
-                     (syntax->datum e)
+                     (syntax->datum d)
                      d))))
 
 (define (match-correlated e pattern)
