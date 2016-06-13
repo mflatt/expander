@@ -224,16 +224,19 @@
                                      phase)   ; or 'all for "all"
   (define self (requires+provides-self r+p))
   (define requires (requires+provides-requires r+p))
-  (for*/list ([mod-name (in-list (if mod-name
-                                     (list mod-name)
-                                     (hash-keys requires)))]
-              #:unless (eq? mod-name self)
-              [phase-to-requireds (in-value (hash-ref requires mod-name #hasheqv()))]
-              [phase (in-list (if (eq? phase 'all)
-                                  (hash-keys phase-to-requireds)
-                                  (list phase)))]
-              [reqd (in-list (hash-ref phase-to-requireds phase null))])
-    reqd))
+  (let/ec esc
+    (for*/list ([mod-name (in-list (if mod-name
+                                       (list mod-name)
+                                       (hash-keys requires)))]
+                #:unless (eq? mod-name self)
+                [phase-to-requireds (in-value (hash-ref requires mod-name #hasheqv()))]
+                [phase (in-list (if (eq? phase 'all)
+                                    (hash-keys phase-to-requireds)
+                                    (list phase)))]
+                [reqd (in-list (hash-ref phase-to-requireds phase
+                                         ;; failure => not required at that phase
+                                         (lambda () (esc #f))))])
+      reqd)))
 
 ;; ----------------------------------------
 

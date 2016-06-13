@@ -306,8 +306,9 @@
     (extract-all-module-requires requires+provides
                                  mpi
                                  (if (eq? phase-level #t) 'all phase-level)))
-  (for/list ([(phase ids) (in-hash (requireds->phase-ht requireds))])
-    (cons phase ids)))
+  (and requireds
+       (for/list ([(phase ids) (in-hash (requireds->phase-ht requireds))])
+         (cons phase ids))))
 
 (define (requireds->phase-ht requireds)
   (for/fold ([ht (hasheqv)]) ([r (in-list requireds)])
