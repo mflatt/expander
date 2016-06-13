@@ -32,7 +32,8 @@
     (raise-argument-error 'module->namespace module-reference-str mod))
   (define name (reference->resolved-module-path mod #:load? #t))
   (define ns (current-namespace))
-  (define m-ns (namespace->module-namespace  ns name (namespace-phase ns)))
+  (define phase (namespace-phase ns))
+  (define m-ns (namespace->module-namespace ns name phase))
   (unless m-ns
     ;; Check for declaration:
     (namespace->module/complain 'module->namespace ns name)
@@ -43,6 +44,8 @@
   (unless (namespace-get-root-expand-ctx m-ns)
     ;; Instantiating the module didn't install a context, so make one now
     (namespace-set-root-expand-ctx! m-ns (make-root-expand-context)))
+  ;; Ensure that the module is available
+  (namespace-module-make-available! ns (namespace-mpi m-ns) phase)
   m-ns)
 
 ;; ----------------------------------------
