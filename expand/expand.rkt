@@ -125,9 +125,16 @@
    (define t (and b (lookup b ctx id)))
    (cond
     [(core-form? t)
-     (if (expand-context-only-immediate? ctx)
-         s
-         (dispatch t (datum->syntax s (cons sym s) s s) id ctx b))]
+     (cond
+      [(expand-context-only-immediate? ctx) s]
+      [(and (eq? sym '#%top)
+            (eq? (core-form-name t) '#%top)
+            (expand-context-preserve-#%expression-and-do-not-add-#%top? ctx))
+       ;; Special favor to `local-expand`: call `#%top` form without
+       ;; making `#%top` explicit in the form
+       ((core-form-expander t) s ctx #t)]
+      [else
+       (dispatch t (datum->syntax s (cons sym s) s s) id ctx b)])]
     [(transformer? t)
      (dispatch t (datum->syntax s (cons sym s) s s) id ctx b)]
     [else

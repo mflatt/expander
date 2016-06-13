@@ -4,6 +4,7 @@
          "../syntax/scope.rkt"
          "../syntax/match.rkt"
          "../namespace/namespace.rkt"
+         "../common/module-path.rkt"
          "../syntax/binding.rkt"
          "env.rkt"
          "free-id-set.rkt"
@@ -364,9 +365,15 @@
 
 (add-core-form!
  '#%top
- (lambda (s ctx)
-   (define m (match-syntax s '(#%top . id)))
-   (define id (m 'id))
+ (lambda (s ctx [implicit-omitted? #f])
+   (define id (cond
+               [implicit-omitted?
+                ;; As a special favor to `local-expand`, the expander
+                ;; has avoided making `#%top` explicit
+                s]
+               [else
+                (define m (match-syntax s '(#%top . id)))
+                (m 'id)]))
    (define b (resolve+shift id (expand-context-phase ctx)
                             #:ambiguous-value 'ambiguous))
    (cond
@@ -376,10 +383,11 @@
           (module-binding? b)
           (eq? (module-binding-module b) (namespace-mpi (expand-context-namespace ctx))))
      ;; Allow `#%top` in a module or top-level where it refers to the same
-     ;; thing that the identifier by itself would refer to. In that case
-     ;; `#%top` can be stripped.
-     ;; FIXME: preserve an explicit `#%top` in the top level
-     id]
+     ;; thing that the identifier by itself would refer to; in that case
+     ;; `#%top` can be stripped within a module
+     (cond
+      [(top-level-module-path-index? (module-binding-module b)) s]
+      [else id])]
     [(register-eventual-variable!? id ctx)
      ;; Must be in a module, and we'll check the binding later, so strip `#%top`:
      id]
@@ -387,14 +395,16 @@
      (cond
       [(not (expand-context-allow-unbound? ctx))
        ;; In a module, unbound or out of context:
-       (raise-syntax-error #f "unbound identifier" (m 'id) #f null
-                           (syntax-debug-info-string (m 'id) ctx))]
+       (raise-syntax-error #f "unbound identifier" id #f null
+                           (syntax-debug-info-string id ctx))]
       [else
        ;; At the top level:
        (define tl-id (add-scope id (root-expand-context-top-level-bind-scope ctx)))
        (cond
         [(resolve tl-id (expand-context-phase ctx))
-         ;; Expand to a reference to a top-level variable
+         ;; Expand to a reference to a top-level variable, instead of
+         ;; a local or imported variable
+         (define m (match-syntax s '(#%top . id)))
          (datum->syntax s (cons (m '#%top) tl-id))]
         [else s])])])))
 
@@ -476,7 +486,7 @@
    (define m (match-syntax s '(#%expression e)))
    (define exp-e (expand (m 'e) (as-tail-context (as-expression-context ctx)
                                                  #:wrt ctx)))
-   (case (and (not (expand-context-preserve-#%expression? ctx))
+   (case (and (not (expand-context-preserve-#%expression-and-do-not-add-#%top? ctx))
               (expand-context-context ctx))
      [(expression) (syntax-track-origin exp-e s)]
      [else (rebuild

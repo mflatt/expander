@@ -70,7 +70,7 @@
                        (namespace-set-variable! ns 0 sym val))]
                     [(1)
                      (for ([(sym proc) (in-hash core-forms)])
-                       (namespace-set-transformer! ns 0 sym (core-form proc)))])))
+                       (namespace-set-transformer! ns 0 sym (core-form proc sym)))])))
    core-module-name))
 
 ;; Helper for recognizing and dispatching on core forms:

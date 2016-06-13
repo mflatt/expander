@@ -33,7 +33,7 @@
                                             module-begin-k ; expander for `#%module-begin` in a 'module-begin context
                                             need-eventually-defined ; phase(>=1) -> variables expanded before binding
                                             allow-unbound? ; allow reference to unbound identifiers as variables
-                                            preserve-#%expression? ; keep `#%expression` around expression forms
+                                            preserve-#%expression-and-do-not-add-#%top? ; #t via `local-expand`
                                             stops      ; free-id-set
                                             current-introduction-scopes ; scopes for current macro expansion
                                             declared-submodule-names ; mutable hash table: symbol -> 'module or 'module*

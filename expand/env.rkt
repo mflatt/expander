@@ -68,7 +68,7 @@
    [else t]))
 
 ;; A subset of compile-time values are primitive forms
-(struct core-form (expander) #:transparent)
+(struct core-form (expander name) #:transparent)
 
 ;; ---------------------------------------- 
 

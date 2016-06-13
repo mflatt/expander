@@ -117,7 +117,7 @@
                                               null)
                                           (expand-context-scopes ctx))]
                                  [only-immediate? (not stop-ids)]
-                                 [preserve-#%expression? #t]
+                                 [preserve-#%expression-and-do-not-add-#%top? #t]
                                  [stops (free-id-set phase (or all-stop-ids null))]
                                  [current-introduction-scopes null]
                                  [all-scopes-stx #:parent root-expand-context
