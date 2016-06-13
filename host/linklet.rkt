@@ -29,6 +29,8 @@
          eval-linklet                ; serializable to instantiable
          instantiate-linklet         ; fills in an instance given argument instances
          
+         linklet-import-variables
+         linklet-export-variables
          compiled-linklet-import-variables
          compiled-linklet-export-variables
 
@@ -51,6 +53,10 @@
          variable-reference-constant?
          
          linklet-compile-to-s-expr) ; a parameter; whether to "compile" to a source form
+
+(struct linklet (proc                ; takes self instance plus instance arguments to run the linklet body
+                 import-variables    ; list [length is 1 less than proc arity] of list of symbols
+                 export-variables))  ; list of symbols
 
 (struct instance (name        ; any value (e.g., a namespace)
                   variables)) ; symbol -> value
@@ -240,7 +246,7 @@
 (define (compile-linklet c)
   (cond
    [(linklet-compile-to-s-expr)
-    (de-path (correlated->datum c))]
+    (marshal (correlated->datum c))]
    [else
     (define plain-c (desugar-linklet c))
     (parameterize ([current-namespace cu-namespace]
@@ -249,23 +255,25 @@
       ;; Use a vector to list the exported variables
       ;; with the compiled bytecode
       (vector (compile (correlated->host-syntax plain-c))
-              (extract-import-variables-from-expression c)
-              (extract-export-variables-from-expression c)))]))
+              (marshal (extract-import-variables-from-expression c))
+              (marshal (extract-export-variables-from-expression c))))]))
 
 ;; Convert serializable form to instantitable form
-(define (eval-linklet linklet)
+(define (eval-linklet cl)
   (parameterize ([current-namespace cu-namespace]
                  [current-eval orig-eval]
                  [current-compile orig-compile])
-    (eval (if (vector? linklet)
-              ;; Normal mode: compiled to bytecode
-              (vector-ref linklet 0)
-              ;; Assume previously "compiled" to source:
-              (desugar-linklet (re-path linklet))))))
+    (linklet (eval (if (vector? cl)
+                       ;; Normal mode: compiled to bytecode
+                       (vector-ref cl 0)
+                       ;; Assume previously "compiled" to source:
+                       (desugar-linklet (unmarshal cl))))
+             (unmarshal (compiled-linklet-import-variables cl))
+             (unmarshal (compiled-linklet-export-variables cl)))))
 
 ;; Instantiate
 (define (instantiate-linklet linklet import-instances [target-instance (make-instance 'anonymous)])
-  (apply linklet target-instance import-instances)
+  (apply (linklet-proc linklet) target-instance import-instances)
   target-instance)
 
 ;; ----------------------------------------
@@ -299,19 +307,22 @@
 ;; ----------------------------------------
 
 (struct path-bytes (bstr) #:prefab)
+(struct unreadable (str) #:prefab)
 (struct void-value () #:prefab)
 
-(define (de-path c)
+(define (marshal c)
   (datum-map c (lambda (tail? c)
                  (cond
                   [(path? c) (path-bytes (path->bytes c))]
+                  [(and (symbol? c) (symbol-unreadable? c)) (unreadable (symbol->string c))]
                   [(void? c) (void-value)]
                   [else c]))))
 
-(define (re-path c)
+(define (unmarshal c)
   (datum-map c
              (lambda (tail? c)
                (cond
                 [(path-bytes? c) (bytes->path (path-bytes-bstr c))]
+                [(unreadable? c) (string->unreadable-symbol (unreadable-str c))]
                 [(void-value? c) (void)]
                 [else c]))))

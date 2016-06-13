@@ -10,7 +10,8 @@
          "../compile/instance.rkt"
          "../compile/compiled-in-memory.rkt"
          "../expand/context.rkt"
-         "../expand/root-expand-context.rkt")
+         "../expand/root-expand-context.rkt"
+         "root-context.rkt")
 
 ;; Run a representation of top-level code as produced by `compile-module`;
 ;; see "compile.rkt" and "compile-module.rkt"
@@ -54,10 +55,16 @@
                                #:when v)
                      (values phase-level (eval-linklet v))))
   (define syntax-literals-linklet (eval-linklet (hash-ref h #".stx")))
-   
+  
+  (define requires (decl 'requires))
+  (define provides (decl 'provides))
+  
+  (define create-root-expand-context-from-module ; might be used to create root-expand-context
+    (make-create-root-expand-context-from-module requires evaled-h))
+  
   (define m (make-module original-self
-                         (decl 'requires)
-                         (decl 'provides)
+                         requires
+                         provides
                          #:language-info (decl 'language-info)
                          min-phase
                          max-phase
@@ -66,7 +73,8 @@
                            (define syntax-literals-instance
                              (init-syntax-literals! data-box ns
                                                     syntax-literals-linklet data-instance
-                                                    phase-shift original-self self bulk-binding-registry))
+                                                    phase-shift original-self self bulk-binding-registry
+                                                    create-root-expand-context-from-module))
                            (define cu (hash-ref evaled-h phase-level #f))
                            (when cu
                              (define imports
@@ -114,7 +122,8 @@
 
 (define (init-syntax-literals! data-box ns
                                syntax-literals-linklet data-instance
-                               phase-shift original-self self bulk-binding-registry)
+                               phase-shift original-self self bulk-binding-registry
+                               create-root-expand-context-from-module)
   (unless (unbox data-box)
     (define inst
       (make-instance-instance
@@ -132,11 +141,17 @@
     
     (set-box! data-box root-ctx-instance)
 
-    (define get-encoded-root-expand-ctx
-      (instance-variable-value root-ctx-instance 'get-encoded-root-expand-ctx))
-
-    (namespace-set-root-expand-ctx! ns (delay (root-expand-context-decode-for-module
-                                               (get-encoded-root-expand-ctx)))))
+    (cond
+     [(instance-variable-value root-ctx-instance 'get-encoded-root-expand-ctx)
+      ;; Root expand context has been preserved; deserialize it on demand
+      => (lambda (get-encoded-root-expand-ctx)
+           (namespace-set-root-expand-ctx! ns (delay (root-expand-context-decode-for-module
+                                                      (get-encoded-root-expand-ctx)))))]
+     [else
+      ;; Root expand context has not been preserved, because it canbe reconstructed
+      ;; from module metadata; do that on demand
+      (namespace-set-root-expand-ctx! ns (delay (create-root-expand-context-from-module
+                                                 ns phase-shift original-self self)))]))
 
   (unbox data-box))
 

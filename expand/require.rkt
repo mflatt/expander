@@ -14,7 +14,8 @@
          "../syntax/bulk-binding.rkt")
 
 (provide parse-and-perform-requires!
-         perform-initial-require!)
+         perform-initial-require!
+         perform-require!)
 
 (struct adjust-only (syms))
 (struct adjust-prefix (sym))
@@ -37,7 +38,7 @@
              [for-meta-ok? #t]
              [just-meta-ok? #t]
              [layer 'raw])
-    (for ([req (in-list reqs)])
+    (for/and ([req (in-list reqs)])
       (define (check-nested want-layer [ok? #t])
         (unless (and ok? (member want-layer (member layer layers)))
           (raise-syntax-error #f "invalid nesting" orig-s req)))
@@ -146,52 +147,61 @@
          (unless (or (module-path? maybe-mp)
                      (resolved-module-path? maybe-mp))
            (raise-syntax-error #f "bad require spec" orig-s req))
+         (when (or adjust (not (eq? just-meta 'all)))
+           (set-requires+provides-all-bindings-simple?! requires+provides #f))
          (define mp (if (resolved-module-path? maybe-mp)
                         (resolved-module-path->module-path maybe-mp)
                         maybe-mp))
-         (perform-require! mp #f self
+         (define mpi (module-path->mpi mp self
+                                       #:declared-submodule-names declared-submodule-names))
+         (perform-require! mpi #f self
                            (or req top-req) m-ns
-                           #:phase-shift phase-shift #:run-phase run-phase
-                           just-meta adjust
-                           requires+provides
+                           #:phase-shift phase-shift
+                           #:run-phase run-phase
+                           #:just-meta just-meta
+                           #:adjust adjust
+                           #:requires+provides requires+provides
                            #:run? run?
-                           #:visit? visit?
-                           #:declared-submodule-names declared-submodule-names)]))))
+                           #:visit? visit?)]))))
 
 (define (ids->sym-set ids)
   (for/set ([id (in-list ids)])
     (syntax-e id)))
+
+(define (module-path->mpi mod-path self
+                          #:declared-submodule-names [declared-submodule-names #hasheq()])
+  (if (and (list? mod-path)
+           (= 2 (length mod-path))
+           (eq? 'quote (car mod-path))
+           (symbol? (cadr mod-path))
+           (hash-ref declared-submodule-names (cadr mod-path) #f))
+      (module-path-index-join `(submod "." ,(cadr mod-path)) self)
+      (module-path-index-join mod-path self)))
 
 ;; ----------------------------------------
 
 (define (perform-initial-require! mod-path self
                                   in-stx m-ns
                                   requires+provides)
-  (perform-require! mod-path #f self
+  (perform-require! (module-path->mpi mod-path self) #f self
                     in-stx m-ns
-                    #:phase-shift 0 #:run-phase 0
-                    'all #f
-                    requires+provides
-                    #:can-shadow? #t))
+                    #:phase-shift 0
+                    #:run-phase 0
+                    #:requires+provides requires+provides
+                    #:can-be-shadowed? #t))
 
 ;; ----------------------------------------
 
-(define (perform-require! mod-path orig-s self
+(define (perform-require! mpi orig-s self
                           in-stx m-ns
-                          #:phase-shift phase-shift #:run-phase run-phase
-                          just-meta adjust
-                          requires+provides
+                          #:phase-shift phase-shift
+                          #:run-phase run-phase
+                          #:just-meta [just-meta 'all]
+                          #:adjust [adjust #f]
+                          #:requires+provides [requires+provides #f]
                           #:visit? [visit? #t]
                           #:run? [run? #f]
-                          #:can-shadow? [can-shadow? #f]
-                          #:declared-submodule-names [declared-submodule-names #hasheq()])
-  (define mpi (if (and (list? mod-path)
-                       (= 2 (length mod-path))
-                       (eq? 'quote (car mod-path))
-                       (symbol? (cadr mod-path))
-                       (hash-ref declared-submodule-names (cadr mod-path) #f))
-                  (module-path-index-join `(submod "." ,(cadr mod-path)) self)
-                  (module-path-index-join mod-path self)))
+                          #:can-be-shadowed? [can-be-shadowed? #f])
   (define module-name (module-path-index-resolve mpi #t))
   (define bind-in-stx (if (adjust-rename? adjust)
                           (adjust-rename-to-id adjust)
@@ -200,8 +210,10 @@
   (define m (namespace->module m-ns module-name))
   (unless m (raise-unknown-module-error 'require module-name))
   (define interned-mpi
-    (add-required-module! requires+provides mpi phase-shift
-                          (module-cross-phase-persistent? m)))
+    (if requires+provides
+        (add-required-module! requires+provides mpi phase-shift
+                              (module-cross-phase-persistent? m))
+        mpi))
   (bind-all-provides!
    m
    bind-in-stx phase-shift m-ns interned-mpi
@@ -238,14 +250,15 @@
               (when adjusted-sym
                 (define s (datum->syntax bind-in-stx adjusted-sym))
                 (define bind-phase (phase+ phase-shift provide-phase))
-                (check-not-defined #:check-not-required? #t
-                                   requires+provides
-                                   s bind-phase 
-                                   #:unless-matches binding
-                                   #:in in-stx)
-                (add-defined-or-required-id! requires+provides
-                                             s bind-phase binding
-                                             #:can-shadow? can-shadow?))
+                (when requires+provides
+                  (check-not-defined #:check-not-required? #t
+                                     requires+provides
+                                     s bind-phase 
+                                     #:unless-matches binding
+                                     #:in in-stx)
+                  (add-defined-or-required-id! requires+provides
+                                               s bind-phase binding
+                                               #:can-be-shadowed? can-be-shadowed?)))
               adjusted-sym))
   (when visit?
     (namespace-module-visit! m-ns interned-mpi phase-shift #:visit-phase run-phase))

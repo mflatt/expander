@@ -18,7 +18,8 @@
          generate-lazy-syntax-literal-lookup
          syntax-literals-as-vectors
          empty-syntax-literals
-         empty-syntax-literals?
+
+         header-empty-syntax-literals?
          
          local-key->symbol
          select-fresh
@@ -61,8 +62,8 @@
 
 (define empty-syntax-literals '#&())
 
-(define (empty-syntax-literals? syntax-literals)
-  (null? (unbox syntax-literals)))
+(define (header-empty-syntax-literals? header)
+  (null? (unbox (header-syntax-literals header))))
 
 ;; Generate on-demand deserialization (shared across instances) and
 ;; shifting (not shared); the result defines `syntax-literals-id` and

@@ -28,6 +28,7 @@
 (define (compile-forms bodys cctx mpis
                        #:phase-in-body-thunk [phase-in-body-thunk #f] ; phase, if any, to export `body-thunk`
                        #:encoded-root-expand-ctx [encoded-root-expand-ctx #f] ; encoded root context, if any
+                       #:root-ctx-only-if-syntax? [root-ctx-only-if-syntax? #f]
                        #:compiled-expression-callback [compiled-expression-callback void]
                        #:other-form-callback [other-form-callback void])
   (define phase (compile-context-phase cctx))
@@ -47,6 +48,9 @@
         (let ([header (make-header mpis)])
           (hash-set! phase-to-header phase header)
           header)))
+  
+  ;; Keep track of whether any `define-syntaxes` appeared at any phase
+  (define saw-define-syntaxes? #f)
   
   (when (compile-context-module-self cctx)
     ;; In a module, select non-conflicting symbols for definitions,
@@ -69,12 +73,6 @@
           [(begin-for-syntax)
            (define m (match-syntax body `(begin-for-syntax e ...)))
            (loop! (m 'e) (add1 phase) (find-or-create-header! (add1 phase)))]))))
-
-  ;; Register root-expand-context, if any, encoded as a syntax object
-  (define encoded-root-expand-header
-    (let ([h (find-or-create-header! 'root-ctx)])
-      (add-syntax-literal! h encoded-root-expand-ctx)
-      h))
 
   ;; Compile each form in `bodys`, recording results in `phase-to-body`
   (let loop! ([bodys bodys] [phase phase] [header (find-or-create-header! phase)])
@@ -153,7 +151,8 @@
                              ids binding-syms
                              (struct-copy compile-context cctx
                                           [phase phase]
-                                          [header header]))))]
+                                          [header header]))))
+         (set! saw-define-syntaxes? #t)]
         [(begin-for-syntax)
          (define m (match-syntax body `(begin-for-syntax e ...)))
          (loop! (m 'e) (add1 phase) (find-or-create-header! (add1 phase)))]
@@ -172,6 +171,18 @@
                                          [header header])))
          (compiled-expression-callback e #f phase)
          (add-body! phase e)])))
+
+  ;; Register root-expand-context, if any, encoded as a syntax object;
+  ;; see also "../eval/root-context.rkt"
+  (define encoded-root-expand-header
+    (and encoded-root-expand-ctx
+         (not (and root-ctx-only-if-syntax?
+                   (not saw-define-syntaxes?)
+                   (for/and ([h (in-hash-values phase-to-header)])
+                     (header-empty-syntax-literals? h))))
+         (let ([h (find-or-create-header! 'root-ctx)])
+           (add-syntax-literal! h encoded-root-expand-ctx)
+           h)))
 
   ;; Collect resulting phases
   (define phases-in-order (sort (hash-keys phase-to-body) <))

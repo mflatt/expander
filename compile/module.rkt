@@ -39,7 +39,8 @@
                                (syntax-e (m 'name))))
   (define requires (syntax-property s 'module-requires))
   (define provides (syntax-property s 'module-provides))
-  (define encoded-root-expand-ctx (syntax-property s 'root-expand-context)) ; for `module->namespace`
+  (define encoded-root-expand-ctx (syntax-property s 'module-root-expand-context)) ; for `module->namespace`
+  (define body-context-simple? (syntax-property s 'module-body-context-simple?))
   (define language-info (filter-language-info (syntax-property s 'module-language)))
   (define bodys (m 'body))
 
@@ -73,6 +74,7 @@
                   root-ctx-syntax-literals)
     (compile-forms bodys body-cctx mpis
                    #:encoded-root-expand-ctx encoded-root-expand-ctx
+                   #:root-ctx-only-if-syntax? body-context-simple?
                    #:compiled-expression-callback check-side-effects!
                    #:other-form-callback (lambda (body cctx)
                                            (case (core-form-sym body (compile-context-phase cctx))
@@ -158,16 +160,14 @@
                  [instance ,@instance-imports])
        #:export ([,syntax-literalss-id syntax-literalss]
                  [,get-syntax-literal!-id get-syntax-literal!]
-                 ,@(if root-ctx-syntax-literals
-                       `(get-encoded-root-expand-ctx)
-                       null))
+                 get-encoded-root-expand-ctx)
        ,@(generate-lazy-syntax-literals! all-syntax-literalss mpis self
                                          #:skip-deserialize? (not serializable?))
-       ,@(if root-ctx-syntax-literals
-             `((define-values (get-encoded-root-expand-ctx)
-                 (lambda ()
-                   ,(generate-lazy-syntax-literal-lookup (add1 max-phase) 0))))
-             null))))
+       (define-values (get-encoded-root-expand-ctx)
+         ,(if root-ctx-syntax-literals
+              `(lambda ()
+                ,(generate-lazy-syntax-literal-lookup (add1 max-phase) 0))
+              `'#f)))))
 
   ;; The data linklet houses deserialized data for use by the
   ;; declaration and module-body linklets. In the case of syntax

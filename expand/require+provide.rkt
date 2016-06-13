@@ -12,6 +12,9 @@
          requires+provides-self
          requires+provides-can-cross-phase-persistent?
          
+         requires+provides-all-bindings-simple?
+         set-requires+provides-all-bindings-simple?!
+         
          (struct-out required)
          add-required-module!
          add-defined-or-required-id!
@@ -38,7 +41,8 @@
                            requires   ; module-path-index -> require-phase -> list of (required id phase boolean)
                            provides   ; phase -> sym -> binding
                            phase-to-defined-syms ; phase -> sym -> boolean
-                           [can-cross-phase-persistent? #:mutable]))
+                           [can-cross-phase-persistent? #:mutable]
+                           [all-bindings-simple? #:mutable])) ; tracks whether bindings are easily reconstructed
 
 (define (make-requires+provides self)
   (requires+provides self
@@ -47,11 +51,12 @@
                      (make-hash)    ; requires
                      (make-hasheqv) ; provides
                      (make-hasheqv) ; phase-to-defined-syms
+                     #t
                      #t))
 
 ;; ----------------------------------------
 
-(struct required (id phase can-shadow?))
+(struct required (id phase can-be-shadowed?))
 
 ;; Register that a module is required at a given phase shift, and return a
 ;; locally interned module path index
@@ -80,28 +85,28 @@
 
 ;; Register a specific identifier that is required
 (define (add-defined-or-required-id! r+p id phase binding
-                                          #:can-shadow? [can-shadow? #f])
+                                          #:can-be-shadowed? [can-be-shadowed? #f])
   ;; Register specific required identifier
   (unless (equal? phase (phase+ (module-binding-nominal-phase binding)
                                 (module-binding-nominal-require-phase binding)))
     (error "internal error: binding phase does not match nominal info"))
-   (add-defined-or-required-id-at-nominal! r+p id phase
-                                           #:nominal-module (module-binding-nominal-module binding)
-                                           #:nominal-require-phase (module-binding-nominal-require-phase binding)
-                                           #:can-shadow? can-shadow?))
+  (add-defined-or-required-id-at-nominal! r+p id phase
+                                          #:nominal-module (module-binding-nominal-module binding)
+                                          #:nominal-require-phase (module-binding-nominal-require-phase binding)
+                                          #:can-be-shadowed? can-be-shadowed?))
 
 ;; The internals of `add-defined-or-required-id!` that consumes just
 ;; the needed part of the binding
 (define (add-defined-or-required-id-at-nominal! r+p id phase
                                                 #:nominal-module nominal-module
                                                 #:nominal-require-phase nominal-require-phase
-                                                #:can-shadow? can-shadow?)
+                                                #:can-be-shadowed? can-be-shadowed?)
   (hash-update! (requires+provides-requires r+p)
                 nominal-module
                 (lambda (at-mod)
                   (hash-update at-mod
                                nominal-require-phase
-                               (lambda (l) (cons (required id phase can-shadow?) l))
+                               (lambda (l) (cons (required id phase can-be-shadowed?) l))
                                null))
                 #hasheqv()))
 
@@ -110,6 +115,7 @@
                                                     #:enclosing-requires+provides enclosing-r+p
                                                     enclosing-mod
                                                     phase-shift)
+  (set-requires+provides-all-bindings-simple?! r+p #f)
   (for ([(mod-name at-mod) (in-hash (requires+provides-requires enclosing-r+p))])
     (for* ([(phase at-phase) (in-hash at-mod)]
            [reqd (in-list at-phase)])
@@ -121,7 +127,7 @@
                                               (phase+ (required-phase reqd) phase-shift)
                                               #:nominal-module enclosing-mod
                                               #:nominal-require-phase phase-shift
-                                              #:can-shadow? #t))))
+                                              #:can-be-shadowed? #t))))
 
 ;; Removes a required identifier, in anticiation of it being defined
 (define (remove-required-id! r+p id phase)
@@ -136,41 +142,63 @@
                   #hasheqv())))
 
 ;; Check whether an identifier has a binding that is from a non-shadowable
-;; require
+;; require; if somethign is found but it will be replaced, then record that
+;; bindings are not simple.
 (define (check-not-defined #:check-not-required? [check-not-required? #f]
                            r+p id phase #:in orig-s
                            #:unless-matches [ok-binding #f])
   (define b (resolve+shift id phase #:exactly? #t))
-  (when (and b (not (module-binding? b)))
-    (raise-syntax-error #f "identifier out of context" id))
-  (define defined? (and b (eq? (requires+provides-self r+p)
-                               (module-binding-module b))))
-  (when (and b
-             (or check-not-required?
-                 (and defined?
-                      ;; In case `#%module-begin` is expanded multiple times, check
-                      ;; that the definition has been seen this particular expansion
-                      (hash-ref (hash-ref (requires+provides-phase-to-defined-syms r+p)
-                                          phase
-                                          #hasheq())
-                                (module-binding-sym b)
-                                #f))))
-    (define at-mod (hash-ref (requires+provides-requires r+p)
-                             (module-binding-nominal-module b)
-                             #f))
-    (and at-mod
-         (for ([r (in-list (hash-ref at-mod
-                                     (module-binding-nominal-require-phase b)
-                                     null))])
-           (when (and (eq? (syntax-e id) (syntax-e (required-id r)))
-                      (not (required-can-shadow? r))
-                      (or (not ok-binding)
-                          (not (same-binding? b ok-binding))))
-             (raise-syntax-error #f
-                                 (string-append "identifier already "
-                                                (if defined? "defined" "required"))
-                                 orig-s
-                                 id))))))
+  (cond
+   [(not b) (void)]
+   [(not (module-binding? b))
+    (raise-syntax-error #f "identifier out of context" id)]
+   [else
+    (define defined? (and b (eq? (requires+provides-self r+p)
+                                 (module-binding-module b))))
+    (cond
+     [(and (not defined?) (not check-not-required?))
+      ;; Not defined, and we're shadowing all requires -- so, it's ok,
+      ;; but binding is non-simple
+      (set-requires+provides-all-bindings-simple?! r+p #f)]
+     [(and defined?
+           ;; In case `#%module-begin` is expanded multiple times, check
+           ;; that the definition has been seen this particular expansion
+           (not (hash-ref (hash-ref (requires+provides-phase-to-defined-syms r+p)
+                                    phase
+                                    #hasheq())
+                          (module-binding-sym b)
+                          #f)))
+      ;; Doesn't count as previously defined
+      (void)]
+     [else
+      (define at-mod (hash-ref (requires+provides-requires r+p)
+                               (module-binding-nominal-module b)
+                               #f))
+      (cond
+       [(not at-mod)
+        ;; Binding is from an enclosing context; if it's from an
+        ;; enclosing module, then we've already marked bindings
+        ;; a non-simple --- otherwise, we don't care
+        (void)]
+       [else
+        (for ([r (in-list (hash-ref at-mod
+                                    (module-binding-nominal-require-phase b)
+                                    null))])
+          (when (eq? (syntax-e id) (syntax-e (required-id r)))
+            (cond
+             [(and ok-binding (same-binding? b ok-binding))
+              ;; It's the same binding already, so overall binding hasn't
+              ;; become non-simple
+              (void)]
+             [(required-can-be-shadowed? r)
+              ;; Shadowing --- ok, but non-simple
+              (set-requires+provides-all-bindings-simple?! r+p #f)]
+             [else
+              (raise-syntax-error #f
+                                  (string-append "identifier already "
+                                                 (if defined? "defined" "required"))
+                                  orig-s
+                                  id)])))])])]))
 
 (define (add-defined-syms! r+p syms phase)
   (define phase-to-defined-syms (requires+provides-phase-to-defined-syms r+p))

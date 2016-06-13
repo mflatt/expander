@@ -354,18 +354,19 @@
    ;; back on any future re-expansion:
    (define generic-self (make-generic-self-module-path-index self))
    
-   (define result-module-s
-     (rebuild
-      s
-      `(,(m 'module) ,(m 'id:module-name) ,initial-require-s ,expanded-mb)))
-   (define shifted-result-s
-     (syntax-module-path-index-shift result-module-s self generic-self))
-   (define r+p-result-s
-    (attach-require-provide-properties requires+provides shifted-result-s self generic-self))
-   (define ex-ctx-result-s
-     (attach-root-expand-context-properties r+p-result-s root-ctx))
-   
-   ex-ctx-result-s)
+   (let* ([result-s
+           (rebuild
+            s
+            `(,(m 'module) ,(m 'id:module-name) ,initial-require-s ,expanded-mb))]
+          [result-s 
+           (syntax-module-path-index-shift result-s self generic-self)]
+          [result-s 
+           (attach-require-provide-properties requires+provides result-s self generic-self)]
+          [result-s (attach-root-expand-context-properties result-s root-ctx)]
+          [result-s (if (requires+provides-all-bindings-simple? requires+provides)
+                        (syntax-property result-s 'module-body-context-simple? #t)
+                        result-s)])
+     result-s))
 
 ;; ----------------------------------------
 
@@ -782,7 +783,7 @@
 
 (define (attach-root-expand-context-properties s root-ctx)
   ;; For `module->namespace`
-  (syntax-property s 'root-expand-context (root-expand-context-encode-for-module root-ctx)))
+  (syntax-property s 'module-root-expand-context (root-expand-context-encode-for-module root-ctx)))
 
 ;; ----------------------------------------
 

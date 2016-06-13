@@ -9,7 +9,8 @@
          "root-expand-context.rkt")
 
 (provide select-defined-syms-and-bind!
-         select-defined-syms-and-bind!/ctx)
+         select-defined-syms-and-bind!/ctx
+         add-defined-sym!)
 
 ;; For each identifier that is defined in a module or at the top
 ;; level, we need to map the identifier to a symbol for a variable in
@@ -85,3 +86,12 @@
                                  (root-expand-context-all-scopes-stx ctx)
                                  #:frame-id (root-expand-context-frame-id ctx)
                                  #:top-level-bind-scope (root-expand-context-top-level-bind-scope ctx)))
+
+;; ----------------------------------------
+
+(define (add-defined-sym! defined-syms phase sym id)
+  (define defined-syms-at-phase
+    (or (hash-ref defined-syms phase #f) (let ([ht (make-hasheq)])
+                                           (hash-set! defined-syms phase ht)
+                                           ht)))
+  (hash-set! defined-syms-at-phase sym id))
