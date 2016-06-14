@@ -96,7 +96,8 @@
                        (lifted-bind-rhs lift)))
            body))))
 
-(define (wrap-lifts-as-begin lifts body s phase)
+(define (wrap-lifts-as-begin lifts body s phase
+                             #:adjust-form [adjust-form values])
   (datum->syntax
    #f
    (cons (datum->syntax
@@ -104,16 +105,17 @@
           'begin)
          (append
           (for/list ([lift (in-list lifts)])
-            (cond
-             [(lifted-bind? lift)
-              (datum->syntax
-               #f
-               (list (datum->syntax
-                      (syntax-shift-phase-level core-stx phase)
-                      'define-values)
-                     (lifted-bind-ids lift)
-                     (lifted-bind-rhs lift)))]
-             [else lift]))
+            (adjust-form
+             (cond
+              [(lifted-bind? lift)
+               (datum->syntax
+                #f
+                (list (datum->syntax
+                       (syntax-shift-phase-level core-stx phase)
+                       'define-values)
+                      (lifted-bind-ids lift)
+                      (lifted-bind-rhs lift)))]
+              [else lift])))
           (list body)))))
 
 ;; ----------------------------------------

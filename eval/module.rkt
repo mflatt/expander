@@ -153,7 +153,7 @@
       (namespace-set-root-expand-ctx! ns (delay (root-expand-context-decode-for-module
                                                  (get-encoded-root-expand-ctx))))]
      [else
-      ;; Root expand context has not been preserved, because it canbe reconstructed
+      ;; Root expand context has not been preserved, because it can be reconstructed
       ;; from module metadata; do that on demand
       (namespace-set-root-expand-ctx! ns (delay (create-root-expand-context-from-module
                                                  ns phase-shift original-self self)))]))

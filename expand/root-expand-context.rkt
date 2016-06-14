@@ -104,5 +104,6 @@
   (hash-copy ; make mutable
    (for/hasheqv ([(phase ht-s) (in-hash (syntax-e v))])
      (values phase
-             (for/hash ([(sym id) (in-hash (syntax-e ht-s))])
-               (values sym id))))))
+             (hash-copy ; make mutable
+              (for/hash ([(sym id) (in-hash (syntax-e ht-s))])
+                (values sym id)))))))

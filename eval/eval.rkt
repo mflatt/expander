@@ -99,9 +99,8 @@
   (cond
    [(and (null? require-lifts) (null? lifts)) exp-s]
    [else
-    (wrap-lifts-as-begin (append require-lifts
-                                 (for/list ([form (in-list lifts)])
-                                   (expand-single form ns)))
+    (wrap-lifts-as-begin (append require-lifts lifts)
+                         #:adjust-form (lambda (form) (expand-single form ns))
                          exp-s
                          s (namespace-phase ns))]))
 
