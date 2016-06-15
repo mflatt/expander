@@ -169,7 +169,11 @@
   (check 'read-syntax input-port? in)
   (raw:read-syntax src in))
 
-(define (read-syntax/recursive src in start readtable graph?)
+(define (read-syntax/recursive [src (object-name (current-input-port))]
+                               [in (current-input-port)]
+                               [start #f]
+                               [readtable (current-readtable)]
+                               [graph? #t])
   (check 'read-syntax/recursive input-port? in)
   (unless (or (char? start) (not start))
     (raise-argument-error 'read-syntax/recursive "(or/c char? #f)" start))
