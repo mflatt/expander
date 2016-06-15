@@ -133,6 +133,7 @@
                     [as-transformer?
                      (expand-transformer input-s local-ctx
                                          #:context context
+                                         #:expand-lifts? #f
                                          #:begin-form? (eq? 'top-level context))]
                     [capture-lifts?
                      (expand/capture-lifts input-s local-ctx

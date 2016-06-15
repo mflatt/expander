@@ -622,7 +622,8 @@
 ;; expansion context
 (define (expand-transformer s ctx
                             #:context [context 'expression]
-                            #:begin-form? [begin-form? #f])
+                            #:begin-form? [begin-form? #f]
+                            #:expand-lifts? [expand-lifts? #t])
   (define phase (add1 (expand-context-phase ctx)))
   (define ns (namespace->namespace-at-phase (expand-context-namespace ctx)
                                             phase))
@@ -635,7 +636,7 @@
                                  [env empty-env]
                                  [only-immediate? #f]
                                  [post-expansion-scope #:parent root-expand-context #f]))
-  (expand/capture-lifts s trans-ctx #:expand-lifts? #t #:begin-form? begin-form?))
+  (expand/capture-lifts s trans-ctx #:expand-lifts? expand-lifts? #:begin-form? begin-form?))
 
 ;; Expand and evaluate `s` as a compile-time expression, ensuring that
 ;; the number of returned values matches the number of target
