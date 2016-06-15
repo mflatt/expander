@@ -2,6 +2,7 @@
 (require "../common/set.rkt"
          "../syntax/syntax.rkt"
          "../syntax/scope.rkt"
+         "../syntax/binding.rkt"
          "../common/phase.rkt")
 
 (provide (struct-out root-expand-context)
@@ -45,12 +46,12 @@
 ;; ----------------------------------------
 
 ;; Encode information in a syntax object that can be serialized and deserialized
-(define (root-expand-context-encode-for-module ctx)
+(define (root-expand-context-encode-for-module ctx orig-self new-self)
   (datum->syntax
    #f
    (vector (add-scopes empty-syntax (root-expand-context-module-scopes ctx))
            (add-scope empty-syntax (root-expand-context-post-expansion-scope ctx))
-           (root-expand-context-all-scopes-stx ctx)
+           (syntax-module-path-index-shift (root-expand-context-all-scopes-stx ctx) orig-self new-self)
            (add-scopes empty-syntax (unbox (root-expand-context-use-site-scopes ctx)))
            (for/hasheqv ([(phase ht) (in-hash (root-expand-context-defined-syms ctx))]) ; make immutable
              (values phase ht))

@@ -16,6 +16,7 @@
          module-path-index-submodule
          make-self-module-path-index
          make-generic-self-module-path-index
+         imitate-generic-module-path-index!
          module-path-index-shift
          module-path-index-resolved ; returns #f if not yet resolved
 
@@ -117,6 +118,7 @@
         #:property prop:custom-write
         (lambda (r port mode)
           (write-string "#<module-path-index" port)
+          (fprintf port "[~a]" (eq-hash-code r))
           (cond
            [(top-level-module-path-index? r)
             (fprintf port ":top-level")]
@@ -195,7 +197,7 @@
   (cond
    [submod
     (make-self-module-path-index (make-resolved-module-path
-                                  (cons 'expanded submod)))]
+                                  (cons generic-module-name submod)))]
    [else
     (define keep-base
       (cond
@@ -232,21 +234,40 @@
                                                      (and enclosing
                                                           (module-path-index-resolve enclosing))))]))
 
+;; A "generic" module path index is used by the exansion of `module`; every
+;; expanded module (at the same submodule nesting and name) uses the same
+;; generic module path, so that compilation can recognize references within
+;; the module to itself, and so on
 (define generic-self-mpis (make-weak-hash))
+(define generic-module-name 'expanded)
 
 ;; Return a module path index that is the same for a given
 ;; submodule path in the given self module path index
 (define (make-generic-self-module-path-index self)
-  (define name (resolved-module-path-name (module-path-index-resolved self)))
-  (define submod (make-resolved-module-path
-                  (if (symbol? name)
-                      'expanded
-                      (cons 'expanded (cdr name)))))
-  (or (let ([e (hash-ref generic-self-mpis submod #f)])
+  (define r (resolved-module-path-to-generic-resolved-module-path
+             (module-path-index-resolved self)))
+  (or (let ([e (hash-ref generic-self-mpis r #f)])
         (and e (ephemeron-value e)))
-      (let ([mpi (module-path-index #f #f submod (make-shift-cache))])
-        (hash-set! generic-self-mpis submod (make-ephemeron submod mpi))
+      (let ([mpi (module-path-index #f #f r (make-shift-cache))])
+        (hash-set! generic-self-mpis r (make-ephemeron r mpi))
         mpi)))
+
+(define (resolved-module-path-to-generic-resolved-module-path r)
+  (define name (resolved-module-path-name r))
+  (make-resolved-module-path
+   (if (symbol? name)
+       generic-module-name
+       (cons generic-module-name (cdr name)))))
+
+;; Mutate the resolved path in `mpi` to use the root module name of a
+;; generic module path index, which means that future
+;; `free-identifier=?` comparisons with the generic module path index
+;; will succeed
+(define (imitate-generic-module-path-index! mpi)
+  (define r (module-path-index-resolved mpi))
+  (when r
+    (set-module-path-index-resolved! mpi
+                                     (resolved-module-path-to-generic-resolved-module-path r))))
 
 (define (module-path-index-shift mpi from-mpi to-mpi)
   (cond

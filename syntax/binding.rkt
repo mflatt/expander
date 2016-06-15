@@ -34,6 +34,7 @@
  apply-syntax-shifts
  syntax-apply-shifts
  binding-module-path-index-shift
+ syntax-transfer-shifts
  
  syntax-source-module
  identifier-prune-to-source-module)
@@ -197,6 +198,10 @@
                                                                      from-mpi
                                                                      to-mpi))]
    [else b]))
+
+(define (syntax-transfer-shifts to-s from-s)
+  (for/fold ([s to-s]) ([shift (in-list (reverse (syntax-mpi-shifts from-s)))])
+    (syntax-module-path-index-shift s (car shift) (cdr shift))))
 
 ;; ----------------------------------------
 

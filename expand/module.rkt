@@ -65,7 +65,8 @@
 (define (expand-module s init-ctx enclosing-self
                        #:keep-enclosing-scope-at-phase [keep-enclosing-scope-at-phase #f]
                        #:enclosing-is-cross-phase-persistent? [enclosing-is-cross-phase-persistent? #f]
-                       #:enclosing-requires+provides [enclosing-r+p #f])
+                       #:enclosing-requires+provides [enclosing-r+p #f]
+                       #:mpis-for-enclosing-reset [mpis-for-enclosing-reset #f])
   (define m (match-syntax s '(module id:module-name initial-require body ...)))
    
    (define initial-require (syntax->datum (m 'initial-require)))
@@ -86,6 +87,9 @@
    
    (define enclosing-mod (and enclosing-self
                               (module-path-index-join '(submod "..") self)))
+   (when (and enclosing-mod mpis-for-enclosing-reset)
+     (set-box! mpis-for-enclosing-reset
+               (cons enclosing-mod (unbox mpis-for-enclosing-reset))))
    
    (define apply-module-scopes
      (make-apply-module-scopes outside-scope inside-scope 
@@ -131,6 +135,9 @@
    ;; Table of symbols picked for each binding in this module:
    (define defined-syms (root-expand-context-defined-syms root-ctx)) ; phase -> sym -> id
 
+   ;; Accumulate module path indexes used by submodules to refer to this module
+   (define mpis-to-reset (box null))
+     
    ;; Initial require
    (cond
     [(not keep-enclosing-scope-at-phase)
@@ -233,6 +240,7 @@
                                    #:defined-syms defined-syms
                                    #:declared-keywords declared-keywords
                                    #:declared-submodule-names declared-submodule-names
+                                   #:mpis-to-reset mpis-to-reset
                                    #:loop pass-1-and-2-loop))
 
          ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -250,7 +258,8 @@
                                            #:phase phase
                                            #:ctx body-ctx
                                            #:self self
-                                           #:declared-submodule-names declared-submodule-names)))
+                                           #:declared-submodule-names declared-submodule-names
+                                           #:mpis-to-reset mpis-to-reset)))
 
      ;; Check that any tentatively allowed reference at phase >= 1 is ok
      (check-defined-by-now need-eventually-defined self)
@@ -306,6 +315,7 @@
                                  #:self self
                                  #:requires-and-provides requires+provides
                                  #:enclosing-is-cross-phase-persistent? is-cross-phase-persistent?
+                                 #:mpis-to-reset mpis-to-reset
                                  #:declared-submodule-names declared-submodule-names
                                  #:ctx ctx)]))
      
@@ -350,6 +360,13 @@
    ;; back on any future re-expansion:
    (define generic-self (make-generic-self-module-path-index self))
    
+   ;; Make `self` like `generic-self`; this hacky update plays the
+   ;; role of applying a shift to identifiers that are in syntax
+   ;; properties, such as the 'origin property
+   (imitate-generic-module-path-index! self)
+   (for ([mpi (in-list (unbox mpis-to-reset))])
+     (imitate-generic-module-path-index! mpi))
+   
    (let* ([result-s
            (rebuild
             s
@@ -358,7 +375,7 @@
            (syntax-module-path-index-shift result-s self generic-self)]
           [result-s 
            (attach-require-provide-properties requires+provides result-s self generic-self)]
-          [result-s (attach-root-expand-context-properties result-s root-ctx)]
+          [result-s (attach-root-expand-context-properties result-s root-ctx self generic-self)]
           [result-s (if (requires+provides-all-bindings-simple? requires+provides)
                         (syntax-property result-s 'module-body-context-simple? #t)
                         result-s)])
@@ -484,6 +501,7 @@
                                 #:defined-syms defined-syms
                                 #:declared-keywords declared-keywords
                                 #:declared-submodule-names declared-submodule-names
+                                #:mpis-to-reset mpis-to-reset
                                 #:loop pass-1-and-2-loop)
   (namespace-visit-available-modules! m-ns phase)
   (let loop ([tail? tail?] [bodys bodys])
@@ -583,7 +601,8 @@
           (define ready-body (remove-use-site-scopes exp-body partial-body-ctx))
           (define submod
             (expand-submodule ready-body self partial-body-ctx
-                              #:declared-submodule-names declared-submodule-names))
+                              #:declared-submodule-names declared-submodule-names
+                              #:mpis-to-reset mpis-to-reset))
           (cons submod
                 (loop tail? (cdr bodys)))]
          [(module*)
@@ -640,7 +659,8 @@
                                           #:phase phase
                                           #:ctx body-ctx
                                           #:self self
-                                          #:declared-submodule-names declared-submodule-names)
+                                          #:declared-submodule-names declared-submodule-names
+                                          #:mpis-to-reset mpis-to-reset)
   (let loop ([tail? tail?] [bodys partially-expanded-bodys])
     (cond
      [(null? bodys)
@@ -683,6 +703,7 @@
                                        phase
                                        self
                                        body-ctx
+                                       #:mpis-to-reset mpis-to-reset
                                        #:declared-submodule-names declared-submodule-names))
       (append
        lifted-requires
@@ -766,8 +787,9 @@
                         ,@fully-expanded-bodys-except-post-submodules)))
                     self
                     self)
-                   root-ctx))
-  
+                   root-ctx
+                   self self))
+
   (define root-module-name (resolved-module-path-root-name
                             (module-path-index-resolve self)))
   (parameterize ([current-namespace m-ns]
@@ -781,9 +803,10 @@
                      #:as-submodule? #t)
      #:as-submodule? #t)))
 
-(define (attach-root-expand-context-properties s root-ctx)
+(define (attach-root-expand-context-properties s root-ctx orig-self new-self)
   ;; For `module->namespace`
-  (syntax-property s 'module-root-expand-context (root-expand-context-encode-for-module root-ctx)))
+  (syntax-property s 'module-root-expand-context
+                   (root-expand-context-encode-for-module root-ctx orig-self new-self)))
 
 ;; ----------------------------------------
 
@@ -797,6 +820,7 @@
                                 #:self self
                                 #:requires-and-provides requires+provides
                                 #:enclosing-is-cross-phase-persistent? enclosing-is-cross-phase-persistent?
+                                #:mpis-to-reset mpis-to-reset
                                 #:declared-submodule-names declared-submodule-names
                                 #:ctx submod-ctx)
   (let loop ([bodys fully-expanded-bodys-except-post-submodules] [phase phase])
@@ -818,10 +842,12 @@
                                  #:keep-enclosing-scope-at-phase neg-phase
                                  #:enclosing-requires+provides requires+provides
                                  #:enclosing-is-cross-phase-persistent? enclosing-is-cross-phase-persistent?
+                                 #:mpis-to-reset mpis-to-reset
                                  #:declared-submodule-names declared-submodule-names))
              (syntax-shift-phase-level submod phase)]
             [else
              (expand-submodule (car bodys) self submod-ctx
+                               #:mpis-to-reset mpis-to-reset
                                #:declared-submodule-names declared-submodule-names)]))
          (cons submod
                (loop (cdr bodys) phase))]
@@ -886,6 +912,7 @@
                           #:keep-enclosing-scope-at-phase [keep-enclosing-scope-at-phase #f]
                           #:enclosing-requires+provides [enclosing-r+p #f]
                           #:enclosing-is-cross-phase-persistent? [enclosing-is-cross-phase-persistent? #f]
+                          #:mpis-to-reset mpis-to-reset
                           #:declared-submodule-names declared-submodule-names)
   ;; Register name and check for duplicates
   (define m (match-syntax s '(module name . _)))
@@ -903,7 +930,8 @@
                    self
                    #:keep-enclosing-scope-at-phase keep-enclosing-scope-at-phase
                    #:enclosing-requires+provides enclosing-r+p
-                   #:enclosing-is-cross-phase-persistent? enclosing-is-cross-phase-persistent?))
+                   #:enclosing-is-cross-phase-persistent? enclosing-is-cross-phase-persistent?
+                   #:mpis-for-enclosing-reset mpis-to-reset))
   
   ;; Compile and declare the submodule for use by later forms
   ;; in the enclosing module:
@@ -925,11 +953,13 @@
 
 ;; Expand `module` forms, leave `module*` forms alone:
 (define (expand-non-module*-submodules bodys phase self ctx
+                                       #:mpis-to-reset mpis-to-reset
                                        #:declared-submodule-names declared-submodule-names)
   (for/list ([body (in-list bodys)])
     (case (core-form-sym body phase)
       [(module)
        (expand-submodule body self ctx
+                         #:mpis-to-reset mpis-to-reset
                          #:declared-submodule-names declared-submodule-names)]
       [else body])))
 
