@@ -20,23 +20,23 @@
       (define old-origin (hash-ref old-props 'origin missing))
       (define origin (if (eq? old-origin missing)
                          (list id)
-                         (cons (list id) old-origin)))
+                         (cons id old-origin)))
       (struct-copy syntax new-stx
                    [props (hash-set old-props 'origin origin)])]
      [else
       ;; Merge properties
-      (define new-props-with-origin
-        (hash-set new-props 'origin (cons id (hash-ref new-props 'origin null))))
+      (define old-props-with-origin
+        (hash-set old-props 'origin (cons id (hash-ref old-props 'origin null))))
       (define updated-props
         (cond
-         [((hash-count old-props) . < . (hash-count new-props))
-          (for/fold ([new-props new-props-with-origin]) ([(k v) (in-hash old-props)])
+         [((hash-count old-props-with-origin) . < . (hash-count new-props))
+          (for/fold ([new-props new-props]) ([(k v) (in-hash old-props-with-origin)])
             (define new-v (hash-ref new-props k missing))
             (hash-set new-props k (if (eq? new-v missing)
                                       v
                                       (cons new-v v))))]
          [else
-          (for/fold ([old-props old-props]) ([(k v) (in-hash new-props-with-origin)])
+          (for/fold ([old-props old-props-with-origin]) ([(k v) (in-hash new-props)])
             (define old-v (hash-ref old-props k missing))
             (hash-set old-props k (if (eq? old-v missing)
                                       v
