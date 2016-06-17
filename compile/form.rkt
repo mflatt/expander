@@ -1,6 +1,7 @@
 #lang racket/base
 (require "../syntax/syntax.rkt"
          "../syntax/scope.rkt"
+         "../syntax/taint.rkt"
          "../syntax/match.rkt"
          "../common/phase.rkt"
          "../namespace/core.rkt"
@@ -76,7 +77,8 @@
 
   ;; Compile each form in `bodys`, recording results in `phase-to-body`
   (let loop! ([bodys bodys] [phase phase] [header (find-or-create-header! phase)])
-    (for ([body (in-list bodys)])
+    (for ([in-body (in-list bodys)])
+      (define body (syntax-disarm in-body))
       (case (core-form-sym body phase)
         [(define-values)
          (define m (match-syntax body '(define-values (id ...) rhs)))

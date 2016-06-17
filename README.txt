@@ -6,7 +6,6 @@ TODO:
  bug fix for local definition contexts (MB's example)
  load handler's direct loading of submodules
  preserved syntax properties
- taints
  expander observer
  continuation barrier on macro invocation
  continuation prompt for module body

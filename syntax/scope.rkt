@@ -4,6 +4,8 @@
          "../compile/serialize-state.rkt"
          "../common/memo.rkt"
          "syntax.rkt"
+         "taint.rkt"
+         "tamper.rkt"
          "../common/phase.rkt"
          "fallback.rkt"
          "datum-map.rkt")
@@ -18,7 +20,8 @@
          flip-scopes
          push-scope
          
-         syntax-e ; handles lazy scope propagation
+         syntax-e ; handles lazy scope and taint propagation
+         syntax-e/no-taint ; like `syntax-e`, but doesn't explode a dye pack
          
          syntax-scope-set
          syntax-any-macro-scopes?
@@ -309,9 +312,10 @@
                              [content d]
                              [shifted-multi-scopes
                               (do-op (syntax-shifted-multi-scopes s))]))
-              syntax-e))
+              syntax-e/no-taint))
 
-(define (syntax-e s)
+(define (syntax-e/no-taint s)
+  (propagate-taint! s)
   (define prop (syntax-scope-propagations s))
   (if prop
       (let ([new-content
@@ -332,6 +336,13 @@
         (set-syntax-scope-propagations! s #f)
         new-content)
       (syntax-content s)))
+
+(define (syntax-e s)
+  (define content (syntax-e/no-taint s))
+  (cond
+   [(not (tamper-armed? (syntax-tamper s))) content]
+   [(datum-has-elements? content) (taint-content content)]
+   [else content]))
 
 ;; When a representative-scope is manipulated, we want to
 ;; manipulate the multi scope, instead (at a particular
@@ -385,7 +396,7 @@
                              [content d]
                              [shifted-multi-scopes
                               (push (syntax-shifted-multi-scopes s))]))
-              syntax-e))
+              syntax-e/no-taint))
 
 ;; ----------------------------------------
 
@@ -494,7 +505,7 @@
                                    [content d]
                                    [shifted-multi-scopes
                                     (shift-all (syntax-shifted-multi-scopes s))]))
-                    syntax-e))))
+                    syntax-e/no-taint))))
 
 ;; ----------------------------------------
 
@@ -534,7 +545,7 @@
                                    [scopes (swap-scs (syntax-scopes s))]
                                    [shifted-multi-scopes
                                     (swap-smss (syntax-shifted-multi-scopes s))]))
-                    syntax-e))))
+                    syntax-e/no-taint))))
 
 ;; ----------------------------------------
 
@@ -595,7 +606,7 @@
     (raise-argument-error 'resolve "phase?" phase))
   (let fallback-loop ([smss (syntax-shifted-multi-scopes s)])
     (define scopes (scope-set-at-fallback s (fallback-first smss) phase))
-    (define sym (syntax-e s))
+    (define sym (syntax-content s))
     (define candidates
       (for*/list ([sc (in-set scopes)]
                   [bindings (in-value

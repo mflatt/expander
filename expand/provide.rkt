@@ -43,7 +43,7 @@
             (raise-syntax-error provide-form-name "bad `for-meta' phase" orig-s spec))
           (list
            (rebuild
-            spec
+            spec spec
             `(,(m 'for-meta) ,(m 'phase-level) ,@(loop (m 'spec)
                                                        (phase+ p at-phase)
                                                        protected?
@@ -53,7 +53,7 @@
           (define m (match-syntax spec '(for-syntax spec ...)))
           (list
            (rebuild
-            spec
+            spec spec
             `(,(m 'for-syntax) ,@(loop (m 'spec)
                                        (phase+ 1 at-phase)
                                        protected?
@@ -62,20 +62,24 @@
           (check-nested 'raw)
           (define m (match-syntax spec '(for-label spec ...)))
           (list
-           (rebuild spec `(,(m 'for-label) ,@(loop (m 'spec)
-                                                   #f
-                                                   protected?
-                                                   'phaseless))))]
+           (rebuild
+            spec spec
+            `(,(m 'for-label) ,@(loop (m 'spec)
+                                      #f
+                                      protected?
+                                      'phaseless))))]
          [(protect)
           (check-nested 'phaseless)
           (when protected?
             (raise-syntax-error provide-form-name "nested `protect' not allowed" orig-s spec))
           (define m (match-syntax spec '(protect spec ...)))
           (list
-           (rebuild spec `(,(m 'protect) ,@(loop (m 'spec)
-                                                 at-phase
-                                                 #t
-                                                 layer))))]
+           (rebuild
+            spec spec
+            `(,(m 'protect) ,@(loop (m 'spec)
+                                    at-phase
+                                    #t
+                                    layer))))]
          [(rename)
           (check-nested 'phaseless)
           (define m (match-syntax spec '(rename id:from id:to)))

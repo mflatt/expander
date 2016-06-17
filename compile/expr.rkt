@@ -1,8 +1,10 @@
 #lang racket/base
 (require "../common/set.rkt"
          "../syntax/syntax.rkt"
+         "../syntax/to-list.rkt"
          "../common/phase.rkt"
          "../syntax/scope.rkt"
+         "../syntax/taint.rkt"
          "../namespace/namespace.rkt"
          "../namespace/module.rkt"
          "../syntax/binding.rkt"
@@ -25,11 +27,12 @@
 ;; phase can be shifted at run time by the amount bound to
 ;; `phase-shift-id`. Module bindings are accessed through a namespace
 ;; that is bound to `ns-id` at run time.
-(define (compile s cctx)
+(define (compile in-s cctx)
   (let ([compile (lambda (s) (compile s cctx))])
-    (define phase (compile-context-phase cctx))
+    (define s (syntax-disarm in-s))
     (cond
      [(pair? (syntax-e s))
+      (define phase (compile-context-phase cctx))
       (define core-sym (core-form-sym s phase))
       (case core-sym
         [(#f)
@@ -46,7 +49,11 @@
                                    (compile-lambda formals body cctx))))]
         [(#%app)
          (define m (match-syntax s '(#%app . rest)))
-         (for/list ([s (in-list (correlated->list (m 'rest)))])
+         (define es (let ([es (m 'rest)])
+                      (if (syntax? es)
+                          (syntax->list (syntax-disarm es))
+                          es)))
+         (for/list ([s (in-list es)])
            (compile s))]
         [(if)
          (define m (match-syntax s '(if tst thn els)))
@@ -77,7 +84,7 @@
          (define m (match-syntax s '(quote datum)))
          (correlate s `(quote ,(syntax->datum (m 'datum))))]
         [(quote-syntax)
-         (define m (match-syntax s '(quote datum . _)))
+         (define m (match-syntax s '(quote-syntax datum . _)))
          (compile-quote-syntax (m 'datum) phase cctx)]
         [(#%variable-reference)
          (define id-m (try-match-syntax s '(#%variable-reference id)))

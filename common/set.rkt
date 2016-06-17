@@ -4,6 +4,7 @@
 ;; Lightweight variant of sets
 
 (provide set seteq seteqv
+         set?
          set-empty?
          set-member?
          set-count
@@ -32,6 +33,8 @@
     [l (for/fold ([s #hasheq()]) ([e (in-list l)])
          (hash-set s e #t))]))
 (define (seteqv) #hasheqv())
+
+(define (set? s) (hash? s))
 
 (define (set-empty? s) (zero? (hash-count s)))
 (define (set-member? s e) (hash-ref s e #f))

@@ -1,7 +1,8 @@
 #lang racket/base
 (require "../common/contract.rkt"
          "syntax.rkt"
-         "scope.rkt")
+         "scope.rkt"
+         "taint.rkt")
 
 (provide (struct-out exn:fail:syntax)
          make-exn:fail:syntax
@@ -55,10 +56,11 @@
                          in-message
                          message-suffix)
           (current-continuation-marks)
-          (if (or sub-expr expr)
-              (cons (datum->syntax #f (or sub-expr expr))
-                    extra-sources)
-              extra-sources))))
+          (map syntax-taint
+               (if (or sub-expr expr)
+                   (cons (datum->syntax #f (or sub-expr expr))
+                         extra-sources)
+                   extra-sources)))))
 
 (define (extract-form-name s)
   (cond

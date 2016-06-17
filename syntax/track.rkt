@@ -8,7 +8,7 @@
 
 (define (syntax-track-origin new-stx old-stx [id (if (identifier? old-stx)
                                                      old-stx
-                                                     (car (syntax-e old-stx)))])
+                                                     (car (syntax-e/no-taint old-stx)))])
   (define old-props (syntax-props old-stx))
   (cond
    [(zero? (hash-count old-props))

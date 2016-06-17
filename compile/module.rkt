@@ -1,6 +1,7 @@
 #lang racket/base
 (require "../syntax/syntax.rkt"
          "../syntax/scope.rkt"
+         "../syntax/taint.rkt"
          "../syntax/match.rkt"
          "../common/phase.rkt"
          "../namespace/core.rkt"
@@ -27,16 +28,16 @@
                         #:self [given-self #f]
                         #:as-submodule? [as-submodule? #f]
                         #:serializable? [serializable? (not as-submodule?)])
-  (define m (match-syntax s '(module name initial-require
-                              (#%module-begin body ...))))
+  (define m-m (match-syntax (syntax-disarm s) '(module name initial-require mb)))
+  (define m (match-syntax (syntax-disarm (m-m 'mb)) '(#%module-begin body ...)))
   (define enclosing-self (compile-context-module-self cctx))
   (define self (or given-self
                    (make-generic-self-module-path-index
                     (make-self-module-path-index
-                     (syntax-e (m 'name))
+                     (syntax-e (m-m 'name))
                      enclosing-self))))
   (define root-module-name (or (compile-context-root-module-name cctx)
-                               (syntax-e (m 'name))))
+                               (syntax-e (m-m 'name))))
   (define requires (syntax-property s 'module-requires))
   (define provides (syntax-property s 'module-provides))
   (define encoded-root-expand-ctx-box (box (syntax-property s 'module-root-expand-context))) ; for `module->namespace`
@@ -239,21 +240,22 @@
       (cond
        [(null? bodys) null]
        [else
-        (define f (core-form-sym (car bodys) phase))
+        (define body (syntax-disarm (car bodys)))
+        (define f (core-form-sym body phase))
         (cond
          [(eq? f form-name)
-          (define sm-m (match-syntax (car bodys) '(_ name . _)))
+          (define sm-m (match-syntax body '(_ name . _)))
           (define s-shifted
             (cond
-             [(try-match-syntax (car bodys) '(module* name #f . _))
-              (syntax-shift-phase-level (car bodys) (phase- 0 phase))]
-             [else (car bodys)]))
+             [(try-match-syntax body '(module* name #f . _))
+              (syntax-shift-phase-level body (phase- 0 phase))]
+             [else body]))
           (cons (cons (syntax-e (sm-m 'name))
                       (compile-module s-shifted body-cctx
                                       #:serializable? serializable?))
                 (loop (cdr bodys) phase))]
          [(eq? f 'begin-for-syntax)
-          (define m (match-syntax (car bodys) `(begin-for-syntax e ...)))
+          (define m (match-syntax body `(begin-for-syntax e ...)))
           (append (loop (m 'e) (add1 phase))
                   (loop (cdr bodys) phase))]
          [else

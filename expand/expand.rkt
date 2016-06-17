@@ -2,6 +2,7 @@
 (require "../common/set.rkt"
          "../syntax/syntax.rkt"
          "../syntax/scope.rkt"
+         "../syntax/taint.rkt"
          "../syntax/match.rkt"
          "../namespace/namespace.rkt"
          "../namespace/module.rkt"
@@ -63,10 +64,11 @@
       [else
        ;; Variable or form as identifier macro
        (dispatch (lookup binding ctx s) s id ctx binding)]))]
-   [(and (pair? (syntax-e s))
-         (identifier? (car (syntax-e s))))
+   [(and (pair? (syntax-e/no-taint (syntax-disarm s)))
+         (identifier? (car (syntax-e/no-taint (syntax-disarm s)))))
     ;; An "application" form that starts with an identifier
-    (define id (or alternate-id (car (syntax-e s))))
+    (define disarmed-s (syntax-disarm s #f))
+    (define id (or alternate-id (car (syntax-e disarmed-s))))
     (guard-stop
      id ctx s
      (define binding (resolve+shift id (expand-context-phase ctx)
@@ -88,12 +90,12 @@
         [else
          ;; Syntax or core form as "application"
          (dispatch t s id ctx binding)])]))]
-   [(or (pair? (syntax-e s))
-        (null? (syntax-e s)))
+   [(or (pair? (syntax-e (syntax-disarm s)))
+        (null? (syntax-e (syntax-disarm s))))
     ;; An "application" form that doesn't start with an identifier, so
     ;; use implicit `#%app`
     (expand-implicit '#%app s ctx #f)]
-   [(already-expanded? (syntax-e s))
+   [(already-expanded? (syntax-e/no-taint s))
     ;; An expression that is already fully expanded via `local-expand-expression`
     (define ae (syntax-e s))
     (unless (bound-identifier=? (root-expand-context-all-scopes-stx ctx)
@@ -111,7 +113,8 @@
 
 ;; Handle an implicit: `#%app`, `#%top`, or `#%datum`
 (define (expand-implicit sym s ctx trigger-id)
-  (define id (datum->syntax s sym))
+  (define disarmed-s (syntax-disarm s))
+  (define id (datum->syntax disarmed-s sym))
   (guard-stop
    id ctx s
    ;; Instead of calling `expand` with a new form that starts `id`,
@@ -134,9 +137,9 @@
        ;; making `#%top` explicit in the form
        ((core-form-expander t) s ctx #t)]
       [else
-       (dispatch t (datum->syntax s (cons sym s) s s) id ctx b)])]
+       (dispatch t (datum->syntax disarmed-s (cons sym disarmed-s) s s) id ctx b)])]
     [(transformer? t)
-     (dispatch t (datum->syntax s (cons sym s) s s) id ctx b)]
+     (dispatch t (datum->syntax disarmed-s (cons sym disarmed-s) s s) id ctx b)]
     [else
      (define phase (expand-context-phase ctx))
      (define what
@@ -163,7 +166,8 @@
 ;; Expand `s` given that the value `t` of the relevant binding,
 ;; where `t` is either a core form, a macro transformer, some
 ;; other compile-time value (which is an error), or a token
-;; indincating that the binding is a run-time variable
+;; indicating that the binding is a run-time variable; note that
+;; `s` is not disarmed
 (define (dispatch t s id ctx binding)
   (cond
    [(core-form? t)
@@ -199,10 +203,14 @@
 ;; Given a macro transformer `t`, apply it --- adding appropriate
 ;; scopes to represent the expansion step
 (define (apply-transformer t s id ctx binding)
+  (define disarmed-s (syntax-disarm s))
   (define intro-scope (new-scope 'macro))
-  (define intro-s (add-scope s intro-scope))
+  (define intro-s (add-scope disarmed-s intro-scope))
   ;; In a definition context, we need use-site scopes
   (define-values (use-s use-scopes) (maybe-add-use-site-scope intro-s ctx binding))
+  ;; Avoid accidental transfer of taint-controlling properties:
+  (define cleaned-s (syntax-property-remove (syntax-property-remove use-s 'taint-mode)
+                                            'certify-mode))
   ;; Call the transformer; the current expansion context may be needed
   ;; for `syntax-local-....` functions, and we may accumulate scopes from
   ;; definition contexts created by the transformer
@@ -284,22 +292,25 @@
    [else
     otherwise ...]))
 
-
 (define (substitute-alternate-id s alternate-id)
   (cond
    [(not alternate-id) s]
-   [(identifier? s) (syntax-track-origin alternate-id s)]
-   [else (syntax-track-origin (datum->syntax
-                               s
-                               (cons alternate-id
-                                     (cdr (syntax-e s)))
-                               s)
-                              s)]))
+   [(identifier? s) (syntax-rearm (syntax-track-origin alternate-id s) s)]
+   [else
+    (define disarmed-s (syntax-disarm s))
+    (syntax-rearm (syntax-track-origin (datum->syntax
+                                        disarmed-s
+                                        (cons alternate-id
+                                              (cdr (syntax-e disarmed-s)))
+                                        s)
+                                       s)
+                       s)]))
 
 ;; ----------------------------------------
 
 ;; Expand a sequence of body forms in a definition context
-(define (expand-body bodys sc s ctx
+(define (expand-body bodys sc ctx
+                     #:source s #:disarmed-source disarmed-s
                      #:stratified? [stratified? #f]
                      #:track? [track? #f])
   ;; The outside-edge scope identifies the original content of the
@@ -348,15 +359,16 @@
       (finish-expanding-body body-ctx frame-id
                              (reverse val-idss) (reverse val-keyss) (reverse val-rhss)
                              (reverse done-bodys)
-                             s
+                             #:source s #:disarmed-source disarmed-s
                              #:stratified? stratified?
                              #:track? track?)]
      [else
-      (define exp-body (expand (car bodys) body-ctx))
-      (case (core-form-sym exp-body phase)
+      (define exp-body (expand (syntax-disarm (car bodys)) body-ctx))
+      (define disarmed-exp-body (syntax-disarm exp-body))
+      (case (core-form-sym disarmed-exp-body phase)
         [(begin)
          ;; Splice a `begin` form
-         (define m (match-syntax exp-body '(begin e ...)))
+         (define m (match-syntax disarmed-exp-body '(begin e ...)))
          (define (track e) (syntax-track-origin e exp-body))
          (loop body-ctx
                (append (map track (m 'e)) (cdr bodys))
@@ -368,7 +380,7 @@
         [(define-values)
          ;; Found a variable definition; add bindings, extend the
          ;; environment, and continue
-         (define m (match-syntax exp-body '(define-values (id ...) rhs)))
+         (define m (match-syntax disarmed-exp-body '(define-values (id ...) rhs)))
          (define ids (remove-use-site-scopes (m 'id) body-ctx))
          (define new-dups (check-no-duplicate-ids ids phase exp-body dups))
          (define counter (root-expand-context-counter ctx))
@@ -403,7 +415,7 @@
          ;; Found a macro definition; add bindings, evaluate the
          ;; compile-time right-hand side, install the compile-time
          ;; values in the environment, and continue
-         (define m (match-syntax exp-body '(define-syntaxes (id ...) rhs)))
+         (define m (match-syntax disarmed-exp-body '(define-syntaxes (id ...) rhs)))
          (define ids (remove-use-site-scopes (m 'id) body-ctx))
          (define new-dups (check-no-duplicate-ids ids phase exp-body dups))
          (define counter (root-expand-context-counter ctx))
@@ -449,7 +461,7 @@
 (define (finish-expanding-body body-ctx frame-id
                                val-idss val-keyss val-rhss
                                done-bodys
-                               s
+                               #:source s #:disarmed-source disarmed-s
                                #:stratified? stratified?
                                #:track? track?)
   (when (null? done-bodys)
@@ -479,7 +491,7 @@
      [else
       (rebuild
        #:track? track?
-       s
+       s disarmed-s
        `(,(datum->syntax s-core-stx 'begin)
          ,@(for/list ([body (in-list done-bodys)])
              (expand body finish-ctx))))]))
@@ -493,7 +505,8 @@
     (expand-and-split-bindings-by-reference
      val-idss val-keyss val-rhss
      #:split? (not stratified?)
-     #:frame-id frame-id #:ctx finish-ctx #:source s
+     #:frame-id frame-id #:ctx finish-ctx
+     #:source s #:disarmed-source disarmed-s
      #:get-body finish-bodys #:track? track?)]))
 
 ;; Roughly, create a `letrec-values` for for the given ids, right-hand sides, and
@@ -503,7 +516,8 @@
 ;; one if there were forward references up to the clause but not beyond.
 (define (expand-and-split-bindings-by-reference idss keyss rhss
                                                 #:split? split?
-                                                #:frame-id frame-id #:ctx ctx #:source s
+                                                #:frame-id frame-id #:ctx ctx 
+                                                #:source s #:disarmed-source disarmed-s
                                                 #:get-body get-body #:track? track?)
   (define s-core-stx
     (syntax-shift-phase-level core-stx (expand-context-phase ctx)))
@@ -516,7 +530,7 @@
        [else
         (rebuild
          #:track? track?
-         s
+         s disarmed-s
          `(,(datum->syntax s-core-stx 'letrec-values)
            ,(map list (reverse accum-idss) (reverse accum-rhss))
            ,(get-body #f)))])]
@@ -534,7 +548,7 @@
         (unless (null? accum-idss) (error "internal error: accumulated ids not empty"))
         (rebuild
          #:track? track?
-         s
+         s disarmed-s
          `(,(datum->syntax s-core-stx 'let-values)
            ([,ids ,expanded-rhs])
            ,(loop (cdr idss) (cdr keyss) (cdr rhss)
@@ -543,7 +557,7 @@
              (or split? (null? (cdr idss))))
         (rebuild
          #:track? track?
-         s
+         s disarmed-s
          `(,(datum->syntax s-core-stx 'letrec-values)
            ,(map list
                  (reverse (cons ids accum-idss))
@@ -681,8 +695,9 @@
 ;; ----------------------------------------
 
 ;; A helper for forms to reconstruct syntax while preserving source
-;; locations and properties; if `track?` is #f, then don't keep
+;; locations, properties, and arming; if `track?` is #f, then don't keep
 ;; properties, because we've kept them in a surrounding form
-(define (rebuild orig-s new
+(define (rebuild orig-s disarmed-orig-s new
                  #:track? [track? #t])
-  (datum->syntax orig-s new orig-s (and track? orig-s)))
+  (syntax-rearm (datum->syntax disarmed-orig-s new orig-s (and track? orig-s))
+                orig-s))

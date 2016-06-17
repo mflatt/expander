@@ -3,6 +3,7 @@
          "../syntax/syntax.rkt"
          "../syntax/error.rkt"
          "../syntax/scope.rkt"
+         "../syntax/taint.rkt"
          "../common/phase.rkt"
          "../syntax/binding.rkt"
          "../namespace/namespace.rkt"
@@ -48,7 +49,8 @@
   (if (and no-stops? (local-variable? t))
       (let ([bind-id (local-variable-id t)])
         ;; Keep source locations and properties of original reference:
-        (datum->syntax bind-id (syntax-e bind-id) id id))
+        (syntax-rearm (datum->syntax (syntax-disarm bind-id) (syntax-e bind-id) id id)
+                      bind-id))
       id))
 
 ;; `missing` is a token to represent the absence of a binding; a
@@ -111,6 +113,7 @@
              phase
              (module-binding-phase b)
              id))
+    (check-taint id)
     (namespace-get-transformer m-ns (module-binding-phase b) (module-binding-sym b)
                                variable)]
    [(local-binding? b)
@@ -124,5 +127,15 @@
        (if out-of-context-as-variable?
            variable
            (error "identifier used out of context:" id)))]
-     [else t])]
+     [else
+      (check-taint id)
+      t])]
    [else (error "internal error: unknown binding for lookup:" b)]))
+
+;; ----------------------------------------
+
+(define (check-taint id)
+  (when (syntax-tainted? id)
+    (raise-syntax-error #f
+                        "cannot use identifier tainted by macro transformation"
+                        id)))

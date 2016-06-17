@@ -133,7 +133,7 @@
                       (struct-copy syntax s
                                    [content d]
                                    [mpi-shifts (add-shift (syntax-mpi-shifts s))]))
-                    syntax-e))))
+                    syntax-e/no-taint))))
 
 ;; Use `resolve` instead of `resolve+shift` when the module of a
 ;; module binding is relevant or when `free-identifier=?` equivalences

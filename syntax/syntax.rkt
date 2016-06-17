@@ -2,6 +2,7 @@
 (require "../compile/serialize-property.rkt"
          "../compile/serialize-state.rkt"
          "../common/set.rkt"
+         "tamper.rkt"
          "datum-map.rkt")
 
 (provide
@@ -16,10 +17,12 @@
  
  syntax-property
  syntax-property-symbol-keys
+ syntax-property-remove
  
  prop:propagation
  
- deserialize-syntax)
+ deserialize-syntax
+ current-arm-inspectors)
 
 (struct syntax ([content #:mutable] ; datum and nested syntax objects; mutated for lazy propagation
                 scopes  ; scopes that apply at all phases
@@ -27,8 +30,9 @@
                 shifted-multi-scopes ; scopes with a distinct identity at each phase; maybe a fallback search
                 mpi-shifts ; chain of module-path-index substitutions
                 bulk-binding-registry ; for resolving bulk bindings on unmarshal
-                srcloc ; source location
-                props) ; properties
+                srcloc  ; source location
+                props   ; properties
+                [tamper #:mutable]) ; see "tamper.rkt"
         ;; Custom printer:
         #:property prop:custom-write
         (lambda (s port mode)
@@ -50,7 +54,8 @@
             ,(ser (intern-scopes (syntax-scopes s) state))
             ,(ser (intern-shifted-multi-scopes (syntax-shifted-multi-scopes s) state))
             ,(ser (intern-mpi-shifts (syntax-mpi-shifts s) state))
-            ,(ser (syntax-srcloc s))))
+            ,(ser (syntax-srcloc s))
+            ,(ser (serialize-tamper (syntax-tamper s)))))
         #:property prop:reach-scopes
         (lambda (s reach)
           (define prop (syntax-scope-propagations s))
@@ -66,8 +71,7 @@
 (define-values (prop:propagation propagation? propagation-ref)
   (make-struct-type-property 'propagation))
 
-(define (deserialize-syntax content scopes shifted-multi-scopes mpi-shifts srcloc)
-  (syntax content scopes #f shifted-multi-scopes mpi-shifts #f srcloc empty-props))
+;; ----------------------------------------
 
 (define empty-scopes (seteq))
 (define empty-shifted-multi-scopes (set))
@@ -77,12 +81,13 @@
 (define empty-syntax
   (syntax #f
           empty-scopes
-          #f ; scope-propogations
+          #f   ; scope-propogations
           empty-shifted-multi-scopes
           empty-mpi-shifts
-          #f ; bulk-binding-registry
-          #f ; srcloc
-          empty-props))
+          #f   ; bulk-binding-registry
+          #f   ; srcloc
+          empty-props
+          #f)) ; tamper (clean)
 
 (define (identifier? s)
   (and (syntax? s) (symbol? (syntax-content s))))
@@ -106,7 +111,10 @@
             (and stx-c
                  (syntax-bulk-binding-registry stx-c))
             (and stx-l (syntax-srcloc stx-l))
-            (if stx-p (syntax-props stx-p) empty-props)))
+            (if stx-p (syntax-props stx-p) empty-props)
+            (and stx-c
+                 (syntax-tamper stx-c)
+                 (tamper-tainted-for-content content))))
   (syntax-map s
               (lambda (tail? x) (if tail? x (wrap x)))
               #f
@@ -138,6 +146,8 @@
                                    v)]
                   [else (f tail? v)])))))
 
+;; ----------------------------------------
+
 (define syntax-property
   (case-lambda
     [(s key)
@@ -157,3 +167,17 @@
     (for/list ([(k v) (in-hash (syntax-props s))]
                #:when (and (symbol? k) (symbol-interned? k)))
       k)))
+
+(define (syntax-property-remove s key)
+  (if (hash-ref (syntax-props s) key #f)
+      (struct-copy syntax s
+                   [props (hash-remove (syntax-props s) key)])
+      s))
+
+;; ----------------------------------------
+
+(define (deserialize-syntax content scopes shifted-multi-scopes mpi-shifts srcloc tamper)
+  (syntax content
+          scopes #f shifted-multi-scopes
+          mpi-shifts #f srcloc empty-props
+          (deserialize-tamper tamper)))
