@@ -185,7 +185,7 @@
   (deserialize-scope-fill! s bindings bulk-bindings)
   (set-representative-scope-owner! s owner))
 
-(struct shifted-multi-scope (phase        ; phase shift applies to all scopes in multi-scope
+(struct shifted-multi-scope (phase        ; non-label phase shift or shifted-to-label-phase
                              multi-scope) ; a multi-scope
         #:transparent
         #:property prop:custom-write
@@ -206,6 +206,13 @@
 
 (define (deserialize-shifted-multi-scope phase multi-scope)
   (shifted-multi-scope phase multi-scope))
+
+;; A `shifted-to-label-phase` record in the `phase` field of a
+;; `shifted-multi-scope` makes the shift reversible; when we're
+;; looking up the label phase, then use the representative scope at
+;; phase `from`; when we're looking up a non-label phase, there is no
+;; corresponding representative scope
+(struct shifted-to-label-phase (from) #:prefab)
 
 (struct bulk-binding-at (scopes ; scope set
                          bulk)  ; bulk-binding
@@ -477,14 +484,32 @@
 
 ;; To shift a syntax's phase, we only have to shift the phase
 ;; of any phase-specific scopes. The bindings attached to a
-;; scope must be represented in such a s way that the binding
+;; scope must be represented in such a way that the binding
 ;; shift is implicit via the phase in which the binding
 ;; is resolved.
 (define (shift-multi-scope sms delta)
-  (if (zero? delta)
-      sms
-      (shifted-multi-scope (phase+ delta (shifted-multi-scope-phase sms))
-                           (shifted-multi-scope-multi-scope sms))))
+  (cond
+   [(zero-phase? delta)
+    ;; No-op shift
+    sms]
+   [(label-phase? delta)
+    (cond
+     [(shifted-to-label-phase? (shifted-multi-scope-phase sms))
+      ;; Shifting to the label phase moves only phase 0, so
+      ;; drop a scope that is already collapsed to phase #f
+      #f]
+     [else
+      ;; Move the current phase 0 to the label phase, which
+      ;; means recording the negation of the current phase
+      (shifted-multi-scope (shifted-to-label-phase (phase- 0 (shifted-multi-scope-phase sms)))
+                           (shifted-multi-scope-multi-scope sms))])]
+   [(shifted-to-label-phase? (shifted-multi-scope-phase sms))
+    ;; Numeric shift has no effect on bindings in phase #f
+    sms]
+   [else
+    ;; Numeric shift added to an existing numeric shift
+    (shifted-multi-scope (phase+ delta (shifted-multi-scope-phase sms))
+                         (shifted-multi-scope-multi-scope sms))]))
 
 ;; Since we tend to shift rarely and only for whole modules, it's
 ;; probably not worth making this lazy
@@ -496,8 +521,10 @@
           (fallback-map
            smss
            (lambda (smss)
-             (for/set ([sms (in-set smss)])
-               (shift-multi-scope sms phase)))))
+             (for*/set ([sms (in-set smss)]
+                        [new-sms (in-value (shift-multi-scope sms phase))]
+                        #:when new-sms)
+               new-sms))))
         (syntax-map s
                     (lambda (tail? d) d)
                     (lambda (s d)
@@ -555,10 +582,14 @@
   (scope-set-at-fallback s (fallback-first (syntax-shifted-multi-scopes s)) phase))
   
 (define (scope-set-at-fallback s smss phase)
-  (for/fold ([scopes (syntax-scopes s)]) ([sms (in-set smss)])
+  (for*/fold ([scopes (syntax-scopes s)]) ([sms (in-set smss)]
+                                           #:when (or (label-phase? phase)
+                                                      (not (shifted-to-label-phase? (shifted-multi-scope-phase sms)))))
     (set-add scopes (multi-scope-to-scope-at-phase (shifted-multi-scope-multi-scope sms)
-                                                   (phase- (shifted-multi-scope-phase sms)
-                                                           phase)))))
+                                                   (let ([ph (shifted-multi-scope-phase sms)])
+                                                     (if (shifted-to-label-phase? ph)
+                                                         (shifted-to-label-phase-from ph)
+                                                         (phase- ph phase)))))))
 
 (define (find-max-scope scopes)
   (when (set-empty? scopes)
