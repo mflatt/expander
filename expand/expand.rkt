@@ -39,7 +39,8 @@
          eval-for-syntaxes-binding
          eval-for-bindings
          
-         rebuild)
+         rebuild
+         attach-disappeared-transformer-bindings)
 
 ;; ----------------------------------------
 
@@ -354,17 +355,21 @@
              [val-idss null]   ; accumulated binding identifiers
              [val-keyss null]  ; accumulated binding keys
              [val-rhss null]   ; accumulated binding right-hand sides
+             [track-stxs null] ; accumulated syntax for tracking
+             [trans-idss null] ; accumulated `define-syntaxes` identifiers that have disappeared
              [dups (make-check-no-duplicate-table)])
     (cond
      [(null? bodys)
       ;; Partial expansion is complete, so finish by rewriting to
       ;; `letrec-values`
-      (finish-expanding-body body-ctx frame-id
-                             (reverse val-idss) (reverse val-keyss) (reverse val-rhss)
-                             (reverse done-bodys)
-                             #:source s #:disarmed-source disarmed-s
-                             #:stratified? stratified?
-                             #:track? track?)]
+      (define result-s
+        (finish-expanding-body body-ctx frame-id
+                               (reverse val-idss) (reverse val-keyss) (reverse val-rhss) (reverse track-stxs)
+                               (reverse done-bodys)
+                               #:source s #:disarmed-source disarmed-s
+                               #:stratified? stratified?
+                               #:track? track?))
+      (attach-disappeared-transformer-bindings result-s (reverse trans-idss))]
      [else
       (define exp-body (expand (syntax-disarm (car bodys)) body-ctx))
       (define disarmed-exp-body (syntax-disarm exp-body))
@@ -379,6 +384,8 @@
                val-idss
                val-keyss
                val-rhss
+               track-stxs
+               trans-idss
                dups)]
         [(define-values)
          ;; Found a variable definition; add bindings, extend the
@@ -413,6 +420,11 @@
                                (for/list ([done-body (in-list done-bodys)])
                                  (no-binds done-body s phase))
                                val-rhss))
+               (cons exp-body (append
+                               (for/list ([done-body (in-list done-bodys)])
+                                 #f)
+                               track-stxs))
+               trans-idss
                new-dups)]
         [(define-syntaxes)
          ;; Found a macro definition; add bindings, evaluate the
@@ -437,6 +449,8 @@
                val-idss
                val-keyss
                val-rhss
+               track-stxs
+               (cons ids trans-idss)
                new-dups)]
         [else
          (cond
@@ -448,6 +462,8 @@
                  val-idss
                  val-keyss
                  val-rhss
+                 track-stxs
+                 trans-idss
                  dups)]
           [else
            ;; Found an expression; accumulate it and continue
@@ -457,12 +473,14 @@
                  val-idss
                  val-keyss
                  val-rhss
+                 track-stxs
+                 trans-idss
                  dups)])])])))
 
 ;; Partial expansion is complete, so assumble the result as a
 ;; `letrec-values` form and continue expanding
 (define (finish-expanding-body body-ctx frame-id
-                               val-idss val-keyss val-rhss
+                               val-idss val-keyss val-rhss track-stxs
                                done-bodys
                                #:source s #:disarmed-source disarmed-s
                                #:stratified? stratified?
@@ -506,7 +524,7 @@
     ;; Roughly, finish expanding the right-hand sides, finish the body
     ;; expression, then add a `letrec-values` wrapper:
     (expand-and-split-bindings-by-reference
-     val-idss val-keyss val-rhss
+     val-idss val-keyss val-rhss track-stxs
      #:split? (not stratified?)
      #:frame-id frame-id #:ctx finish-ctx
      #:source s #:disarmed-source disarmed-s
@@ -517,15 +535,16 @@
 ;; forward references appear, and if not, generate a `let-values` form, instead,
 ;; at each binding clause. Similar, end a `letrec-values` form and start a new
 ;; one if there were forward references up to the clause but not beyond.
-(define (expand-and-split-bindings-by-reference idss keyss rhss
+(define (expand-and-split-bindings-by-reference idss keyss rhss track-stxs
                                                 #:split? split?
                                                 #:frame-id frame-id #:ctx ctx 
                                                 #:source s #:disarmed-source disarmed-s
                                                 #:get-body get-body #:track? track?)
   (define s-core-stx
     (syntax-shift-phase-level core-stx (expand-context-phase ctx)))
-  (let loop ([idss idss] [keyss keyss] [rhss rhss]
-             [accum-idss null] [accum-rhss null] [track? track?])
+  (let loop ([idss idss] [keyss keyss] [rhss rhss] [track-stxs track-stxs]
+             [accum-idss null] [accum-rhss null] [accum-track-stxs null]
+             [track? track?])
     (cond
      [(null? idss)
       (cond
@@ -535,11 +554,12 @@
          #:track? track?
          s disarmed-s
          `(,(datum->syntax s-core-stx 'letrec-values)
-           ,(map list (reverse accum-idss) (reverse accum-rhss))
+           ,(build-clauses accum-idss accum-rhss accum-track-stxs)
            ,(get-body #f)))])]
      [else
       (define ids (car idss))
       (define expanded-rhs (expand (car rhss) (as-named-context ctx ids)))
+      (define track-stx (car track-stxs))
       
       (define local-or-forward-references? (reference-record-forward-references? frame-id))
       (reference-record-bound! frame-id (car keyss))
@@ -553,23 +573,38 @@
          #:track? track?
          s disarmed-s
          `(,(datum->syntax s-core-stx 'let-values)
-           ([,ids ,expanded-rhs])
-           ,(loop (cdr idss) (cdr keyss) (cdr rhss)
-                  null null #f)))]
+           (,(build-clause ids expanded-rhs track-stx))
+           ,(loop (cdr idss) (cdr keyss) (cdr rhss) (cdr track-stxs)
+                  null null null
+                  #f)))]
        [(and (not forward-references?)
              (or split? (null? (cdr idss))))
         (rebuild
          #:track? track?
          s disarmed-s
          `(,(datum->syntax s-core-stx 'letrec-values)
-           ,(map list
-                 (reverse (cons ids accum-idss))
-                 (reverse (cons expanded-rhs accum-rhss)))
-           ,(loop (cdr idss) (cdr keyss) (cdr rhss)
-                  null null #f)))]
+           ,(build-clauses (cons ids accum-idss)
+                           (cons expanded-rhs accum-rhss)
+                           (cons track-stx accum-track-stxs))
+           ,(loop (cdr idss) (cdr keyss) (cdr rhss) (cdr track-stxs)
+                  null null null
+                  #f)))]
        [else
-        (loop (cdr idss) (cdr keyss) (cdr rhss)
-              (cons ids accum-idss) (cons expanded-rhs accum-rhss) track?)])])))
+        (loop (cdr idss) (cdr keyss) (cdr rhss) (cdr track-stxs)
+              (cons ids accum-idss) (cons expanded-rhs accum-rhss) (cons track-stx accum-track-stxs)
+              track?)])])))
+
+(define (build-clauses accum-idss accum-rhss accum-track-stxs)
+  (map build-clause
+       (reverse accum-idss)
+       (reverse accum-rhss)
+       (reverse accum-track-stxs)))
+
+(define (build-clause ids rhs track-stx)
+  (define clause (datum->syntax #f `[,ids ,rhs]))
+  (if track-stx
+      (syntax-track-origin clause track-stx)
+      clause))
 
 ;; Helper to turn an expression into a binding clause with zero
 ;; bindings
@@ -704,3 +739,13 @@
                  #:track? [track? #t])
   (syntax-rearm (datum->syntax disarmed-orig-s new orig-s (and track? orig-s))
                 orig-s))
+
+(define (attach-disappeared-transformer-bindings s trans-idss)
+   (cond
+    [(null? trans-idss) s]
+    [else
+     (syntax-property s
+                      'disappeared-binding
+                      (append (apply append trans-idss)
+                              (or (syntax-property s 'disappeared-binding)
+                                  null)))]))

@@ -185,26 +185,31 @@
          (syntax-track-origin exp-body s)
          exp-body))
    
-   (cond
-    [(not split-by-reference?)
-     (rebuild
-      s disarmed-s
-      `(,letrec-values-id ,(for/list ([ids (in-list val-idss)]
-                                      [rhs (in-list (m 'val-rhs))])
-                             `[,ids ,(if rec?
-                                         (expand (add-scope rhs sc)
-                                                 (as-named-context rec-ctx ids))
-                                         (expand rhs
-                                                 (as-named-context expr-ctx ids)))])
-        ,(get-body #f)))]
-    [else
-     (expand-and-split-bindings-by-reference
-      val-idss val-keyss (for/list ([rhs (in-list (m 'val-rhs))])
-                           (add-scope rhs sc))
-      #:split? #t
-      #:frame-id frame-id #:ctx rec-ctx
-      #:source s #:disarmed-source disarmed-s
-      #:get-body get-body #:track? #t)])))
+   (define result-s
+     (cond
+      [(not split-by-reference?)
+       (rebuild
+        s disarmed-s
+        `(,letrec-values-id ,(for/list ([ids (in-list val-idss)]
+                                        [rhs (in-list (m 'val-rhs))])
+                               `[,ids ,(if rec?
+                                           (expand (add-scope rhs sc)
+                                                   (as-named-context rec-ctx ids))
+                                           (expand rhs
+                                                   (as-named-context expr-ctx ids)))])
+          ,(get-body #f)))]
+      [else
+       (define val-rhss (for/list ([rhs (in-list (m 'val-rhs))])
+                          (add-scope rhs sc)))
+       (expand-and-split-bindings-by-reference
+        val-idss val-keyss val-rhss (for/list ([rhs (in-list val-idss)])
+                                      #f)
+        #:split? #t
+        #:frame-id frame-id #:ctx rec-ctx
+        #:source s #:disarmed-source disarmed-s
+        #:get-body get-body #:track? #t)]))
+
+   (attach-disappeared-transformer-bindings result-s trans-idss)))
 
 (add-core-form!
  'let-values
