@@ -25,6 +25,7 @@
 (provide eval
          compile
          expand
+         expand-once
          expand-to-top-form)
 
 ;; This `eval` is suitable as an eval handler that will be called by
@@ -104,6 +105,28 @@
                          exp-s
                          s (namespace-phase ns))]))
 
+(define (expand-once s [ns (current-namespace)])
+  (per-top-level s ns
+                 #:single expand-single-once
+                 #:combine cons
+                 #:wrap (lambda (form-id s r)
+                          (datum->syntax s
+                                         (cons form-id r)
+                                         s
+                                         s))
+                 #:just-once? #t))
+
+(define (expand-single-once s ns)
+  (define-values (require-lifts lifts exp-s)
+    (expand-capturing-lifts s (struct-copy expand-context (make-expand-context ns)
+                                           [just-once? #t])))
+  (cond
+   [(and (null? require-lifts) (null? lifts)) exp-s]
+   [else
+    (wrap-lifts-as-begin (append require-lifts lifts)
+                         exp-s
+                         s (namespace-phase ns))]))
+
 (define (expand-to-top-form s [ns (current-namespace)])
   ;; Use `per-top-level` for immediate expansion and lift handling,
   ;; but `#:single #f` makes it return immediately
@@ -117,14 +140,16 @@
 (define (per-top-level given-s ns
                        #:single single        ; handle discovered form; #f => stop after immediate
                        #:combine [combine #f] ; how to cons a recur result, or not
-                       #:wrap [wrap #f])      ; how to wrap a list of recur results, or not
+                       #:wrap [wrap #f]       ; how to wrap a list of recur results, or not
+                       #:just-once? [just-once? #f]) ; single expansion step
   (define s (maybe-intro given-s ns))
   (define ctx (make-expand-context ns))
   (define phase (namespace-phase ns))
   (let loop ([s s] [phase phase] [ns ns])
     (define tl-ctx (struct-copy expand-context ctx
                                 [phase phase]
-                                [namespace ns]))
+                                [namespace ns]
+                                [just-once? just-once?]))
     (define-values (require-lifts lifts exp-s)
       (expand-capturing-lifts s (struct-copy expand-context tl-ctx
                                              [only-immediate? #t]
@@ -136,8 +161,11 @@
       (define new-s (wrap-lifts-as-begin (append require-lifts lifts)
                                          exp-s
                                          s phase))
-      (loop new-s phase ns)]
+      (if just-once?
+          new-s
+          (loop new-s phase ns))]
      [(not single) exp-s]
+     [(and just-once? (not (eq? exp-s s))) exp-s]
      [else
       (case (core-form-sym exp-s phase)
         [(begin)

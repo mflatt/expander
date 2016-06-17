@@ -126,7 +126,8 @@
                             [allow-unbound? #f]
                             [namespace m-ns]
                             [post-expansion-scope-mode 'add]
-                            [phase phase]))
+                            [phase phase]
+                            [just-once? #f]))
    
    ;; Add the module's scope to the bodies
    (define bodys (map apply-module-scopes (m 'body)))

@@ -140,6 +140,7 @@
        (dispatch t (datum->syntax disarmed-s (cons sym disarmed-s) s s) id ctx b)])]
     [(transformer? t)
      (dispatch t (datum->syntax disarmed-s (cons sym disarmed-s) s s) id ctx b)]
+    [(expand-context-only-immediate? ctx) s]
     [else
      (define phase (expand-context-phase ctx))
      (define what
@@ -183,9 +184,11 @@
       ;; Apply transformer and expand again
       (define-values (exp-s re-ctx)
         (apply-transformer (transformer->procedure t) s id ctx binding))
-      (expand exp-s re-ctx
-              #:alternate-id (and (rename-transformer? t)
-                                  (rename-transformer-target t)))])]
+      (cond
+       [(expand-context-just-once? ctx) exp-s]
+       [else (expand exp-s re-ctx
+                     #:alternate-id (and (rename-transformer? t)
+                                         (rename-transformer-target t)))])])]
    [(variable? t)
     ;; A reference to a variable expands to itself --- but if the
     ;; binding's frame has a reference record, then register the

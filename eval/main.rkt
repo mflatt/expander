@@ -18,7 +18,10 @@
          expand-syntax
          
          expand-to-top-form
-         expand-syntax-to-top-form)
+         expand-syntax-to-top-form
+         
+         expand-once
+         expand-syntax-once)
 
 (define (eval s [ns (current-namespace)])
   (check 'eval namespace? ns)
@@ -26,8 +29,8 @@
     ((current-eval) (intro s ns))))
 
 (define (eval-syntax s [ns (current-namespace)])
-  (check 'eval syntax? s)
-  (check 'eval namespace? ns)
+  (check 'eval-syntax syntax? s)
+  (check 'eval-syntax namespace? ns)
   (parameterize ([current-namespace ns])
     ((current-eval) s)))
 
@@ -35,21 +38,28 @@
   ((current-compile) (intro s) #f))
 
 (define (compile-syntax s)
-  (check 'compile syntax? s)
-  ((current-compile) (intro s)))
+  (check 'compile-syntax syntax? s)
+  ((current-compile) (intro s) #f))
 
 (define (expand s)
   (direct:expand (intro s)))
 
 (define (expand-syntax s)
-  (check 'expand syntax? s)
+  (check 'expand-syntax syntax? s)
   (direct:expand s))
+
+(define (expand-once s)
+  (direct:expand-once (intro s)))
+
+(define (expand-syntax-once s)
+  (check 'expand-syntax-once syntax? s)
+  (direct:expand-once s))
 
 (define (expand-to-top-form s)
   (direct:expand-to-top-form (intro s)))
 
 (define (expand-syntax-to-top-form s)
-  (check 'expand syntax? s)
+  (check 'expand-syntax-to-top-form syntax? s)
   (direct:expand-to-top-form s))
 
 

@@ -30,6 +30,7 @@
                                             def-ctx-scopes ; #f or box of list of scopes; transformer-created def-ctxes
                                             reference-records ; list of reference records for enclosing
                                             only-immediate? ; #t => stop at core forms
+                                            just-once? ; #t => stop (a given subform) after any expansion
                                             module-begin-k ; expander for `#%module-begin` in a 'module-begin context
                                             need-eventually-defined ; phase(>=1) -> variables expanded before binding
                                             allow-unbound? ; allow reference to unbound identifiers as variables
@@ -64,6 +65,7 @@
                   #f   ; def-ctx-scopes
                   null ; reference-records
                   #f   ; only-immediate?
+                  #f   ; just-once?
                   #f   ; module-begin-k
                   #f   ; need-eventually-defined
                   #t   ; allow-unbound?

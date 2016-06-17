@@ -118,7 +118,6 @@
         #:property prop:custom-write
         (lambda (r port mode)
           (write-string "#<module-path-index" port)
-          (fprintf port "[~a]" (eq-hash-code r))
           (cond
            [(top-level-module-path-index? r)
             (fprintf port ":top-level")]
