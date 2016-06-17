@@ -125,11 +125,12 @@
 
 (define (make-syntax-delta-introducer ext-s base-s [phase (syntax-local-phase-level)])
   (check 'make-syntax-delta-introducer syntax? ext-s)
-  (check 'make-syntax-delta-introducer syntax? base-s)
+  (unless (or (syntax? base-s) (not base-s))
+    (raise-argument-error 'make-syntax-delta-introducer "(or/c syntax? #f)" base-s))
   (unless (phase? phase)
     (raise-argument-error 'make-syntax-delta-introducer phase?-string phase))
   (define ext-scs (syntax-scope-set ext-s phase))
-  (define base-scs (syntax-scope-set base-s phase))
+  (define base-scs (syntax-scope-set (or base-s empty-syntax) phase))
   (define delta-scs (set->list (set-subtract ext-scs base-scs)))
   (lambda (s [mode 'add])
     (case mode
