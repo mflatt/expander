@@ -39,7 +39,7 @@
 
 (define (compile-syntax s)
   (check 'compile-syntax syntax? s)
-  ((current-compile) (intro s) #f))
+  ((current-compile) s #f))
 
 (define (expand s)
   (direct:expand (intro s)))
