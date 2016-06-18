@@ -7,6 +7,7 @@
          "../syntax/error.rkt"
          "require+provide.rkt"
          "context.rkt"
+         "protect.rkt"
          "../namespace/core.rkt"
          "../common/module-path.rkt")
 
@@ -21,6 +22,7 @@
                                     phase ctx
                                     expand rebuild)
   ;; returns a list of expanded specs while registering provides in `rp`
+  (define ns (expand-context-namespace ctx))
   (let loop ([specs specs]
              [at-phase phase]
              [protected? #f]
@@ -83,42 +85,42 @@
          [(rename)
           (check-nested 'phaseless)
           (define m (match-syntax spec '(rename id:from id:to)))
-          (parse-identifier! (m 'id:from) orig-s (syntax-e (m 'id:to)) at-phase rp protected?)
+          (parse-identifier! (m 'id:from) orig-s (syntax-e (m 'id:to)) at-phase ns rp protected?)
           (list spec)]
          [(struct)
           (check-nested 'phaseless)
           (define m (match-syntax spec '(struct id:struct (id:field ...))))
-          (parse-struct! (m 'id:struct) orig-s (m 'id:field) at-phase rp protected?)
+          (parse-struct! (m 'id:struct) orig-s (m 'id:field) at-phase ns rp protected?)
           (list spec)]
          [(all-from)
           (check-nested 'phaseless)
           (define m (match-syntax spec '(all-from mod-path)))
-          (parse-all-from (m 'mod-path) orig-s self null at-phase rp protected?)
+          (parse-all-from (m 'mod-path) orig-s self null at-phase ns rp protected?)
           (list spec)]
          [(all-from-except)
           (check-nested 'phaseless)
           (define m (match-syntax spec '(all-from-except mod-path id ...)))
-          (parse-all-from (m 'mod-path) orig-s self (m 'id) at-phase rp protected?)
+          (parse-all-from (m 'mod-path) orig-s self (m 'id) at-phase ns rp protected?)
           (list spec)]
          [(all-defined)
           (check-nested 'phaseless)
           (define m (match-syntax spec '(all-defined)))
-          (parse-all-from-module self spec orig-s null #f at-phase rp protected?)
+          (parse-all-from-module self spec orig-s null #f at-phase ns rp protected?)
           (list spec)]
          [(all-defined-except)
           (check-nested 'phaseless)
           (define m (match-syntax spec '(all-defined-except id ...)))
-          (parse-all-from-module self spec orig-s (m 'id) #f at-phase rp protected?)
+          (parse-all-from-module self spec orig-s (m 'id) #f at-phase ns rp protected?)
           (list spec)]
          [(prefix-all-defined)
           (check-nested 'phaseless)
           (define m (match-syntax spec '(prefix-all-defined id:prefix)))
-          (parse-all-from-module self spec orig-s null (syntax-e (m 'id:prefix)) at-phase rp protected?)
+          (parse-all-from-module self spec orig-s null (syntax-e (m 'id:prefix)) at-phase ns rp protected?)
           (list spec)]
          [(prefix-all-defined-except)
           (check-nested 'phaseless)
           (define m (match-syntax spec '(prefix-all-defined-except id:prefix id ...)))
-          (parse-all-from-module self spec orig-s (m 'id) (syntax-e (m 'id:prefix)) at-phase rp protected?)
+          (parse-all-from-module self spec orig-s (m 'id) (syntax-e (m 'id:prefix)) at-phase ns rp protected?)
           (list spec)]
          [(expand)
           (void (match-syntax spec '(expand (id . datum))))
@@ -137,20 +139,20 @@
          [else
           (cond
            [(identifier? spec)
-            (parse-identifier! spec orig-s (syntax-e spec) at-phase rp protected?)
+            (parse-identifier! spec orig-s (syntax-e spec) at-phase ns rp protected?)
             (list spec)]
            [else
             (raise-syntax-error provide-form-name "bad syntax" orig-s spec)])])))))
 
 ;; ----------------------------------------
 
-(define (parse-identifier! spec orig-s sym at-phase rp protected?)
-  (define b (resolve+shift spec at-phase))
+(define (parse-identifier! spec orig-s sym at-phase ns rp protected?)
+  (define b (resolve+shift/extra-inspector spec at-phase ns))
   (unless b
     (raise-syntax-error provide-form-name "provided identifier is not defined or required" orig-s spec))
   (add-provide! rp sym at-phase b spec protected?))
 
-(define (parse-struct! id:struct orig-s fields at-phase rp protected?)
+(define (parse-struct! id:struct orig-s fields at-phase ns rp protected?)
   (define (mk fmt)
     (define sym (string->symbol (format fmt (syntax-e id:struct))))
     (datum->syntax id:struct sym id:struct))
@@ -164,21 +166,21 @@
                    "struct:~a"
                    "~a?")])
     (define id (mk fmt))
-    (parse-identifier! id orig-s (syntax-e id) at-phase rp protected?))
+    (parse-identifier! id orig-s (syntax-e id) at-phase ns rp protected?))
   (for ([field (in-list fields)])
     (define get-id (mk2 "~a-~a" field))
     (define set-id (mk2 "set-~a-~a!" field))
-    (parse-identifier! get-id orig-s (syntax-e get-id) at-phase rp protected?)
-    (parse-identifier! set-id orig-s (syntax-e set-id) at-phase rp protected?)))
+    (parse-identifier! get-id orig-s (syntax-e get-id) at-phase ns rp protected?)
+    (parse-identifier! set-id orig-s (syntax-e set-id) at-phase ns rp protected?)))
   
-(define (parse-all-from mod-path-stx orig-s self except-ids at-phase rp protected?)
+(define (parse-all-from mod-path-stx orig-s self except-ids at-phase ns rp protected?)
   (define mod-path (syntax->datum mod-path-stx))
   (unless (module-path? mod-path)
     (raise-syntax-error provide-form-name "not a module path" orig-s mod-path-stx))
   (define mpi (module-path-index-join mod-path self))
-  (parse-all-from-module mpi #f orig-s except-ids #f at-phase rp protected?))
+  (parse-all-from-module mpi #f orig-s except-ids #f at-phase ns rp protected?))
   
-(define (parse-all-from-module mpi matching-stx orig-s except-ids prefix-sym at-phase rp protected?)
+(define (parse-all-from-module mpi matching-stx orig-s except-ids prefix-sym at-phase ns rp protected?)
   (define requireds (extract-module-requires rp mpi at-phase))
 
   (define (phase-desc) (cond
@@ -211,7 +213,7 @@
                 (for/or ([except-id (in-list except-ids)])
                   (and (free-identifier=? id except-id phase phase)
                        (hash-set! found except-id #t))))
-      (add-provide! rp (add-prefix (syntax-e id)) phase (resolve+shift id phase) id protected?)))
+      (add-provide! rp (add-prefix (syntax-e id)) phase (resolve+shift/extra-inspector id phase ns) id protected?)))
   
   ;; Check that all exclusions matched something to exclude:
   (unless (= (hash-count found) (length except-ids))

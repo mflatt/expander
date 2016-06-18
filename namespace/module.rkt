@@ -1,12 +1,14 @@
 #lang racket/base
 (require "../common/phase.rkt"
          "../syntax/bulk-binding.rkt"
+         "../syntax/module-binding.rkt"
          "../common/module-path.rkt"
          "../compile/module-use.rkt"
          "../expand/root-expand-context.rkt"
          "../host/linklet.rkt"
          "../compile/built-in-symbol.rkt"
          "namespace.rkt"
+         "protect.rkt"
          (submod "namespace.rkt" for-module))
 
 (provide make-module-namespace
@@ -25,6 +27,8 @@
          module-cross-phase-persistent?
          module-no-protected?
          module-inspector
+         module-access
+         module-compute-access!
          
          module-instance-namespace
          module-instance-module
@@ -46,6 +50,7 @@
 (struct module (self            ; module path index used for a self reference
                 requires        ; list of (cons phase list-of-module-path-index)
                 provides        ; phase-level -> sym -> binding or protected binding
+                [access #:mutable] ; phase-level -> sym -> 'provided or 'protected; computed on demand from `provides`
                 language-info   ; #f or vector
                 min-phase-level ; phase-level
                 max-phase-level ; phase-level
@@ -63,7 +68,9 @@
                      #:primitive? [primitive? #f]
                      #:cross-phase-persistent? [cross-phase-persistent? primitive?]
                      #:no-protected? [no-protected? #f])
-  (module self requires provides language-info
+  (module self requires provides
+          #f ; access
+          language-info
           min-phase-level max-phase-level
           instantiate
           primitive?
@@ -380,3 +387,18 @@
       (definitions-variables d)
       (error "namespace mismatch: phase level not found")))
 
+;; ----------------------------------------
+
+(define (module-compute-access! m)
+  (define access
+    (for/hasheqv ([(phase at-phase) (in-hash (module-provides m))])
+      (values phase
+              (for/hash ([(sym binding) (in-hash at-phase)])
+                (values (module-binding-sym (if (protected? binding)
+                                                (protected-binding binding)
+                                                binding))
+                        (if (protected? binding)
+                            'protected
+                            'provided))))))
+  (set-module-access! m access)
+  access)

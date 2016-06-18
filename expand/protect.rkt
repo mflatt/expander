@@ -1,0 +1,59 @@
+#lang racket/base
+(require "../syntax/syntax.rkt"
+         "../syntax/binding.rkt"
+         "../syntax/error.rkt"
+         "../namespace/protect.rkt"
+         "../namespace/namespace.rkt"
+         "../namespace/module.rkt"
+         "../common/module-path.rkt"
+         "binding-to-module.rkt")
+
+(provide resolve+shift/extra-inspector
+         check-access)
+
+;; Check inspector-based access to a module's definitions
+(define (check-access b mi id what)
+  (define m (module-instance-module mi))
+  (when (and m (not (module-no-protected? m)))
+    (define access (or (module-access m) (module-compute-access! m)))
+    (define a (hash-ref (hash-ref access (module-binding-phase b) #hasheq())
+                        (module-binding-sym b)
+                        'unexported))
+    (when (or (eq? a 'unexported) ; not provided => implicitly protected
+              (eq? a 'protected))
+      (unless (or (inspector-superior? (or (syntax-inspector id) (current-code-inspector))
+                                       (namespace-inspector (module-instance-namespace mi)))
+                  (and (module-binding-extra-inspector b)
+                       (inspector-superior? (module-binding-extra-inspector b)
+                                            (namespace-inspector (module-instance-namespace mi)))))
+        (raise-syntax-error #f
+                            (format "access disallowed by code inspector to ~a ~a\n  from module: ~s"
+                                    a
+                                    what
+                                    (module-path-index-resolve (namespace-mpi (module-instance-namespace mi))))
+                            id #f null)))))
+
+;; Like `resolve+shift`, but follow `free-identifier=?` chains to
+;; attach an inspector at the last step in the chain to the
+;; resulting binding. Also, check protected access along the way,
+;; so that we don't expose an inspector that the reference is not
+;; allowed to reach.
+(define (resolve+shift/extra-inspector id phase ns)
+  (let loop ([id id])
+    (define b (resolve+shift id phase #:immediate? #t))
+    (cond
+     [(binding-free=id b)
+      => (lambda (next-id)
+           (when (and (module-binding? b)
+                      (not (top-level-module-path-index? (module-binding-module b))))
+             (define mi (binding->module-instance b ns phase id))
+             (check-access b mi id "provided binding"))
+           (define next-b (loop next-id))
+           (cond
+            [(and (module-binding? next-b)
+                  (not (module-binding-extra-inspector next-b))
+                  (syntax-inspector id))
+             (module-binding-update next-b
+                                    #:extra-inspector (syntax-inspector id))]
+            [else next-b]))]
+     [else b])))

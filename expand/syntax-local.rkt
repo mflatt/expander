@@ -12,6 +12,7 @@
          "rename-trans.rkt"
          "lift-context.rkt"
          "require+provide.rkt"
+         "protect.rkt"
          "../common/module-path.rkt"
          "../namespace/namespace.rkt"
          "../namespace/module.rkt"
@@ -153,7 +154,9 @@
   (define ctx (get-current-expand-context who))
   (define phase (expand-context-phase ctx))
   (let loop ([id id])
-    (define b (resolve+shift id phase #:immediate? immediate?))
+    (define b (if immediate?
+                  (resolve+shift id phase #:immediate? #t)
+                  (resolve+shift/extra-inspector id phase (expand-context-namespace ctx))))
     (cond
      [(not b)
       (if failure-thunk

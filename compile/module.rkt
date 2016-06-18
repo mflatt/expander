@@ -151,6 +151,7 @@
                  pre-submodules
                  post-submodules
                  language-info)
+       (define-values (,inspector-id) (current-code-inspector))
        ,@declaration-body)))
   
   ;; Assemble a linklet that deserializes syntax objects on demand.
@@ -190,6 +191,7 @@
             #:import ([deserialize ,@deserialize-imports])
             #:export ([,mpi-vector-id mpi-vector]
                       deserialized-syntax)
+            (define-values (,inspector-id) (current-code-inspector))
             (define-values (,mpi-vector-id)
               ,(generate-module-path-index-deserialize mpis))
             (define-values (deserialized-syntax)

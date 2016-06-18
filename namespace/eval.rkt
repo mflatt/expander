@@ -17,6 +17,7 @@
          "../expand/require.rkt"
          "../common/module-path.rkt"
          "../common/contract.rkt"
+         "../expand/protect.rkt"
          "../expand/env.rkt")
 
 (provide make-empty-namespace
@@ -142,7 +143,9 @@
        (cond
         [use-mapping?
          (define id (datum->syntax #f sym))
-         (define b (resolve+shift (namespace-syntax-introduce id ns)))
+         (define b (resolve+shift/extra-inspector (namespace-syntax-introduce id ns)
+                                                  (namespace-phase ns)
+                                                  ns))
          (define v (if b
                        (binding-lookup b empty-env null ns (namespace-phase ns) id)
                        variable))

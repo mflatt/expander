@@ -70,7 +70,10 @@
                                                 (phase- phase ex-phase)
                                                 #:complain-on-failure? #t))
       (when (and (protected? binding/maybe-protected)
-                 (not (inspector-superior? (current-code-inspector) (namespace-inspector m-ns))))
+                 (and (not (inspector-superior? (current-code-inspector) (namespace-inspector m-ns)))
+                      (not (and (module-binding-extra-inspector binding)
+                                (inspector-superior? (module-binding-extra-inspector binding)
+                                                     (namespace-inspector m-ns))))))
         (raise-arguments-error 'dynamc-require
                                "name is protected"
                                "name" sym

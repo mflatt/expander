@@ -1,6 +1,7 @@
 #lang racket/base
 (require "../common/set.rkt"
          "../compile/serialize-property.rkt"
+         "../compile/serialize-state.rkt"
          "full-binding.rkt")
 
 (provide make-module-binding
@@ -14,6 +15,7 @@
          module-binding-nominal-phase
          module-binding-nominal-sym
          module-binding-nominal-require-phase
+         module-binding-extra-inspector
          
          deserialize-full-module-binding
          deserialize-simple-module-binding)
@@ -27,10 +29,12 @@
                              #:nominal-sym [nominal-sym sym]
                              #:nominal-require-phase [nominal-require-phase 0]
                              #:frame-id [frame-id #f]
-                             #:free=id [free=id #f])
+                             #:free=id [free=id #f]
+                             #:extra-inspector [extra-inspector #f])
   (cond
    [(or frame-id
         free=id
+        extra-inspector
         (not (and (eq? nominal-module module)
                   (eqv? nominal-phase phase)
                   (eq? nominal-sym sym)
@@ -39,7 +43,8 @@
                          free=id
                          module phase sym
                          nominal-module nominal-phase nominal-sym
-                         nominal-require-phase)]
+                         nominal-require-phase
+                         extra-inspector)]
    [else
     (simple-module-binding module phase sym)]))
 
@@ -52,14 +57,16 @@
                                #:nominal-sym [nominal-sym (module-binding-nominal-sym b)]
                                #:nominal-require-phase [nominal-require-phase (module-binding-nominal-require-phase b)]
                                #:frame-id [frame-id (binding-frame-id b)]
-                               #:free=id [free=id (binding-free=id b)])
+                               #:free=id [free=id (binding-free=id b)]
+                               #:extra-inspector [extra-inspector (module-binding-extra-inspector b)])
   (make-module-binding module phase sym
                        #:nominal-module nominal-module
                        #:nominal-phase nominal-phase
                        #:nominal-sym nominal-sym
                        #:nominal-require-phase nominal-require-phase
                        #:frame-id frame-id
-                       #:free=id free=id))
+                       #:free=id free=id
+                       #:extra-inspector extra-inspector))
 
 (define (module-binding? b)
   ;; must not overlap with `local-binding?`
@@ -69,7 +76,8 @@
 ;; See `identifier-binding` docs for information about these fields:
 (struct full-module-binding full-binding (module phase sym
                                            nominal-module nominal-phase nominal-sym
-                                           nominal-require-phase)
+                                           nominal-require-phase
+                                           extra-inspector) ; preserves access to protected definitions
         #:transparent
         #:property prop:serialize
         (lambda (b ser state)
@@ -88,7 +96,9 @@
               ,(ser (full-module-binding-nominal-phase b))
               ,(ser (full-module-binding-nominal-sym b))
               ,(ser (full-module-binding-nominal-require-phase b))
-              ,(ser (full-binding-free=id b)))]
+              ,(ser (full-binding-free=id b))
+              ,(and (full-module-binding-extra-inspector b)
+                    (serialize-state-inspector-id state)))]
            [else
             (ser simplified-b)])))
 
@@ -106,13 +116,15 @@
                                          nominal-phase
                                          nominal-sym
                                          nominal-require-phase
-                                         free=id)
+                                         free=id
+                                         extra-inspector)
   (make-module-binding module phase sym
                        #:nominal-module nominal-module
                        #:nominal-phase nominal-phase
                        #:nominal-sym nominal-sym
                        #:nominal-require-phase nominal-require-phase
-                       #:free=id free=id))
+                       #:free=id free=id
+                       #:extra-inspector extra-inspector))
 
 (define (deserialize-simple-module-binding module sym phase)
   (simple-module-binding module phase sym))
@@ -153,3 +165,8 @@
   (if (simple-module-binding? b)
       0
       (full-module-binding-nominal-require-phase b)))
+
+(define (module-binding-extra-inspector b)
+  (if (simple-module-binding? b)
+      #f
+      (full-module-binding-extra-inspector b)))

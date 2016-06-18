@@ -169,7 +169,9 @@
      [else
       (module-binding-update b
                              #:module (apply-syntax-shifts (module-binding-module b) mpi-shifts)
-                             #:nominal-module (apply-syntax-shifts (module-binding-nominal-module b) mpi-shifts))])]
+                             #:nominal-module (apply-syntax-shifts (module-binding-nominal-module b) mpi-shifts)
+                             #:free=id (and (binding-free=id b)
+                                            (syntax-transfer-shifts (binding-free=id b) s)))])]
    [(and (not b) unbound-sym?)
     (syntax-e s)]
    [else b]))
