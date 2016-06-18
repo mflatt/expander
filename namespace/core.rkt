@@ -63,7 +63,7 @@
                                               (in-hash-keys core-forms))])
                              (values sym (make-module-binding core-mpi 0 sym))))
                 0 1
-                (lambda (data-box ns phase phase-level self bulk-binding-registry)
+                (lambda (data-box ns phase phase-level self bulk-binding-registry insp)
                   (case phase-level
                     [(0)
                      (for ([(sym val) (in-hash core-primitives)])

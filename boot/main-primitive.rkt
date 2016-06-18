@@ -48,5 +48,6 @@
           
           'module-declared? module-declared?
           'module->language-info module->language-info
-          'module->namespace module->namespace))
+          'module->namespace module->namespace
+          'namespace-unprotect-module namespace-unprotect-module))
 

@@ -2,6 +2,7 @@
 (require racket/promise
          "../namespace/namespace.rkt"
          "../namespace/module.rkt"
+         "../namespace/inspector.rkt"
          "../common/phase.rkt"
          "../compile/module-use.rkt"
          "../common/module-path.rkt"
@@ -69,7 +70,7 @@
                          min-phase
                          max-phase
                          #:cross-phase-persistent? (decl 'cross-phase-persistent?)
-                         (lambda (data-box ns phase-shift phase-level self bulk-binding-registry)
+                         (lambda (data-box ns phase-shift phase-level self bulk-binding-registry insp)
                            (define syntax-literals-instance
                              (init-syntax-literals! data-box ns
                                                     syntax-literals-linklet data-instance
@@ -106,7 +107,8 @@
                                ;; For phase level 1 and up, set the expansion context
                                ;; to point back to the module's info:
                                (parameterize ([current-expand-context (delay (make-expand-context ns))]
-                                              [current-namespace ns])
+                                              [current-namespace ns]
+                                              [current-module-code-inspector insp])
                                  (instantiate-body))])))))
 
   (declare-module! ns

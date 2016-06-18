@@ -46,9 +46,9 @@
                    submodule-declarations ; resolved-module-path -> module [shared during a module compilation]
                    cross-phase-persistent-namespace ; #f or namespace for persistent instances [shared among modules]
                    available-module-instances  ; phase -> list of module-instance [shared among modules]
-                   module-instances)  ; instance-key -> module-instance [shared among modules]
-        ;;                            ;   where an instance-key is either (cons resolved-module-path 0-phase)
-        ;;                            ;   or just a resolved-module-path, the latter for cross phase persistent modules
+                   module-instances)   ; instance-key -> module-instance [shared among modules]
+        ;;                             ;   where an instance-key is either (cons resolved-module-path 0-phase)
+        ;;                             ;   or just a resolved-module-path, the latter for cross phase persistent modules
         #:property prop:custom-write
         (lambda (ns port mode)
           (write-string "#<namespace" port)

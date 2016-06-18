@@ -72,7 +72,9 @@
                                        name))
   (for ([name (in-list runtime-instances)]
         #:unless (eq? name '#%kernel))
-    (copy-racket-module! name #:namespace ns))
+    (copy-racket-module! name
+                         #:namespace ns
+                         #:protected? (eq? name '#%foreign)))
   (declare-reexporting-module! '#%builtin (list* '#%place-struct
                                                  '#%utils
                                                  '#%boot

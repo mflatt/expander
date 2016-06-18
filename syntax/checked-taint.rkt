@@ -10,6 +10,7 @@
                     [syntax-taint raw:syntax-taint])
          (only-in "../expand/syntax-local.rkt" syntax-local-phase-level)
          "../namespace/core.rkt"
+         "../namespace/inspector.rkt"
          "../common/contract.rkt")
 
 (provide syntax-tainted?
@@ -62,6 +63,7 @@
 
 (define (inspector-for-taint maybe-insp)
   (or maybe-insp
+      (current-module-code-inspector)
       (current-code-inspector)))
 
 ;; ----------------------------------------

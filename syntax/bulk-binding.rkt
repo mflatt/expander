@@ -4,7 +4,8 @@
          "scope.rkt" ; defines `prop:bulk-binding`
          "binding.rkt"
          "../common/module-path.rkt"
-         (only-in "../compile/reserved-symbol.rkt" bulk-binding-registry-id))
+         (only-in "../compile/reserved-symbol.rkt" bulk-binding-registry-id)
+         "../namespace/protect.rkt")
 
 (provide provide-binding-to-require-binding
 
@@ -45,8 +46,11 @@
                                             #:mpi mpi   ; the requiring module's view
                                             #:provide-phase-level provide-phase-level
                                             #:phase-shift phase-shift)
-  (define from-mod (module-binding-module out-binding))
-  (module-binding-update out-binding
+  (define binding (if (protected? out-binding)
+                      (protected-binding out-binding)
+                      out-binding))
+  (define from-mod (module-binding-module binding))
+  (module-binding-update binding
                          #:module (module-path-index-shift from-mod self mpi)
                          #:nominal-module mpi
                          #:nominal-phase provide-phase-level

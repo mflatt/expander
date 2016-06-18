@@ -4,11 +4,13 @@
          "namespace.rkt"
          (submod "namespace.rkt" for-module)
          "module.rkt"
-         (submod "module.rkt" for-module-reflect))
+         (submod "module.rkt" for-module-reflect)
+         "../common/contract.rkt")
 
 (provide module-declared?
          module->language-info
-         module->namespace)
+         module->namespace
+         namespace-unprotect-module)
 
 ;; ----------------------------------------
 
@@ -33,20 +35,39 @@
   (define name (reference->resolved-module-path mod #:load? #t))
   (define ns (current-namespace))
   (define phase (namespace-phase ns))
-  (define m-ns (namespace->module-namespace ns name phase))
-  (unless m-ns
+  (define mi (namespace->module-instance ns name phase))
+  (unless mi
     ;; Check for declaration:
     (namespace->module/complain 'module->namespace ns name)
     ;; Must be declared, but not instantiated
     (raise-arguments-error 'module->namespace
                            "module not instantiated in the current namespace"
                            "name" name))
+  (unless (inspector-superior? (current-code-inspector) (module-instance-inspector mi))
+    (raise-arguments-error 'module->namespace
+                           "current code inspector cannot access namespace of module"
+                           "module name" name))
+  (define m-ns (module-instance-namespace mi))
   (unless (namespace-get-root-expand-ctx m-ns)
     ;; Instantiating the module didn't install a context, so make one now
     (namespace-set-root-expand-ctx! m-ns (make-root-expand-context)))
   ;; Ensure that the module is available
   (namespace-module-make-available! ns (namespace-mpi m-ns) phase)
   m-ns)
+
+(define (namespace-unprotect-module insp mod [ns (current-namespace)])
+  (check 'namespace-unprotect-module inspector? insp)
+  (check 'namespace-unprotect-module module-path? mod)
+  (check 'namespace-unprotect-module namespace? ns)
+  (define name (reference->resolved-module-path mod #:load? #f))
+  (define phase (namespace-phase ns))
+  (define mi (namespace->module-instance ns name phase))
+  (unless mi
+    (raise-arguments-error 'namespace-unprotect-module
+                           "module not instantiated"
+                           "module name" name))
+  (when (inspector-superior? insp (module-instance-inspector mi))
+    (set-module-instance-inspector! mi (current-inspector))))
 
 ;; ----------------------------------------
 

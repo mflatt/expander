@@ -4,6 +4,7 @@
          "../namespace/core.rkt"
          "../namespace/namespace.rkt"
          "../namespace/module.rkt"
+         "../namespace/protect.rkt"
          "../syntax/binding.rkt"
          "core-primitive.rkt"
          "../common/module-path.rkt"
@@ -32,7 +33,8 @@
                              #:namespace ns
                              #:skip [skip-syms (seteq)]
                              #:alts [alts #hasheq()]
-                             #:primitive? [primitive? #f])
+                             #:primitive? [primitive? #f]
+                             #:protected? [protected? #f])
   (define mod-name `',name)
   (define inst (lookup-primitive-instance name))
   (define ht (for/hash ([sym (in-list (instance-variable-names inst))]
@@ -42,12 +44,14 @@
                            (instance-variable-value inst sym)))))
   (declare-hash-based-module! to-name ht
                               #:namespace ns
-                              #:primitive? primitive?))
+                              #:primitive? primitive?
+                              #:protected? protected?))
 
 
 (define (declare-hash-based-module! name ht
                                     #:namespace ns
-                                    #:primitive? [primitive? #f])
+                                    #:primitive? [primitive? #f]
+                                    #:protected? [protected? #f])
   (define mpi (module-path-index-join (list 'quote name) #f))
   (declare-module!
    ns
@@ -56,10 +60,13 @@
                 mpi
                 null
                 (hasheqv 0 (for/hash ([sym (in-hash-keys ht)])
+                             (define binding (make-module-binding mpi 0 sym))
                              (values sym
-                                     (make-module-binding mpi 0 sym))))
+                                     (if protected?
+                                         (protected binding)
+                                         binding))))
                 0 0
-                (lambda (data-box ns phase-shift phase-level self bulk-binding-registry)
+                (lambda (data-box ns phase-shift phase-level self bulk-binding-registry insp)
                   (when (= 0 phase-level)
                     (for ([(sym val) (in-hash ht)])
                       (namespace-set-variable! ns 0 sym val)))))

@@ -50,7 +50,7 @@
       (let ([bind-id (local-variable-id t)])
         ;; Keep source locations and properties of original reference:
         (syntax-rearm (datum->syntax (syntax-disarm bind-id) (syntax-e bind-id) id id)
-                      bind-id))
+                      id))
       id))
 
 ;; `missing` is a token to represent the absence of a binding; a
@@ -74,33 +74,37 @@
 
 ;; ---------------------------------------- 
 
-;; Returns `variable` or a compile-time value
+;; Returns: `variable` or a compile-time value
+;;          #f or (for a transformer) an inspector for the defining module
 (define (binding-lookup b env lift-envs ns phase id
                         #:out-of-context-as-variable? [out-of-context-as-variable? #f])
   (cond
    [(module-binding? b)
     (define at-phase (- phase (module-binding-phase b)))
-    (define m-ns (if (top-level-module-path-index? (module-binding-module b))
-                     ns
-                     (namespace->module-namespace ns
-                                                  (module-path-index-resolve
-                                                   (module-binding-module b))
-                                                  at-phase
-                                                  #:check-available-at-phase-level (module-binding-phase b)
-                                                  #:unavailable-callback
-                                                  (lambda ()
-                                                    (raise-syntax-error
-                                                     #f
-                                                     (format (string-append "module mismatch;\n"
-                                                                            " attempted to use a module that is not available\n"
-                                                                            "  possible cause:\n"
-                                                                            "   using (dynamic-require .... #f)\n"
-                                                                            "   but need (dynamic-require .... 0)\n"
-                                                                            "  module: ~s\n"
-                                                                            "  phase: ~s")
-                                                             (module-binding-module b)
-                                                             (phase+ at-phase (module-binding-phase b)))
-                                                     id)))))
+    (define-values (mi m-ns)
+      (if (top-level-module-path-index? (module-binding-module b))
+          (values #f ns)
+          (let ([mi
+                 (namespace->module-instance ns
+                                             (module-path-index-resolve
+                                              (module-binding-module b))
+                                             at-phase
+                                             #:check-available-at-phase-level (module-binding-phase b)
+                                             #:unavailable-callback
+                                             (lambda ()
+                                               (raise-syntax-error
+                                                #f
+                                                (format (string-append "module mismatch;\n"
+                                                                       " attempted to use a module that is not available\n"
+                                                                       "  possible cause:\n"
+                                                                       "   using (dynamic-require .... #f)\n"
+                                                                       "   but need (dynamic-require .... 0)\n"
+                                                                       "  module: ~s\n"
+                                                                       "  phase: ~s")
+                                                        (module-binding-module b)
+                                                        (phase+ at-phase (module-binding-phase b)))
+                                                id)))])
+            (values mi (and mi (module-instance-namespace mi))))))
     (unless m-ns
       (error 'expand
              (string-append "namespace mismatch; cannot locate module instance\n"
@@ -114,22 +118,24 @@
              (module-binding-phase b)
              id))
     (check-taint id)
-    (namespace-get-transformer m-ns (module-binding-phase b) (module-binding-sym b)
-                               variable)]
+    (define t (namespace-get-transformer m-ns (module-binding-phase b) (module-binding-sym b)
+                                         variable))
+    (values t (and mi (module-instance-inspector mi)))]
    [(local-binding? b)
     (define t (hash-ref env (local-binding-key b) missing))
     (cond
      [(eq? t missing)
-      (or
-       ;; check in lift envs, if any
-       (for/or ([lift-env (in-list lift-envs)])
-         (hash-ref (unbox lift-env) (local-binding-key b) #f))
-       (if out-of-context-as-variable?
-           variable
-           (error "identifier used out of context:" id)))]
+      (values (or
+               ;; check in lift envs, if any
+               (for/or ([lift-env (in-list lift-envs)])
+                 (hash-ref (unbox lift-env) (local-binding-key b) #f))
+               (if out-of-context-as-variable?
+                   variable
+                   (error "identifier used out of context:" id)))
+              #f)]
      [else
       (check-taint id)
-      t])]
+      (values t #f)])]
    [else (error "internal error: unknown binding for lookup:" b)]))
 
 ;; ----------------------------------------

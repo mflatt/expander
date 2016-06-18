@@ -12,6 +12,7 @@
 (provide make-module-namespace
          raise-unknown-module-error
 
+         namespace->module-instance
          namespace->module-namespace
          namespace-install-module-namespace!
          
@@ -22,6 +23,11 @@
          module-provides
          module-primitive?
          module-cross-phase-persistent?
+         
+         module-instance-namespace
+         module-instance-module
+         module-instance-inspector
+         set-module-instance-inspector!
 
          namespace-module-instantiate!
          namespace-module-visit!
@@ -39,14 +45,15 @@
 
 (struct module (self            ; module path index used for a self reference
                 requires        ; list of (cons phase list-of-module-path-index)
-                provides        ; phase-level -> sym -> binding
+                provides        ; phase-level -> sym -> binding or protected binding
                 language-info   ; #f or vector
                 min-phase-level ; phase-level
                 max-phase-level ; phase-level
                 ;; expected to be consistent with provides and {min,max}-phase-level:
                 instantiate     ; namespace phase phase-level ->
                 primitive?      ; inline variable values in compiled code?
-                cross-phase-persistent?))
+                cross-phase-persistent?
+                inspector))     ; declaration-time inspector
 
 (define (make-module self requires provides
                      min-phase-level max-phase-level
@@ -58,17 +65,25 @@
           min-phase-level max-phase-level
           instantiate
           primitive?
-          cross-phase-persistent?))
+          cross-phase-persistent?
+          (current-code-inspector)))
 
 (struct module-instance (namespace
                          module                        ; can be #f for the module being expanded
+                         [inspector #:mutable]         ; instantation-time inspector
                          [shifted-requires #:mutable]  ; computed on demand; shifted from `module-requires`
                          phase-level-to-state          ; phase-level -> #f, 'available, or 'started
                          [made-available? #:mutable]   ; no #f in `phase-level-to-state`?
                          data-box))                    ; for use by module implementation
 
 (define (make-module-instance m-ns m)
-  (module-instance m-ns m #f (make-hasheqv) #f (box #f)))
+  (module-instance m-ns           ; namespace
+                   m              ; module
+                   (and m (make-inspector (module-inspector m)))
+                   #f             ; shifted-requires (not yet computed)
+                   (make-hasheqv) ; phase-level-to-state
+                   #f             ; made-available?
+                   (box #f)))     ; data-box
 
 ;; ----------------------------------------
 
@@ -131,12 +146,18 @@
 
 (define (namespace->module-instance ns name 0-phase
                                     #:install!-namespace [install!-ns #f]
-                                    #:complain-on-failure? [complain-on-failure? #f])
-  (or (hash-ref (namespace-module-instances ns) (cons name 0-phase) #f)
-      (let ([c-ns (or (namespace-cross-phase-persistent-namespace ns) ns)])
-        (hash-ref (namespace-module-instances c-ns) name #f))
-      (and complain-on-failure?
-           (error "no module instance found:" name 0-phase))))
+                                    #:complain-on-failure? [complain-on-failure? #f]
+                                    #:check-available-at-phase-level [check-available-at-phase-level #f]
+                                    #:unavailable-callback [unavailable-callback void])
+  (define mi
+    (or (hash-ref (namespace-module-instances ns) (cons name 0-phase) #f)
+        (let ([c-ns (or (namespace-cross-phase-persistent-namespace ns) ns)])
+          (hash-ref (namespace-module-instances c-ns) name #f))
+        (and complain-on-failure?
+             (error "no module instance found:" name 0-phase))))
+  (when (and mi check-available-at-phase-level)
+    (check-availablilty mi check-available-at-phase-level unavailable-callback))
+  mi)
 
 (define (namespace-install-module-namespace! ns name 0-phase m existing-m-ns)
   (define m-ns (struct-copy namespace ns
@@ -184,22 +205,22 @@
              mi)
   mi)
 
-(define (namespace->module-namespace ns name 0-phase
-                                     #:complain-on-failure? [complain-on-failure? #f]
-                                     #:check-available-at-phase-level [check-available-at-phase-level #f]
-                                     #:unavailable-callback [unavailable-callback void])
-  (define mi (namespace->module-instance ns name 0-phase
-                                         #:complain-on-failure? complain-on-failure?))
-  (when (and mi check-available-at-phase-level)
-    (check-availablilty mi check-available-at-phase-level unavailable-callback))
-  (and mi (module-instance-namespace mi)))
-
 (define (check-availablilty mi check-available-at-phase-level unavailable-callback)
   (define m (module-instance-module mi))
   (when (and m
              (<= (module-min-phase-level m) (add1 check-available-at-phase-level) (module-max-phase-level m))
              (not (hash-ref (module-instance-phase-level-to-state mi) (add1 check-available-at-phase-level) #f)))
     (unavailable-callback)))
+
+(define (namespace->module-namespace ns name 0-phase
+                                     #:complain-on-failure? [complain-on-failure? #f]
+                                     #:check-available-at-phase-level [check-available-at-phase-level #f]
+                                     #:unavailable-callback [unavailable-callback void])
+  (define mi (namespace->module-instance ns name 0-phase
+                                         #:complain-on-failure? complain-on-failure?
+                                         #:check-available-at-phase-level check-available-at-phase-level
+                                         #:unavailable-callback unavailable-callback))
+  (and mi (module-instance-namespace mi)))
 
 ;; ----------------------------------------
 
@@ -299,8 +320,9 @@
             (hash-set! (module-instance-phase-level-to-state mi) phase-level 'started)
             (define defs (namespace->definitions m-ns phase-level))
             (define p-ns (namespace->namespace-at-phase m-ns phase))
+            (define insp (module-instance-inspector mi))
             (define go (module-instantiate m))
-            (go (module-instance-data-box mi) p-ns phase-shift phase-level mpi bulk-binding-registry))]
+            (go (module-instance-data-box mi) p-ns phase-shift phase-level mpi bulk-binding-registry insp))]
          [(and otherwise-available?
                (not (negative? run-phase))
                (not (hash-ref (module-instance-phase-level-to-state mi) phase-level #f)))

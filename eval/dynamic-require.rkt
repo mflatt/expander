@@ -4,6 +4,7 @@
          "../syntax/checked-syntax.rkt"
          "../namespace/namespace.rkt"
          "../namespace/module.rkt"
+         "../namespace/protect.rkt"
          "../common/module-path.rkt"
          "../namespace/eval.rkt"
          "eval.rkt")
@@ -41,31 +42,40 @@
    [(void? sym)
     (namespace-module-visit! ns mpi phase #:visit-phase phase)]
    [else
-    ;; FIXME: the old `dynamic-require` checks exports before
-    ;; instantiating modules
-    (namespace-module-instantiate! ns mpi phase #:run-phase phase)
     (define m (namespace->module ns mod-name))
-    (define binding (hash-ref (hash-ref (module-provides m) 0 #hasheq())
-                              sym
-                              #f))
+    (define binding/maybe-protected (hash-ref (hash-ref (module-provides m) 0 #hasheq())
+                                              sym
+                                              #f))
     (cond
-     [(not binding) (if (eq? fail-k default-fail-thunk)
-                        (raise-arguments-error 'dynamic-require
-                                               "name is not provided"
-                                               "name" sym
-                                               "module" mod-name)
-                        (fail-k))]
+     [(not binding/maybe-protected)
+      (if (eq? fail-k default-fail-thunk)
+          (raise-arguments-error 'dynamic-require
+                                 "name is not provided"
+                                 "name" sym
+                                 "module" mod-name)
+          (fail-k))]
      [else
+      (define binding (if (protected? binding/maybe-protected)
+                          (protected-binding binding/maybe-protected)
+                          binding/maybe-protected))
       (define ex-sym (module-binding-sym binding))
       (define ex-phase (module-binding-phase binding))
-      (define m-ns (namespace->module-namespace ns
-                                                (module-path-index-resolve
-                                                 (module-path-index-shift
-                                                  (module-binding-module binding)
-                                                  (module-self m)
-                                                  mpi))
-                                                (phase- phase ex-phase)
-                                                #:complain-on-failure? #t))
+      (namespace-module-instantiate! ns mpi phase #:run-phase phase)
+      (define mi (namespace->module-instance ns
+                                             (module-path-index-resolve
+                                              (module-path-index-shift
+                                               (module-binding-module binding)
+                                               (module-self m)
+                                               mpi))
+                                             (phase- phase ex-phase)
+                                             #:complain-on-failure? #t))
+      (when (and (protected? binding/maybe-protected)
+                 (not (inspector-superior? (current-code-inspector) (module-instance-inspector mi))))
+        (raise-arguments-error 'dynamc-require
+                               "name is protected"
+                               "name" sym
+                               "module" mod-name))
+      (define m-ns (module-instance-namespace mi))
       (namespace-get-variable m-ns ex-phase ex-sym
                               (lambda ()
                                 ;; Maybe syntax?

@@ -441,7 +441,9 @@
                                     #:immediate? #t))
      (when (eq? binding 'ambiguous)
        (raise-ambigious-error id ctx))
-     (define t (and binding (lookup binding ctx s)))
+     (define-values (t insp) (if binding
+                                 (lookup binding ctx s)
+                                 (values #f #f)))
      (cond
       [(or (variable? t)
            (and (not binding)
@@ -462,7 +464,7 @@
                  ctx)]
         [else
          (define-values (exp-s re-ctx)
-           (apply-transformer (transformer->procedure t) s id ctx binding))
+           (apply-transformer t insp s id ctx binding))
          (expand exp-s re-ctx)])]
       [(rename-transformer? t)
        (cond

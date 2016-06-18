@@ -6,6 +6,7 @@
          "../syntax/match.rkt"
          "../namespace/namespace.rkt"
          "../namespace/module.rkt"
+         "../namespace/inspector.rkt"
          "../syntax/binding.rkt"
          "env.rkt"
          "../syntax/track.rkt"
@@ -64,7 +65,8 @@
        (expand-implicit '#%top (substitute-alternate-id s alternate-id) ctx s)]
       [else
        ;; Variable or form as identifier macro
-       (dispatch (lookup binding ctx s) s id ctx binding)]))]
+       (define-values (t insp) (lookup binding ctx s))
+       (dispatch t insp s id ctx binding)]))]
    [(and (pair? (syntax-e/no-taint (syntax-disarm s)))
          (identifier? (car (syntax-e/no-taint (syntax-disarm s)))))
     ;; An "application" form that starts with an identifier
@@ -83,14 +85,14 @@
        (expand-implicit '#%app (substitute-alternate-id s alternate-id) ctx id)]
       [else
        ;; Find out whether it's bound as a variable, syntax, or core form
-       (define t (lookup binding ctx id))
+       (define-values (t insp) (lookup binding ctx id))
        (cond
         [(variable? t)
          ;; Not as syntax or core form, so use implicit `#%app`
          (expand-implicit '#%app (substitute-alternate-id s alternate-id) ctx id)]
         [else
          ;; Syntax or core form as "application"
-         (dispatch t s id ctx binding)])]))]
+         (dispatch t insp s id ctx binding)])]))]
    [(or (pair? (syntax-e (syntax-disarm s)))
         (null? (syntax-e (syntax-disarm s))))
     ;; An "application" form that doesn't start with an identifier, so
@@ -126,7 +128,9 @@
                             #:immediate? #t))
    (when (eq? b 'ambiguous)
      (raise-ambigious-error id ctx))
-   (define t (and b (lookup b ctx id)))
+   (define-values (t insp) (if b
+                               (lookup b ctx id)
+                               (values #f #f)))
    (cond
     [(core-form? t)
      (cond
@@ -138,9 +142,9 @@
        ;; making `#%top` explicit in the form
        ((core-form-expander t) s ctx #t)]
       [else
-       (dispatch t (datum->syntax disarmed-s (cons sym disarmed-s) s s) id ctx b)])]
+       (dispatch t insp (datum->syntax disarmed-s (cons sym disarmed-s) s s) id ctx b)])]
     [(transformer? t)
-     (dispatch t (datum->syntax disarmed-s (cons sym disarmed-s) s s) id ctx b)]
+     (dispatch t insp (datum->syntax disarmed-s (cons sym disarmed-s) s s) id ctx b)]
     [(expand-context-only-immediate? ctx) s]
     [else
      (define phase (expand-context-phase ctx))
@@ -170,7 +174,7 @@
 ;; other compile-time value (which is an error), or a token
 ;; indicating that the binding is a run-time variable; note that
 ;; `s` is not disarmed
-(define (dispatch t s id ctx binding)
+(define (dispatch t insp s id ctx binding)
   (cond
    [(core-form? t)
     (if (expand-context-only-immediate? ctx)
@@ -184,7 +188,7 @@
      [else
       ;; Apply transformer and expand again
       (define-values (exp-s re-ctx)
-        (apply-transformer (transformer->procedure t) s id ctx binding))
+        (apply-transformer t insp s id ctx binding))
       (cond
        [(expand-context-just-once? ctx) exp-s]
        [else (expand exp-s re-ctx
@@ -206,7 +210,7 @@
 
 ;; Given a macro transformer `t`, apply it --- adding appropriate
 ;; scopes to represent the expansion step
-(define (apply-transformer t s id ctx binding)
+(define (apply-transformer t insp s id ctx binding)
   (define disarmed-s (syntax-disarm s))
   (define intro-scope (new-scope 'macro))
   (define intro-s (add-scope disarmed-s intro-scope))
@@ -226,8 +230,10 @@
   (define transformed-s (parameterize ([current-expand-context m-ctx]
                                        [current-namespace (namespace->namespace-at-phase
                                                            (expand-context-namespace ctx)
-                                                           (add1 (expand-context-phase ctx)))])
-                          (t use-s)))
+                                                           (add1 (expand-context-phase ctx)))]
+                                       [current-module-code-inspector (or insp (current-module-code-inspector))])
+          
+                          ((transformer->procedure t) use-s)))
   (unless (syntax? transformed-s)
     (raise-argument-error (syntax-e id)
                           "received value from syntax expander was not syntax"

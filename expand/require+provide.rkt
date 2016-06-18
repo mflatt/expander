@@ -6,6 +6,7 @@
          "../syntax/binding.rkt"
          "../syntax/error.rkt"
          "../namespace/namespace.rkt"
+         "../namespace/protect.rkt"
          "../common/module-path.rkt")
 
 (provide make-requires+provides
@@ -39,7 +40,7 @@
                            require-mpis ; module-path-index to itself as interned
                            require-mpis-in-order ; require-phase -> list of module-path-index
                            requires   ; module-path-index -> require-phase -> list of (required id phase boolean)
-                           provides   ; phase -> sym -> binding
+                           provides   ; phase -> sym -> binding or protected
                            phase-to-defined-syms ; phase -> sym -> boolean
                            [can-cross-phase-persistent? #:mutable]
                            [all-bindings-simple? #:mutable])) ; tracks whether bindings are easily reconstructed
@@ -251,14 +252,20 @@
 
 ;; Register that a binding is provided as a given symbol; report an
 ;; error if the provide is inconsistent with an earlier one
-(define (add-provide! r+p sym phase binding id)
+(define (add-provide! r+p sym phase binding id as-protected?)
+  (when (and as-protected?
+             (not (eq? (module-binding-module binding) (requires+provides-self r+p))))
+    (raise-syntax-error #f "cannot protect imported identifier with re-provide" sym))
   (hash-update! (requires+provides-provides r+p)
                 phase
                 (lambda (at-phase)
-                  (define b (hash-ref at-phase sym #f))
+                  (define b/p (hash-ref at-phase sym #f))
+                  (define b (if (protected? b/p) (protected-binding b/p) b/p))
                   (cond
                    [(not b)
-                    (hash-set at-phase sym binding)]
+                    (hash-set at-phase sym (if as-protected?
+                                               (protected binding)
+                                               binding))]
                    [(and (eq? (module-path-index-resolve (module-binding-module b))
                               (module-path-index-resolve (module-binding-module binding)))
                          (eqv? (module-binding-phase b) (module-binding-phase binding))
@@ -304,6 +311,8 @@
               (values sym
                       (let loop ([binding binding])
                         (cond
+                         [(protected? binding)
+                          (protected (loop (protected-binding binding)))]
                          [(binding-free=id binding)
                           (loop (binding-free=id binding))]
                          [else binding])))))))
@@ -327,4 +336,9 @@
       (values phase
               (for/hasheq ([(sym binding) (in-hash at-phase)])
                 (values sym
-                        (binding-module-path-index-shift binding from-mpi to-mpi)))))]))
+                        (let loop ([binding binding])
+                          (cond
+                           [(protected? binding)
+                            (protected (loop (protected-binding binding)))]
+                           [else
+                            (binding-module-path-index-shift binding from-mpi to-mpi)]))))))]))
