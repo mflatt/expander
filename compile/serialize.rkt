@@ -11,7 +11,8 @@
          "../common/module-path.rkt"
          "module-use.rkt"
          "../host/linklet.rkt"
-         "built-in-symbol.rkt")
+         "built-in-symbol.rkt"
+         "reserved-symbol.rkt")
 
 (provide make-module-path-index-table
          add-module-path-index!
@@ -161,7 +162,7 @@
 (define (generate-deserialize v mpis)
   (define reachable-scopes (find-reachable-scopes v))
   
-  (define state (make-serialize-state reachable-scopes))
+  (define state (make-serialize-state reachable-scopes inspector-id))
   
   (define mutables (make-hasheq))
   (define objs (make-hasheq))

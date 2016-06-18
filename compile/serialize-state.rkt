@@ -12,15 +12,17 @@
                          bulk-bindings-intern   ; to record pruned bulk-binding lists
                          scopes                 ; interned scope sets
                          shifted-multi-scopes   ; interned shifted multi-scope lists
-                         mpi-shifts))           ; interned module path index shifts
+                         mpi-shifts             ; interned module path index shifts
+                         inspector-id))         ; symbol name bound to declaraiton-time inspector
 
-(define (make-serialize-state reachable-scopes)
+(define (make-serialize-state reachable-scopes inspector-id)
   (serialize-state reachable-scopes
                    (make-hasheq)   ; bindings-intern
                    (make-hasheq)   ; bulk-bindings-intern
                    (make-hash)     ; scopes
                    (make-hash)     ; shifted-multi-scopes
-                   (make-hasheq))) ; mpi-shifts
+                   (make-hasheq)   ; mpi-shifts
+                   inspector-id))
 
 (define (intern-scopes scs state)
   (or (hash-ref (serialize-state-scopes state) scs #f)

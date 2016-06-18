@@ -7,6 +7,7 @@
          "../common/phase.rkt"
          "../syntax/track.rkt"
          "../syntax/error.rkt"
+         "../syntax/inspector.rkt"
          "../namespace/namespace.rkt"
          "../namespace/module.rkt"
          "../syntax/binding.rkt"
@@ -482,11 +483,14 @@
        [else s-with-edges]))
     ;; In case we're expanding syntax that was previously expanded,
     ;; shift the generic "self" to the "self" for the current expansion:
-    (syntax-module-path-index-shift
-     s-with-suitable-enclosing
-     (make-generic-self-module-path-index self)
-     self)))
-  
+    (define s-shifted
+      (syntax-module-path-index-shift
+       s-with-suitable-enclosing
+       (make-generic-self-module-path-index self)
+       self))
+    ;; Preserve the expansion-time code inspector
+    (syntax-set-inspector s-shifted (current-code-inspector))))
+
 ;; ----------------------------------------
 
 ;; Pass 1 of `module` expansion, which uncovers definitions,

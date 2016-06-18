@@ -74,7 +74,7 @@
                            (define syntax-literals-instance
                              (init-syntax-literals! data-box ns
                                                     syntax-literals-linklet data-instance
-                                                    phase-shift original-self self bulk-binding-registry
+                                                    phase-shift original-self self bulk-binding-registry insp
                                                     create-root-expand-context-from-module))
                            (define cu (hash-ref evaled-h phase-level #f))
                            (when cu
@@ -92,6 +92,7 @@
                                 #:phase-shift phase-shift
                                 #:self self 
                                 #:bulk-binding-registry bulk-binding-registry
+                                #:inspector insp
                                 #:set-transformer! (lambda (name val)
                                                      (namespace-set-transformer! ns (sub1 phase-level) name val))))
                              (define (instantiate-body)
@@ -124,7 +125,7 @@
 
 (define (init-syntax-literals! data-box ns
                                syntax-literals-linklet data-instance
-                               phase-shift original-self self bulk-binding-registry
+                               phase-shift original-self self bulk-binding-registry insp
                                create-root-expand-context-from-module)
   (unless (unbox data-box)
     (define inst
@@ -133,6 +134,7 @@
        #:phase-shift phase-shift
        #:self self 
        #:bulk-binding-registry bulk-binding-registry
+       #:inspector insp
        #:set-transformer! (lambda (name val) (error "shouldn't get here for the root-ctx linklet"))))
     
     (define root-ctx-instance

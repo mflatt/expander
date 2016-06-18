@@ -51,5 +51,4 @@
 
 (define (variable-reference->module-declaration-inspector vr)
   (check 'variable-reference->base-phase variable-reference? vr)
-  ;; FIXME
-  (current-code-inspector))
+  (namespace-inspector (variable-reference->namespace vr)))

@@ -23,11 +23,11 @@
          module-provides
          module-primitive?
          module-cross-phase-persistent?
+         module-no-protected?
+         module-inspector
          
          module-instance-namespace
          module-instance-module
-         module-instance-inspector
-         set-module-instance-inspector!
 
          namespace-module-instantiate!
          namespace-module-visit!
@@ -53,6 +53,7 @@
                 instantiate     ; namespace phase phase-level ->
                 primitive?      ; inline variable values in compiled code?
                 cross-phase-persistent?
+                no-protected?   ; short cut for checking protected access
                 inspector))     ; declaration-time inspector
 
 (define (make-module self requires provides
@@ -60,17 +61,18 @@
                      instantiate
                      #:language-info [language-info #f]
                      #:primitive? [primitive? #f]
-                     #:cross-phase-persistent? [cross-phase-persistent? primitive?])
+                     #:cross-phase-persistent? [cross-phase-persistent? primitive?]
+                     #:no-protected? [no-protected? #f])
   (module self requires provides language-info
           min-phase-level max-phase-level
           instantiate
           primitive?
           cross-phase-persistent?
+          no-protected?
           (current-code-inspector)))
 
 (struct module-instance (namespace
                          module                        ; can be #f for the module being expanded
-                         [inspector #:mutable]         ; instantation-time inspector
                          [shifted-requires #:mutable]  ; computed on demand; shifted from `module-requires`
                          phase-level-to-state          ; phase-level -> #f, 'available, or 'started
                          [made-available? #:mutable]   ; no #f in `phase-level-to-state`?
@@ -79,7 +81,6 @@
 (define (make-module-instance m-ns m)
   (module-instance m-ns           ; namespace
                    m              ; module
-                   (and m (make-inspector (module-inspector m)))
                    #f             ; shifted-requires (not yet computed)
                    (make-hasheqv) ; phase-level-to-state
                    #f             ; made-available?
@@ -168,7 +169,8 @@
                             [phase-to-namespace (make-hasheqv)]
                             [phase-level-to-definitions (if (module-cross-phase-persistent? m)
                                                             (namespace-phase-level-to-definitions existing-m-ns)
-                                                            (make-hasheqv))]))
+                                                            (make-hasheqv))]
+                            [inspector (namespace-inspector existing-m-ns)]))
   (define mi (make-module-instance m-ns m))
   (cond
    [(module-cross-phase-persistent? m)
@@ -195,7 +197,8 @@
                             [phase 0-phase]
                             [0-phase 0-phase]
                             [phase-to-namespace (make-hasheqv)]
-                            [phase-level-to-definitions (make-hasheqv)]))
+                            [phase-level-to-definitions (make-hasheqv)]
+                            [inspector (make-inspector (module-inspector m))]))
   (hash-set! (namespace-phase-to-namespace m-ns) 0-phase m-ns)
   (define mi (make-module-instance m-ns m))
   (hash-set! (namespace-module-instances ns)
@@ -320,7 +323,7 @@
             (hash-set! (module-instance-phase-level-to-state mi) phase-level 'started)
             (define defs (namespace->definitions m-ns phase-level))
             (define p-ns (namespace->namespace-at-phase m-ns phase))
-            (define insp (module-instance-inspector mi))
+            (define insp (module-inspector m))
             (define go (module-instantiate m))
             (go (module-instance-data-box mi) p-ns phase-shift phase-level mpi bulk-binding-registry insp))]
          [(and otherwise-available?

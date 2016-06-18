@@ -62,7 +62,8 @@
                                     #:namespace ns
                                     #:dest-phase (namespace-phase ns)
                                     #:self (namespace-mpi ns)
-                                    #:bulk-binding-registry (namespace-bulk-binding-registry ns))))))
+                                    #:bulk-binding-registry (namespace-bulk-binding-registry ns)
+                                    #:inspector (current-code-inspector))))))
 
   (define orig-phase (instance-variable-value link-instance 'original-phase))
   (define max-phase (instance-variable-value link-instance 'max-phase))
@@ -87,6 +88,7 @@
                    #:phase-shift phase-shift
                    #:self (namespace-mpi ns)
                    #:bulk-binding-registry (namespace-bulk-binding-registry ns)
+                   #:inspector (namespace-inspector ns)
                    #:set-transformer! (lambda (name val)
                                         (namespace-set-transformer! ns
                                                                     (phase+ (sub1 phase) phase-shift)

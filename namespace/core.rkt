@@ -56,6 +56,7 @@
   (declare-module!
    ns
    (make-module #:cross-phase-persistent? #t
+                #:no-protected? #t
                 core-mpi
                 null
                 (hasheqv 0 (for/hasheq ([sym (in-sequences

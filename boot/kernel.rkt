@@ -57,6 +57,7 @@
    ns
    (make-module #:cross-phase-persistent? #t
                 #:primitive? primitive?
+                #:no-protected? (not protected?)
                 mpi
                 null
                 (hasheqv 0 (for/hash ([sym (in-hash-keys ht)])

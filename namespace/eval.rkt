@@ -2,6 +2,7 @@
 (require (only-in "../syntax/syntax.rkt" syntax-mpi-shifts)
          (only-in "../syntax/scope.rkt" add-binding!)
          (only-in "../syntax/binding.rkt" resolve+shift syntax-transfer-shifts)
+         "../syntax/inspector.rkt"
          "../syntax/module-binding.rkt"
          "../syntax/checked-syntax.rkt"
          "../syntax/error.rkt"
@@ -57,9 +58,14 @@
                                             #:unless (equal? sc post-scope))
                                    sc))
   (define (add-ns-scopes s)
-    (syntax-transfer-shifts (push-scope (add-scopes s other-namespace-scopes)
-                                        post-scope)
-                            (root-expand-context-all-scopes-stx root-ctx)))
+    (syntax-set-inspector
+     (syntax-transfer-shifts (push-scope (add-scopes s other-namespace-scopes)
+                                         post-scope)
+                             (root-expand-context-all-scopes-stx root-ctx))
+     ;; FIXME
+     (current-code-inspector)
+     #;
+     (namespace-declaration-inspector  ns)))
   (define maybe-module-id
     (and (pair? (syntax-e s))
          (identifier? (car (syntax-e s)))

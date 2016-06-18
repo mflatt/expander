@@ -9,6 +9,7 @@
          syntax-literalss-id
          get-syntax-literal!-id
          bulk-binding-registry-id
+         inspector-id
          deserialized-syntax-id
          set-transformer!-id
          top-level-bind!-id
@@ -22,6 +23,7 @@
 (define syntax-literalss-id (make-built-in-symbol! 'syntax-literalss))
 (define get-syntax-literal!-id (make-built-in-symbol! 'get-syntax-literal!))
 (define bulk-binding-registry-id (make-built-in-symbol! 'bulk-binding-registry))
+(define inspector-id (make-built-in-symbol! 'inspector))
 (define deserialized-syntax-id (make-built-in-symbol! 'deserialized-syntax))
 (define set-transformer!-id (make-built-in-symbol! 'set-transformer!))
 (define top-level-bind!-id (make-built-in-symbol! 'top-level-bind!))

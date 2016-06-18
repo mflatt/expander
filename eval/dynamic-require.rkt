@@ -61,21 +61,20 @@
       (define ex-sym (module-binding-sym binding))
       (define ex-phase (module-binding-phase binding))
       (namespace-module-instantiate! ns mpi phase #:run-phase phase)
-      (define mi (namespace->module-instance ns
-                                             (module-path-index-resolve
-                                              (module-path-index-shift
-                                               (module-binding-module binding)
-                                               (module-self m)
-                                               mpi))
-                                             (phase- phase ex-phase)
-                                             #:complain-on-failure? #t))
+      (define m-ns (namespace->module-namespace ns
+                                                (module-path-index-resolve
+                                                 (module-path-index-shift
+                                                  (module-binding-module binding)
+                                                  (module-self m)
+                                                  mpi))
+                                                (phase- phase ex-phase)
+                                                #:complain-on-failure? #t))
       (when (and (protected? binding/maybe-protected)
-                 (not (inspector-superior? (current-code-inspector) (module-instance-inspector mi))))
+                 (not (inspector-superior? (current-code-inspector) (namespace-inspector m-ns))))
         (raise-arguments-error 'dynamc-require
                                "name is protected"
                                "name" sym
                                "module" mod-name))
-      (define m-ns (module-instance-namespace mi))
       (namespace-get-variable m-ns ex-phase ex-sym
                               (lambda ()
                                 ;; Maybe syntax?

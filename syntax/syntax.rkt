@@ -32,6 +32,7 @@
                 bulk-binding-registry ; for resolving bulk bindings on unmarshal
                 srcloc  ; source location
                 props   ; properties
+                inspector ; inspector for access to protected values
                 [tamper #:mutable]) ; see "tamper.rkt"
         ;; Custom printer:
         #:property prop:custom-write
@@ -55,6 +56,7 @@
             ,(ser (intern-shifted-multi-scopes (syntax-shifted-multi-scopes s) state))
             ,(ser (intern-mpi-shifts (syntax-mpi-shifts s) state))
             ,(ser (syntax-srcloc s))
+            ,(serialize-state-inspector-id state)
             ,(ser (serialize-tamper (syntax-tamper s)))))
         #:property prop:reach-scopes
         (lambda (s reach)
@@ -87,6 +89,7 @@
           #f   ; bulk-binding-registry
           #f   ; srcloc
           empty-props
+          #f   ; inspector
           #f)) ; tamper (clean)
 
 (define (identifier? s)
@@ -112,6 +115,8 @@
                  (syntax-bulk-binding-registry stx-c))
             (and stx-l (syntax-srcloc stx-l))
             (if stx-p (syntax-props stx-p) empty-props)
+            (and stx-c
+                 (syntax-inspector stx-c))
             (and stx-c
                  (syntax-tamper stx-c)
                  (tamper-tainted-for-content content))))
@@ -176,8 +181,9 @@
 
 ;; ----------------------------------------
 
-(define (deserialize-syntax content scopes shifted-multi-scopes mpi-shifts srcloc tamper)
+(define (deserialize-syntax content scopes shifted-multi-scopes mpi-shifts srcloc inspector tamper)
   (syntax content
           scopes #f shifted-multi-scopes
           mpi-shifts #f srcloc empty-props
+          inspector
           (deserialize-tamper tamper)))

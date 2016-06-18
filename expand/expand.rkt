@@ -65,7 +65,7 @@
        (expand-implicit '#%top (substitute-alternate-id s alternate-id) ctx s)]
       [else
        ;; Variable or form as identifier macro
-       (define-values (t insp) (lookup binding ctx s))
+       (define-values (t insp) (lookup binding ctx id))
        (dispatch t insp s id ctx binding)]))]
    [(and (pair? (syntax-e/no-taint (syntax-disarm s)))
          (identifier? (car (syntax-e/no-taint (syntax-disarm s)))))

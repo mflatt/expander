@@ -35,19 +35,18 @@
   (define name (reference->resolved-module-path mod #:load? #t))
   (define ns (current-namespace))
   (define phase (namespace-phase ns))
-  (define mi (namespace->module-instance ns name phase))
-  (unless mi
+  (define m-ns (namespace->module-namespace ns name phase))
+  (unless m-ns
     ;; Check for declaration:
     (namespace->module/complain 'module->namespace ns name)
     ;; Must be declared, but not instantiated
     (raise-arguments-error 'module->namespace
                            "module not instantiated in the current namespace"
                            "name" name))
-  (unless (inspector-superior? (current-code-inspector) (module-instance-inspector mi))
+  (unless (inspector-superior? (current-code-inspector) (namespace-inspector m-ns))
     (raise-arguments-error 'module->namespace
                            "current code inspector cannot access namespace of module"
                            "module name" name))
-  (define m-ns (module-instance-namespace mi))
   (unless (namespace-get-root-expand-ctx m-ns)
     ;; Instantiating the module didn't install a context, so make one now
     (namespace-set-root-expand-ctx! m-ns (make-root-expand-context)))
@@ -61,13 +60,13 @@
   (check 'namespace-unprotect-module namespace? ns)
   (define name (reference->resolved-module-path mod #:load? #f))
   (define phase (namespace-phase ns))
-  (define mi (namespace->module-instance ns name phase))
-  (unless mi
+  (define m-ns (namespace->module-namespace ns name phase))
+  (unless m-ns
     (raise-arguments-error 'namespace-unprotect-module
                            "module not instantiated"
                            "module name" name))
-  (when (inspector-superior? insp (module-instance-inspector mi))
-    (set-module-instance-inspector! mi (current-inspector))))
+  (when (inspector-superior? insp (namespace-inspector m-ns))
+    (set-namespace-inspector! m-ns (current-inspector))))
 
 ;; ----------------------------------------
 

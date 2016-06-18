@@ -8,6 +8,7 @@
          "../syntax/binding.rkt"
          "../namespace/namespace.rkt"
          "../namespace/module.rkt"
+         "../namespace/protect.rkt"
          "set-bang-trans.rkt"
          "rename-trans.rkt"
          "../common/module-path.rkt")
@@ -80,47 +81,15 @@
                         #:out-of-context-as-variable? [out-of-context-as-variable? #f])
   (cond
    [(module-binding? b)
-    (define at-phase (- phase (module-binding-phase b)))
-    (define-values (mi m-ns)
-      (if (top-level-module-path-index? (module-binding-module b))
-          (values #f ns)
-          (let ([mi
-                 (namespace->module-instance ns
-                                             (module-path-index-resolve
-                                              (module-binding-module b))
-                                             at-phase
-                                             #:check-available-at-phase-level (module-binding-phase b)
-                                             #:unavailable-callback
-                                             (lambda ()
-                                               (raise-syntax-error
-                                                #f
-                                                (format (string-append "module mismatch;\n"
-                                                                       " attempted to use a module that is not available\n"
-                                                                       "  possible cause:\n"
-                                                                       "   using (dynamic-require .... #f)\n"
-                                                                       "   but need (dynamic-require .... 0)\n"
-                                                                       "  module: ~s\n"
-                                                                       "  phase: ~s")
-                                                        (module-binding-module b)
-                                                        (phase+ at-phase (module-binding-phase b)))
-                                                id)))])
-            (values mi (and mi (module-instance-namespace mi))))))
-    (unless m-ns
-      (error 'expand
-             (string-append "namespace mismatch; cannot locate module instance\n"
-                            "  X: ~s\n"
-                            "  module: ~s\n"
-                            "  use phase: ~a\n"
-                            "  definition phase: ~a\n"
-                            "  for identifier: ~s")
-             (module-binding-module b)
-             phase
-             (module-binding-phase b)
-             id))
+    (define top-level? (top-level-module-path-index? (module-binding-module b)))
+    (define mi (and (not top-level?) (binding->module-instance b ns phase id)))
+    (define m-ns (if top-level? ns (and mi (module-instance-namespace mi))))
     (check-taint id)
     (define t (namespace-get-transformer m-ns (module-binding-phase b) (module-binding-sym b)
                                          variable))
-    (values t (and mi (module-instance-inspector mi)))]
+    (when mi (check-access b mi id (and t #t)))
+    (define insp (and mi (module-instance-module mi) (module-inspector (module-instance-module mi))))
+    (values t insp)]
    [(local-binding? b)
     (define t (hash-ref env (local-binding-key b) missing))
     (cond
@@ -140,8 +109,64 @@
 
 ;; ----------------------------------------
 
+;; Locate a module instance for a binding
+(define (binding->module-instance b ns phase id)
+  (define at-phase (- phase (module-binding-phase b)))
+  (define mi
+    (namespace->module-instance ns
+                                (module-path-index-resolve (module-binding-module b))
+                                at-phase
+                                #:check-available-at-phase-level (module-binding-phase b)
+                                #:unavailable-callback
+                                (lambda ()
+                                  (raise-syntax-error
+                                   #f
+                                   (format (string-append "module mismatch;\n"
+                                                          " attempted to use a module that is not available\n"
+                                                          "  possible cause:\n"
+                                                          "   using (dynamic-require .... #f)\n"
+                                                          "   but need (dynamic-require .... 0)\n"
+                                                          "  module: ~s\n"
+                                                          "  phase: ~s")
+                                           (module-binding-module b)
+                                           (phase+ at-phase (module-binding-phase b)))
+                                   id))))
+  (unless mi
+    (error 'expand
+           (string-append "namespace mismatch; cannot locate module instance\n"
+                          "  X: ~s\n"
+                          "  module: ~s\n"
+                          "  use phase: ~a\n"
+                          "  definition phase: ~a\n"
+                          "  for identifier: ~s")
+           (module-binding-module b)
+           phase
+           (module-binding-phase b)
+           id))
+  mi)
+
+;; Check for taints on a variable reference
 (define (check-taint id)
   (when (syntax-tainted? id)
     (raise-syntax-error #f
                         "cannot use identifier tainted by macro transformation"
                         id)))
+
+;; Check inspector-based access to a module's definitions
+(define (check-access b mi id transformer?)
+  (define m (module-instance-module mi))
+  (when (and m (not (module-no-protected? m)))
+    (define provides (module-provides m))
+    (define out-b (hash-ref (hash-ref provides (module-binding-phase b) #hasheq())
+                            (module-binding-sym b)
+                            #f))
+    (when (or (not out-b) ; not provided => protected
+              (protected? out-b))
+      (unless (inspector-superior? (or (syntax-inspector id) (current-code-inspector))
+                                   (namespace-inspector (module-instance-namespace mi)))
+        (raise-syntax-error #f
+                            (format "access disallowed by code inspector to ~a ~a\n  from module: ~s"
+                                    (if out-b "protected" "unexported")
+                                    (if transformer? "syntax" "variable")
+                                    (module-path-index-resolve (namespace-mpi (module-instance-namespace mi))))
+                            id #f null)))))
