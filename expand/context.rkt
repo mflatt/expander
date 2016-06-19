@@ -6,7 +6,8 @@
          "env.rkt"
          "free-id-set.rkt"
          "../namespace/namespace.rkt"
-         "root-expand-context.rkt")
+         "root-expand-context.rkt"
+         "lift-key.rkt")
 
 (provide (struct-out expand-context)
          (all-from-out "root-expand-context.rkt")
@@ -56,6 +57,7 @@
                   (root-expand-context-defined-syms root-ctx)
                   (root-expand-context-frame-id root-ctx)
                   (root-expand-context-counter root-ctx)
+                  (root-expand-context-lift-key root-ctx)
                   'top-level
                   (namespace-phase ns)
                   ns
@@ -90,7 +92,8 @@
                [use-site-scopes #:parent root-expand-context (root-expand-context-use-site-scopes root-ctx)]
                [defined-syms #:parent root-expand-context (root-expand-context-defined-syms root-ctx)]
                [frame-id #:parent root-expand-context (root-expand-context-frame-id root-ctx)]
-               [counter #:parent root-expand-context (root-expand-context-counter root-ctx)]))
+               [counter #:parent root-expand-context (root-expand-context-counter root-ctx)]
+               [lift-key #:parent root-expand-context (root-expand-context-lift-key root-ctx)]))
 
 ;; An expand-context or a delayed expand context (so use `force`):
 (define current-expand-context (make-parameter #f))

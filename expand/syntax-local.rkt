@@ -209,7 +209,7 @@
 
 (define (syntax-local-lift-context)
   (define ctx (get-current-expand-context 'syntax-local-lift-context))
-  (expand-context-lifts ctx))
+  (root-expand-context-lift-key ctx))
 
 ;; ----------------------------------------
 

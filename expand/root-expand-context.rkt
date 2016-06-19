@@ -3,7 +3,8 @@
          "../syntax/syntax.rkt"
          "../syntax/scope.rkt"
          "../syntax/binding.rkt"
-         "../common/phase.rkt")
+         "../common/phase.rkt"
+         "lift-key.rkt")
 
 (provide (struct-out root-expand-context)
          make-root-expand-context
@@ -23,7 +24,8 @@
                              defined-syms    ; phase -> sym -> id; symbols picked for bindings
                              frame-id        ; #f or a gensym to identify a binding frame
                              counter         ; box of an integer; used for generating names deterministically
-                             )) ; after adding a field, update `copy-module-context` in "expand-context.rkt"
+                             lift-key        ; identifies (via `syntax-local-lift-context`) a target for lifts
+                             )) ; after adding a field, update `copy-module-context` in "context.rkt"
 
 (define (make-root-expand-context #:initial-scopes [initial-scopes null]
                                   #:outside-scope [outside-scope top-level-common-scope]
@@ -40,8 +42,8 @@
                        (box null)      ; use-site-scopes
                        (make-hasheqv)  ; defined-syms
                        (gensym)        ; frame-id
-                       (box 0)))       ; counter
-
+                       (box 0)         ; counter
+                       (generate-lift-key)))
 
 ;; ----------------------------------------
 
@@ -80,7 +82,8 @@
                        (box (extract-scope-list (vector-ref vec 3))) ; use-site-scopes
                        (unpack-defined-syms (vector-ref vec 4)) ; defined-syms
                        (syntax-e (vector-ref vec 5))           ; frame-id
-                       (box (syntax-e (vector-ref vec 6)))))   ; counter
+                       (box (syntax-e (vector-ref vec 6)))     ; counter
+                       (generate-lift-key)))
 
 (define (defined-syms-hash? v)
   (and (for/and ([(phase ht-s) (in-hash v)])

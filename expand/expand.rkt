@@ -25,6 +25,7 @@
          "liberal-def-ctx.rkt"
          "rename-trans.rkt"
          "allowed-context.rkt"
+         "lift-key.rkt"
          "../syntax/debug.rkt"
          "reference-record.rkt")
 
@@ -630,7 +631,8 @@
 ;; expansion context
 (define (expand/capture-lifts s ctx
                               #:expand-lifts? [expand-lifts? #f]
-                              #:begin-form? [begin-form? #f])
+                              #:begin-form? [begin-form? #f]
+                              #:lift-key [lift-key (generate-lift-key)])
   (define context (expand-context-context ctx))
   (define phase (expand-context-phase ctx))
   (define local? (not begin-form?)) ;; see "[*]" below
@@ -643,6 +645,7 @@
                           (make-toplevel-lift ctx))
                       #:module*-ok? (and (not local?) (eq? context 'module))))
     (define capture-ctx (struct-copy expand-context ctx
+                                     [lift-key #:parent root-expand-context lift-key]
                                      [lifts lift-ctx]
                                      [lift-envs (if local?
                                                     (cons lift-env
@@ -681,7 +684,8 @@
 (define (expand-transformer s ctx
                             #:context [context 'expression]
                             #:begin-form? [begin-form? #f]
-                            #:expand-lifts? [expand-lifts? #t])
+                            #:expand-lifts? [expand-lifts? #t]
+                            #:lift-key [lift-key (generate-lift-key)])
   (define phase (add1 (expand-context-phase ctx)))
   (define ns (namespace->namespace-at-phase (expand-context-namespace ctx)
                                             phase))
@@ -694,7 +698,10 @@
                                  [env empty-env]
                                  [only-immediate? #f]
                                  [post-expansion-scope #:parent root-expand-context #f]))
-  (expand/capture-lifts s trans-ctx #:expand-lifts? expand-lifts? #:begin-form? begin-form?))
+  (expand/capture-lifts s trans-ctx
+                        #:expand-lifts? expand-lifts?
+                        #:begin-form? begin-form?
+                        #:lift-key lift-key))
 
 ;; Expand and evaluate `s` as a compile-time expression, ensuring that
 ;; the number of returned values matches the number of target

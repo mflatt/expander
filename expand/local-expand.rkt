@@ -9,7 +9,8 @@
          "expand.rkt"
          "syntax-local.rkt"
          "definition-context.rkt"
-         "already-expanded.rkt")
+         "already-expanded.rkt"
+         "lift-key.rkt")
 
 (provide local-expand
          local-expand/capture-lifts
@@ -20,18 +21,20 @@
 (define (local-expand s context stop-ids [intdefs #f])
   (do-local-expand 'local-expand s context stop-ids intdefs))
 
-(define (local-expand/capture-lifts s context stop-ids [intdefs #f])
+(define (local-expand/capture-lifts s context stop-ids [intdefs #f] [lift-key (generate-lift-key)])
   (do-local-expand 'local-expand s context stop-ids intdefs
-                   #:capture-lifts? #t))
+                   #:capture-lifts? #t
+                   #:lift-key lift-key))
 
 (define (local-transformer-expand s context stop-ids [intdefs #f])
   (do-local-expand 'local-expand s context stop-ids intdefs
                    #:as-transformer? #t))
 
-(define (local-transformer-expand/capture-lifts s context stop-ids [intdefs #f])
+(define (local-transformer-expand/capture-lifts s context stop-ids [intdefs #f] [lift-key (generate-lift-key)])
   (do-local-expand 'local-expand s context stop-ids intdefs
                    #:as-transformer? #t
-                   #:capture-lifts? #t))
+                   #:capture-lifts? #t
+                   #:lift-key lift-key))
 
 (define (syntax-local-expand-expression s)
   (define exp-s (do-local-expand 'local-expand s 'expression null #f))
@@ -44,7 +47,10 @@
 
 (define (do-local-expand who s context stop-ids [intdefs #f]
                          #:capture-lifts? [capture-lifts? #f]
-                         #:as-transformer? [as-transformer? #f])
+                         #:as-transformer? [as-transformer? #f]
+                         #:lift-key [lift-key (and (or capture-lifts?
+                                                       as-transformer?)
+                                                   (generate-lift-key))])
   (unless (syntax? s)
     (raise-argument-error who "syntax?" s))
   (unless (or (list? context)
@@ -130,15 +136,18 @@
                     [(and as-transformer? capture-lifts?)
                      (expand-transformer input-s local-ctx
                                          #:context context
-                                         #:begin-form? #t)]
+                                         #:begin-form? #t
+                                         #:lift-key lift-key)]
                     [as-transformer?
                      (expand-transformer input-s local-ctx
                                          #:context context
                                          #:expand-lifts? #f
-                                         #:begin-form? (eq? 'top-level context))]
+                                         #:begin-form? (eq? 'top-level context)
+                                         #:lift-key lift-key)]
                     [capture-lifts?
                      (expand/capture-lifts input-s local-ctx
-                                           #:begin-form? #t)]
+                                           #:begin-form? #t
+                                         #:lift-key lift-key)]
                     [else
                      (expand input-s local-ctx)]))
   (flip-introduction-scopes output-s ctx))
