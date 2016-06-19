@@ -63,10 +63,8 @@
      (syntax-transfer-shifts (push-scope (add-scopes s other-namespace-scopes)
                                          post-scope)
                              (root-expand-context-all-scopes-stx root-ctx))
-     ;; FIXME
-     (current-code-inspector)
-     #;
-     (namespace-declaration-inspector  ns)))
+     (or (namespace-declaration-inspector ns)
+         (current-code-inspector))))
   (define maybe-module-id
     (and (pair? (syntax-e s))
          (identifier? (car (syntax-e s)))

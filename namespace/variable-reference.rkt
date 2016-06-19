@@ -51,4 +51,6 @@
 
 (define (variable-reference->module-declaration-inspector vr)
   (check 'variable-reference->base-phase variable-reference? vr)
-  (namespace-declaration-inspector (variable-reference->namespace vr)))
+  (or (namespace-declaration-inspector (variable-reference->namespace vr))
+      (raise-arguments-error 'variable-reference->module-declaration-inspector
+                             "given variable reference is not from a module")))

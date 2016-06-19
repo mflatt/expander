@@ -97,7 +97,7 @@
                (and share-from-ns
                     (or (namespace-cross-phase-persistent-namespace share-from-ns)
                         share-from-ns))
-               (current-code-inspector)
+               #f ; no declaration-time inspector for a top-level namespace
                (make-inspector (current-code-inspector))
                (if share-from-ns
                    (namespace-available-module-instances share-from-ns)

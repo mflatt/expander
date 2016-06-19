@@ -66,7 +66,7 @@
                            "module not instantiated"
                            "module name" name))
   (when (inspector-superior? insp (namespace-inspector m-ns))
-    (set-namespace-inspector! m-ns (current-inspector))))
+    (set-namespace-inspector! m-ns (make-inspector (current-code-inspector)))))
 
 ;; ----------------------------------------
 
