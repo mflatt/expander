@@ -51,4 +51,4 @@
 
 (define (variable-reference->module-declaration-inspector vr)
   (check 'variable-reference->base-phase variable-reference? vr)
-  (namespace-inspector (variable-reference->namespace vr)))
+  (namespace-declaration-inspector (variable-reference->namespace vr)))

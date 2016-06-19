@@ -26,6 +26,7 @@
          namespace-get-variable
          namespace-get-transformer
          
+         namespace-declaration-inspector
          namespace-inspector
          set-namespace-inspector!
          
@@ -48,6 +49,7 @@
                    bulk-binding-registry ; (resolved-module-path -> bulk-provide) for resolving bulk bindings on unmarshal
                    submodule-declarations ; resolved-module-path -> module [shared during a module compilation]
                    cross-phase-persistent-namespace ; #f or namespace for persistent instances [shared among modules]
+                   declaration-inspector ; declaration-time inspector
                    [inspector #:mutable] ; instantiation-time inspector
                    available-module-instances  ; phase -> list of module-instance [shared among modules]
                    module-instances)   ; instance-key -> module-instance [shared among modules]
@@ -95,7 +97,8 @@
                (and share-from-ns
                     (or (namespace-cross-phase-persistent-namespace share-from-ns)
                         share-from-ns))
-               (make-inspector)
+               (current-code-inspector)
+               (make-inspector (current-code-inspector))
                (if share-from-ns
                    (namespace-available-module-instances share-from-ns)
                    (make-hasheqv))

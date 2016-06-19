@@ -185,6 +185,7 @@
                             [phase-level-to-definitions (if (module-cross-phase-persistent? m)
                                                             (namespace-phase-level-to-definitions existing-m-ns)
                                                             (make-hasheqv))]
+                            [declaration-inspector (module-inspector m)]
                             [inspector (namespace-inspector existing-m-ns)]))
   (define mi (make-module-instance m-ns m))
   (cond
@@ -213,6 +214,7 @@
                             [0-phase 0-phase]
                             [phase-to-namespace (make-hasheqv)]
                             [phase-level-to-definitions (make-hasheqv)]
+                            [declaration-inspector (module-inspector m)]
                             [inspector (make-inspector (module-inspector m))]))
   (hash-set! (namespace-phase-to-namespace m-ns) 0-phase m-ns)
   (define mi (make-module-instance m-ns m))
