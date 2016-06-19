@@ -18,12 +18,17 @@
 ;; Since Racket doesn't yet support linklets natively, we implement
 ;; them here by compilaing `linklet` to `lambda`.
 
-;; A "linklet directory" is similarly intended as a primitive
-;; constructs that is essentially a mapping of byte strings to
-;; linklets and sub-directories. The intent is that individual
-;; linklets can be efficiently extracted from the marshaled form of a
-;; linklet directory --- the primitive form of accessing an indvidual
-;; submodule.
+;; A "linklet bundle" is similarly intended as a primitive constructs
+;; that is essentially a mapping of symbols and fixnums to linklets,
+;; symbols, and symbol lists. A bundle is used, for example, to
+;; implement a module (which is a collection of linklets plus some
+;; static metadata).
+
+;; Finally, a "linklet directory" is a primitive constructs that is a
+;; mapping of #f to a bundle and symbols to linklet directories. The
+;; intent is that individual linklet bundles can be efficiently
+;; extracted from the marshaled form of a linklet directory --- the
+;; primitive form of accessing an indvidual submodule.
 
 (provide compile-linklet             ; result is serializable
          eval-linklet                ; serializable to instantiable
@@ -43,10 +48,13 @@
 
          lookup-primitive-instance
 
-         linklet-directory?       ; maps byte strings to linking units and nested cds
-         hash->linklet-directory  ; converts a hash table to a cd
+         linklet-directory?       ; maps symbol lists to linklet bundles
+         hash->linklet-directory  ; converts a hash table to a ld
          linklet-directory->hash  ; the other way
-         encode-linklet-directory-key ; S-expresion -> suitable byte string for a cd key
+
+         linklet-bundle?          ; maps symbols and fixnums to values
+         hash->linklet-bundle
+         linklet-bundle->hash
          
          variable-reference?
          variable-reference->instance
@@ -301,8 +309,16 @@
 (define (linklet-directory->hash ld)
   (linklet-directory-table ld))
 
-(define (encode-linklet-directory-key v)
-  (string->bytes/utf-8 (format "~a" v)))
+;; ----------------------------------------
+
+(struct linklet-bundle (table)
+        #:prefab)
+
+(define (hash->linklet-bundle ht)
+  (linklet-bundle ht))
+
+(define (linklet-bundle->hash ld)
+  (linklet-bundle-table ld))
 
 ;; ----------------------------------------
 

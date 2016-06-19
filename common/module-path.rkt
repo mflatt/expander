@@ -378,11 +378,13 @@
                                             r))
                     r)))
 
-(define (substitute-module-declare-name default-root-name default-name)
+(define (substitute-module-declare-name default-name)
   (define current-name (current-module-declare-name))
   (define root-name (if current-name
                         (resolved-module-path-root-name current-name)
-                        default-root-name))
+                        (if (pair? default-name)
+                            (car default-name)
+                            default-name)))
   (make-resolved-module-path
    (if (pair? default-name)
        (cons root-name (cdr default-name))

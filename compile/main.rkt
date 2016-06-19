@@ -1,6 +1,7 @@
 #lang racket/base
 (require "context.rkt"
          "top.rkt"
+         "multi-top.rkt"
          "module.rkt")
 
 ;; Compilation uses one of two protocols, which differ in the shapes

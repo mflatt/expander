@@ -22,28 +22,29 @@
 
 (define (eval-module c
                      #:namespace [ns (current-namespace)]
-                     #:as-submodule? [as-submodule? #f])
-  (define-values (h data-instance declaration-instance)
-    (compiled-module->h+data-instance+declaration-instance c))
+                     #:as-submodule? [as-submodule? #f]
+                     #:supermodule-name [supermodule-name #f]) ; for submodules declared with module
+  (define-values (dh h data-instance declaration-instance)
+    (compiled-module->dh+h+data-instance+declaration-instance c))
   
   (define (decl key)
     (instance-variable-value declaration-instance key))
   
   (define (declare-submodules names pre?)
-    (if (compiled-in-memory? c)
-        (for ([c (in-list (if pre?
-                              (compiled-in-memory-pre-compiled-in-memorys c)
-                              (compiled-in-memory-post-compiled-in-memorys c)))])
-          (eval-module c #:namespace ns))
-        (for ([name (in-list names)])
-          (define sm-cd (hash-ref h (encode-linklet-directory-key name)))
-          (unless sm-cd (error "missing submodule declaration:" name))
-          (eval-module sm-cd #:namespace ns))))
+    (when dh
+      (if (compiled-in-memory? c)
+          (for ([c (in-list (if pre?
+                                (compiled-in-memory-pre-compiled-in-memorys c)
+                                (compiled-in-memory-post-compiled-in-memorys c)))])
+            (eval-module c #:namespace ns #:supermodule-name declare-name))
+          (for ([name (in-list names)])
+            (define sm-cd (hash-ref dh name #f))
+            (unless sm-cd (error "missing submodule declaration:" name))
+            (eval-module sm-cd #:namespace ns #:supermodule-name declare-name)))))
   
-  (unless as-submodule?
-    (declare-submodules (decl 'pre-submodules) #t))
-  
-  (define root-module-name (instance-variable-value declaration-instance 'root-module-name))
+  (define pre-submodule-names (hash-ref h 'pre null))
+  (define post-submodule-names (hash-ref h 'post null))
+  (define default-name (hash-ref h 'name 'module))
   
   (define original-self (decl 'self-mpi))
 
@@ -52,10 +53,10 @@
   (define min-phase (decl 'min-phase))
   (define max-phase (decl 'max-phase))
   (define evaled-h (for*/hash ([phase-level (in-range min-phase (add1 max-phase))]
-                               [v (in-value (hash-ref h (encode-linklet-directory-key phase-level) #f))]
+                               [v (in-value (hash-ref h phase-level #f))]
                                #:when v)
                      (values phase-level (eval-linklet v))))
-  (define syntax-literals-linklet (eval-linklet (hash-ref h #".stx")))
+  (define syntax-literals-linklet (eval-linklet (hash-ref h 'stx)))
   
   (define requires (decl 'requires))
   (define provides (decl 'provides))
@@ -70,6 +71,8 @@
                          min-phase
                          max-phase
                          #:cross-phase-persistent? (decl 'cross-phase-persistent?)
+                         #:submodule-names (append pre-submodule-names post-submodule-names)
+                         #:supermodule-name supermodule-name
                          (lambda (data-box ns phase-shift phase-level self bulk-binding-registry insp)
                            (define syntax-literals-instance
                              (init-syntax-literals! data-box ns
@@ -111,15 +114,19 @@
                                               [current-namespace ns]
                                               [current-module-code-inspector insp])
                                  (instantiate-body))])))))
-
+  
+  (define declare-name (substitute-module-declare-name default-name))
+  
+  (unless as-submodule?
+    (declare-submodules pre-submodule-names #t))
+ 
   (declare-module! ns
                    m
-                   (substitute-module-declare-name (decl 'root-module-name)
-                                                   (decl 'default-name))
+                   declare-name
                    #:as-submodule? as-submodule?)
 
   (unless as-submodule?
-    (declare-submodules (decl 'post-submodules) #f)))
+    (declare-submodules post-submodule-names #f)))
 
 ;; ----------------------------------------
 
@@ -166,28 +173,49 @@
 
 ;; ----------------------------------------
 
-(define (compiled-module->h+data-instance+declaration-instance c)
-  (define ld (if (compiled-in-memory? c)
-                 (compiled-in-memory-linklet-directory c)
-                 c))
-  (define h (linklet-directory->hash ld))
+;; Returns:
+;;
+;;   dh - hash from linklet directory to access submodules, or #f if
+;;   no submodules
+;;
+;;   h - hash from the module's linklet bundle
+;;
+;;  data-instance - provides data, either extracted from
+;;  compiled-in-memory or instantiated from the bundle
+;;
+;;  declaration-instance - provides metadata, extracted from the
+;;  bundle and linked with `data-instance`
+(define (compiled-module->dh+h+data-instance+declaration-instance c)
+  (define ld/h (if (compiled-in-memory? c)
+                   (compiled-in-memory-linklet-directory c)
+                   c))
+  (define dh (cond
+              [(linklet-directory? ld/h)
+               ;; has submodules
+               (linklet-directory->hash ld/h)]
+              [else
+               ;; no submodules
+               #f]))
+  (define h (linklet-bundle->hash (if dh
+                                      (hash-ref dh #f)
+                                      ld/h)))
 
   (define data-instance
     (if (compiled-in-memory? c)
         (make-data-instance-from-compiled-in-memory c)
-        (instantiate-linklet (eval-linklet (hash-ref h #".data"))
+        (instantiate-linklet (eval-linklet (hash-ref h 'data))
                              (list deserialize-instance))))
 
   (define declaration-instance
-    (instantiate-linklet (eval-linklet (hash-ref h #".decl"))
+    (instantiate-linklet (eval-linklet (hash-ref h 'decl))
                          (list deserialize-instance
                                data-instance)))
   
-  (values h data-instance declaration-instance))
+  (values dh h data-instance declaration-instance))
 
 (define (compiled-module->declaration-instance c)
-  (define-values (h data-instance declaration-instance)
-    (compiled-module->h+data-instance+declaration-instance c))
+  (define-values (dh h data-instance declaration-instance)
+    (compiled-module->dh+h+data-instance+declaration-instance c))
   declaration-instance)
 
 ;; ----------------------------------------

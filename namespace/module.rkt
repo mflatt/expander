@@ -27,6 +27,8 @@
          module-cross-phase-persistent?
          module-no-protected?
          module-inspector
+         module-submodule-names
+         module-supermodule-name
          module-access
          module-compute-access!
          
@@ -59,7 +61,9 @@
                 primitive?      ; inline variable values in compiled code?
                 cross-phase-persistent?
                 no-protected?   ; short cut for checking protected access
-                inspector))     ; declaration-time inspector
+                inspector       ; declaration-time inspector
+                submodule-names ; associated submodules (i.e, when declared together)
+                supermodule-name)) ; associated supermodule (i.e, when declared together)
 
 (define (make-module self requires provides
                      min-phase-level max-phase-level
@@ -67,7 +71,9 @@
                      #:language-info [language-info #f]
                      #:primitive? [primitive? #f]
                      #:cross-phase-persistent? [cross-phase-persistent? primitive?]
-                     #:no-protected? [no-protected? #f])
+                     #:no-protected? [no-protected? #f]
+                     #:submodule-names [submodule-names null]
+                     #:supermodule-name [supermodule-name #f])
   (module self requires provides
           #f ; access
           language-info
@@ -76,7 +82,9 @@
           primitive?
           cross-phase-persistent?
           no-protected?
-          (current-code-inspector)))
+          (current-code-inspector)
+          submodule-names
+          supermodule-name))
 
 (struct module-instance (namespace
                          module                        ; can be #f for the module being expanded

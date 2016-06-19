@@ -8,6 +8,7 @@
          "../compile/instance.rkt"
          "../compile/eager-instance.rkt"
          "../compile/compiled-in-memory.rkt"
+         "../compile/multi-top.rkt"
          "top-level-instance.rkt")
 
 ;; Run a representation of top-level code as produced by `compile-top`;
@@ -19,9 +20,9 @@
   (define ld (if (compiled-in-memory? c)
                  (compiled-in-memory-linklet-directory c)
                  c))
-  (if (hash-ref (linklet-directory->hash ld) #".multi" #f)
-      (eval-multiple-tops c ns eval-compiled)
-      (eval-single-top c ns)))
+  (if (hash-ref (linklet-directory->hash ld) #f #f)
+      (eval-single-top c ns)
+      (eval-multiple-tops c ns eval-compiled)))
 
 (define (eval-multiple-tops c ns eval-compiled)
   (cond
@@ -36,27 +37,25 @@
         (eval-compiled (car cims) ns)
         (loop (cdr cims))]))]
    [else
-    (define ht (linklet-directory->hash c))
-    (let loop ([keys (sort (hash-keys ht) bytes<?)])
+    (let loop ([lds (compiled-top->compiled-tops c)])
       (cond
-       [(null? keys) (void)]
-       [(equal? (car keys) #".multi") (loop (cdr keys))]
-       [(null? (cdr keys))
+       [(null? lds) (void)]
+       [(null? (cdr lds))
         ;; Tail call:
-        (eval-compiled (hash-ref ht (car keys)) ns)]
+        (eval-compiled (car lds) ns)]
        [else
-        (eval-compiled (hash-ref ht (car keys)) ns)
-        (loop (cdr keys))]))]))
+        (eval-compiled (car lds) ns)
+        (loop (cdr lds))]))]))
 
 (define (eval-single-top c ns)
   (define ld (if (compiled-in-memory? c)
                  (compiled-in-memory-linklet-directory c)
                  c))
-  (define h (linklet-directory->hash ld))
+  (define h (linklet-bundle->hash (hash-ref (linklet-directory->hash ld) #f)))
   (define link-instance
     (if (compiled-in-memory? c)
         (link-instance-from-compiled-in-memory c)
-        (instantiate-linklet (eval-linklet (hash-ref h #".link"))
+        (instantiate-linklet (eval-linklet (hash-ref h 'link))
                              (list deserialize-instance
                                    (make-eager-instance-instance
                                     #:namespace ns
@@ -96,7 +95,7 @@
                                                                     val))))
 
      (define linklet
-       (eval-linklet (hash-ref h (encode-linklet-directory-key phase) #f)))
+       (eval-linklet (hash-ref h phase #f)))
      
      (cond
       [linklet

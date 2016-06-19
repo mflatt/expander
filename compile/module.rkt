@@ -36,8 +36,14 @@
                     (make-self-module-path-index
                      (syntax-e (m-m 'name))
                      enclosing-self))))
-  (define root-module-name (or (compile-context-root-module-name cctx)
-                               (syntax-e (m-m 'name))))
+  (define full-module-name (let ([parent-full-name (compile-context-full-module-name cctx)]
+                                 [name (syntax-e (m-m 'name))])
+                             (if parent-full-name
+                                 (append (if (list? parent-full-name)
+                                             parent-full-name
+                                             (list parent-full-name))
+                                         (list name))
+                                 name)))
   (define requires (syntax-property s 'module-requires))
   (define provides (syntax-property s 'module-provides))
   (define encoded-root-expand-ctx-box (box (syntax-property s 'module-root-expand-context))) ; for `module->namespace`
@@ -53,7 +59,7 @@
                                  [phase 0]
                                  [self self]
                                  [module-self self]
-                                 [root-module-name root-module-name]
+                                 [full-module-name full-module-name]
                                  [lazy-syntax-literals? #t]))
   
   (define cross-phase-persistent? #f)
@@ -116,9 +122,6 @@
   ;; information for each phase
   (define declaration-body
     `((define-values (self-mpi) ,(add-module-path-index! mpis self))
-      (define-values (default-name) ',(resolved-module-path-name
-                                       (module-path-index-resolve self)))
-      (define-values (root-module-name) ',root-module-name)
       (define-values (cross-phase-persistent?) ,cross-phase-persistent?)
       (define-values (requires) ,(generate-deserialize requires mpis))
       (define-values (provides) ,(generate-deserialize provides mpis))
@@ -126,8 +129,6 @@
       (define-values (min-phase) ,min-phase)
       (define-values (max-phase) ,max-phase)
       (define-values (phase-to-link-modules) ,phase-to-link-module-uses-expr)
-      (define-values (pre-submodules) ',(map car pre-submodules))
-      (define-values (post-submodules) ',(map car post-submodules))
       (define-values (language-info) ',language-info)))
 
   ;; Assemble the declaration linking unit, which is instanted
@@ -138,8 +139,6 @@
        #:import ([deserialize ,@deserialize-imports]
                  [data (mpi-vector ,mpi-vector-id)])
        #:export (self-mpi
-                 default-name
-                 root-module-name
                  requires
                  provides
                  variables
@@ -148,8 +147,6 @@
                  min-phase
                  max-phase
                  phase-to-link-modules
-                 pre-submodules
-                 post-submodules
                  language-info)
        (define-values (,inspector-id) (current-code-inspector))
        ,@declaration-body)))
@@ -197,23 +194,25 @@
             (define-values (deserialized-syntax)
               (make-vector ,(+ 2 max-phase) #f))))))
   
-  (define combined-linklets
-    (let* ([linklets (hash-set body-linklets #".decl" declaration-linklet)]
+  (define bundle
+    (let* ([linklets (hash-set body-linklets 'decl declaration-linklet)]
            [linklets (if data-linklet
-                         (hash-set linklets #".data" data-linklet)
+                         (hash-set linklets 'data data-linklet)
                          linklets)]
-           [linklets (hash-set linklets #".stx" syntax-literals-linklet)])
-      linklets))
+           [linklets (hash-set linklets 'stx syntax-literals-linklet)]
+           [linklets (hash-set linklets 'pre (map car pre-submodules))]
+           [linklets (hash-set linklets 'post (map car post-submodules))]
+           [linklets (hash-set linklets 'name full-module-name)])
+      (hash->linklet-bundle linklets)))
 
   ;; Combine with submodules in a linklet directory
   (define ld
     (hash->linklet-directory
-     (for/fold ([ht combined-linklets])
-               ([sm (in-list (append pre-submodules post-submodules))])
+     (for/fold ([ht (hash #f bundle)]) ([sm (in-list (append pre-submodules post-submodules))])
        (hash-set ht
-                 (encode-linklet-directory-key (car sm))
+                 (car sm)
                  (compiled-in-memory-linklet-directory (cdr sm))))))
- 
+
   ;; Save mpis and syntax for direct evaluation, instead of unmarshaling:
   (compiled-in-memory ld
                       0

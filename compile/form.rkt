@@ -207,13 +207,13 @@
   
   ;; Generate the phase-specific linking units
   (define body-linklets
-    (for/hash ([phase (in-list phases-in-order)])
+    (for/hasheq ([phase (in-list phases-in-order)])
       (define bodys (hash-ref phase-to-body phase))
       (define li (hash-ref phase-to-link-info phase))
       (define binding-sym-to-define-sym
         (header-binding-sym-to-define-sym (hash-ref phase-to-header phase)))
       (values
-       (encode-linklet-directory-key phase)
+       phase
        (compile-linklet
         `(linklet
           #:import (,@(if (compile-context-module-self cctx)
@@ -244,12 +244,12 @@
       (values phase (link-info-link-module-uses li))))
   
   (define phase-to-link-module-uses-expr
-    `(hash ,@(apply
-              append
-              (for/list ([phase (in-list phases-in-order)])
-                (list phase `(list ,@(serialize-module-uses (hash-ref phase-to-link-module-uses phase)
-                                                            mpis)))))))
-  
+    `(hasheqv ,@(apply
+                 append
+                 (for/list ([phase (in-list phases-in-order)])
+                   (list phase `(list ,@(serialize-module-uses (hash-ref phase-to-link-module-uses phase)
+                                                               mpis)))))))
+
   (define syntax-literalss
     (for/list ([phase (in-range phase (add1 max-phase))])
       (define h (hash-ref phase-to-header phase #f))

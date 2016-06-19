@@ -136,13 +136,13 @@
                     (define h (linklet-directory->hash cd))
                     (if (or (not (pair? name))
                             (null? (cdr name)))
-                        h
-                        (loop (hash-ref h (encode-linklet-directory-key (cadr name)))
+                        (linklet-bundle->hash (hash-ref h #f))
+                        (loop (hash-ref h (cadr name))
                               (cdr name)))))
         ;; Instantiate the declaration linklet
-        (define data-instance (instantiate-linklet (eval-linklet (hash-ref h #".data"))
+        (define data-instance (instantiate-linklet (eval-linklet (hash-ref h 'data))
                                                    (list deserialize-instance)))
-        (define decl (instantiate-linklet (eval-linklet (hash-ref h #".decl"))
+        (define decl (instantiate-linklet (eval-linklet (hash-ref h 'decl))
                                           (list deserialize-instance
                                                 data-instance)))
         ;; Make a `compiled-module` structure to represent the compilaed module
@@ -172,9 +172,7 @@
       ;; Extract the relevant linklet (i.e., at a given phase)
       ;; from the compiled module
       (define linklet
-        (hash-ref (compiled-module-phase-to-linklet comp-mod)
-                  (encode-linklet-directory-key phase)
-                  #f))
+        (hash-ref (compiled-module-phase-to-linklet comp-mod) phase #f))
 
       ;; Extract other metadata at the module level:
       (define reqs (instance-variable-value (compiled-module-declaration comp-mod) 'requires))

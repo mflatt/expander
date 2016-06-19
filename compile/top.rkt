@@ -12,11 +12,11 @@
          "instance.rkt"
          "eager-instance.rkt"
          "expr.rkt"
-         "form.rkt")
+         "form.rkt"
+         "multi-top.rkt")
 
 (provide compile-single
-         compile-top
-         compiled-tops->compiled-top)
+         compile-top)
 
 ;; Compile a stand-alone expression, such as the right-hand side of a
 ;; `define-syntaxes` in a module
@@ -45,8 +45,8 @@
                    #:phase-in-body-thunk phase
                    #:other-form-callback compile-top-level-require))
 
-  (define code
-    (hash->linklet-directory
+  (define bundle
+    (hash->linklet-bundle
      (cond
       [serializable?
        (define syntax-literalss-expr
@@ -77,14 +77,14 @@
             (define-values (phase-to-link-modules) ,phase-to-link-module-uses-expr)
             (define-values (syntax-literalss) ,syntax-literalss-expr))))
        
-       (hash-set body-linklets #".link" link-cu)]
+       (hash-set body-linklets 'link link-cu)]
       [else
        ;; Will combine the linking unit with non-serialized link info
        body-linklets])))
   
   ;; If the compiled code is executed directly in its original phase,
   ;; we'll share the original values
-  (compiled-in-memory code
+  (compiled-in-memory (hash->linklet-directory (hash #f bundle))
                       phase
                       max-phase
                       phase-to-link-module-uses
@@ -100,39 +100,3 @@
      (define form-stx (compile-quote-syntax s phase cctx))
      `(,top-level-require!-id ,form-stx ,ns-id)]
     [else #f]))
-
-;; ----------------------------------------
-
-;; Encode a sequence of compiled top-level forms by creating a
-;; linklet directory with labels #"0", #"1", etc. Keep all the
-;; existing compile-in-memory records as "pre" record, too.
-(define (compiled-tops->compiled-top cims)
-  (compiled-in-memory (hash->linklet-directory
-                       (hash-set (for/hash ([cim (in-list cims)]
-                                            [i (in-naturals)])
-                                   (values (encode-linklet-directory-key i)
-                                           (compiled-in-memory-linklet-directory cim)))
-                                 ;; The #".multi" key acts as a tag to indicate
-                                 ;; that it's multiple top-level forms in sequence
-                                 #".multi"
-                                 (hash->linklet-directory #hash())))
-                      0
-                      0
-                      #hasheqv()
-                      #()
-                      #()
-                      cims
-                      null))
-
-;; ----------------------------------------
-
-;; Encode a list of top-level compile into a linklet dirctory,
-;; preserving the order
-(define (compiles->linket-directory cs)
-  (hash->linklet-directory
-   (hash-set (for/hash ([c (in-list cs)]
-                        [i (in-naturals)])
-               (values (encode-linklet-directory-key i)
-                       c))
-             #".multi"
-             (hash->linklet-directory #hash()))))

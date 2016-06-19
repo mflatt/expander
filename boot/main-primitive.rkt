@@ -26,6 +26,7 @@
           'compiled-expression? compiled-expression?
           'compiled-module-expression? compiled-module-expression?
           'module-compiled-name module-compiled-name
+          'module-compiled-submodules module-compiled-submodules
           'module-compiled-language-info module-compiled-language-info
 
           'make-empty-namespace make-empty-namespace

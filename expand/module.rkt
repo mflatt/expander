@@ -805,15 +805,16 @@
                    root-ctx
                    self self))
 
-  (define root-module-name (resolved-module-path-root-name
-                            (module-path-index-resolve self)))
+  (define module-name (module-path-index-resolve (or enclosing-self self)))
+  (define root-module-name (resolved-module-path-root-name module-name))
   (parameterize ([current-namespace m-ns]
                  [current-module-declare-name (make-resolved-module-path root-module-name)])
     (eval-module
      (compile-module tmp-mod
                      (make-compile-context #:namespace m-ns
                                            #:module-self enclosing-self
-                                           #:root-module-name root-module-name)
+                                           #:full-module-name (and enclosing-self
+                                                                   (resolved-module-path-name module-name)))
                      #:self self
                      #:as-submodule? #t)
      #:as-submodule? #t)))
@@ -953,15 +954,15 @@
   ;; Compile and declare the submodule for use by later forms
   ;; in the enclosing module:
   (define ns (expand-context-namespace ctx))
-  (define root-module-name (resolved-module-path-root-name
-                            (module-path-index-resolve self)))
+  (define module-name (module-path-index-resolve self))
+  (define root-module-name (resolved-module-path-root-name module-name))
   (parameterize ([current-namespace ns]
                  [current-module-declare-name (make-resolved-module-path root-module-name)])
     (eval-module
      (compile-module submod 
                      (make-compile-context #:namespace ns
                                            #:module-self self
-                                           #:root-module-name root-module-name)
+                                           #:full-module-name (resolved-module-path-name module-name))
                      #:as-submodule? #t)
      #:as-submodule? #t))
 

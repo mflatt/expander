@@ -13,6 +13,7 @@
          "host/linklet.rkt"
          "host/reader-bridge.rkt"
          "run/status.rkt"
+         "run/submodule.rkt"
          "run/extract.rkt")
 
 (define extract? #f)
@@ -80,7 +81,17 @@
                                                   (when cache-dir
                                                     (unless quiet-load?
                                                       (log-status "cached ~s" path))))))
-                      => eval]
+                      => (lambda (m)
+                           ;; Since we'ce set `use-compiled-file-paths` to null,
+                           ;; the load/use-compiled handler thinks that we're
+                           ;; always loading from source, so don't find the
+                           ;; expected submodule with
+                           ;;  `(extract-requested-submodule m expected-module)`
+                           (eval m))]
+                     [(and (pair? expected-module)
+                           (not (car expected-module)))
+                      ;; shouldn't load from source when `expected-module` start with #f
+                      (void)]
                      [else
                       (unless quiet-load?
                         (log-status "compile ~s" path))

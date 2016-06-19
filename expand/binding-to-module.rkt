@@ -1,5 +1,6 @@
 #lang racket/base
 (require "../syntax/module-binding.rkt"
+         "../syntax/error.rkt"
          "../common/phase.rkt"
          "../common/module-path.rkt"
          "../namespace/module.rkt")

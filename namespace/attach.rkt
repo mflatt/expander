@@ -36,18 +36,23 @@
                            "source phase" phase
                            "destination phase" (namespace-phase dest-namespace)))
   
-  (define todo (make-hasheq)) ; module name -> phase -> namespace
+  (define todo (make-hasheq)) ; module name -> phase -> namespace-or-#f
   
   (define initial-phase phase) ; phase to attach instances
   
   (define missing (gensym 'missing))
 
   (let loop ([mpi (module-path-index-join mod-path #f)]
-             [phase phase])
+             [phase phase]
+             [attach-instances? attach-instances?])
     (define mod-name (parameterize ([current-namespace src-namespace])
                        (module-path-index-resolve mpi)))
     
-    (when (eq? missing (hash-ref (hash-ref todo mod-name #hasheqv()) phase missing))
+    (define attach-this-instance? (and attach-instances? (eqv? phase initial-phase)))
+    (define m-ns (hash-ref (hash-ref todo mod-name #hasheqv()) phase missing))
+
+    (when (or (eq? missing m-ns)
+              (and attach-this-instance? (not m-ns)))
       (define m (namespace->module src-namespace mod-name))
       (unless m
         (raise-arguments-error who
@@ -62,7 +67,7 @@
 
       (define-values (m-ns already?)
         (cond
-         [(and attach-instances? (eqv? phase initial-phase))
+         [attach-this-instance?
           (define m-ns (namespace->module-namespace src-namespace mod-name phase))
           (unless m-ns
             (raise-arguments-error who
@@ -79,17 +84,36 @@
 
           (values m-ns (and already-m-ns #t))]
          [else
+          (when (and (label-phase? phase)
+                     (not (namespace->module-namespace src-namespace mod-name phase)))
+            ;; Force instantiation of for-label instance, which ensures that
+            ;; required modules are declared
+            (parameterize ([current-namespace src-namespace])
+              (namespace-module-instantiate! src-namespace mpi phase)))
+          
           (values #f (and already-m #t))]))
 
       (hash-update! todo mod-name (lambda (ht) (hash-set ht phase m-ns)) #hasheqv())
-      
+
       (unless already?
         (for* ([phase+reqs (in-list (module-requires m))]
                [req (in-list (cdr phase+reqs))])
           (loop (module-path-index-shift req
                                          (module-self m)
                                          mpi)
-                (phase+ phase (car phase+reqs)))))))
+                (phase+ phase (car phase+reqs))
+                attach-instances?))
+        (for ([submod-name (in-list (module-submodule-names m))])
+          (loop (module-path-index-join `(submod "." ,submod-name) mpi)
+                ;; Attach submodules at phase #f, which allows
+                ;; dependencies to be loaded if they're not declared
+                ;; already, since the submodule has not necessarily
+                ;; been instantiated
+                #f
+                #f))
+        (when (module-supermodule-name m)
+          ;; Associated supermodule is treated like an associated submodule
+          (loop (module-path-index-join `(submod "..") mpi) #f #f)))))
 
   (parameterize ([current-namespace dest-namespace]) ; for resolver notifications
     (for* ([(mod-name phases) (in-hash todo)]
