@@ -14,7 +14,7 @@
          "context.rkt"
          "header.rkt"
          "reserved-symbol.rkt"
-         "id-lto-symbol.rkt"
+         "id-to-symbol.rkt"
          "instance.rkt"
          "form.rkt"
          "compiled-in-memory.rkt"
