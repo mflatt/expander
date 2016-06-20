@@ -38,8 +38,9 @@
 
 (struct requires+provides (self       ; module-path-index to recognize definitions among requires
                            require-mpis ; module-path-index to itself as interned
+                           require-mpis/fast ; same table, but `eq?`-keyed for fast already-interned checks
                            require-mpis-in-order ; require-phase -> list of module-path-index
-                           requires   ; module-path-index -> require-phase -> sym -> list of (required id phase boolean)
+                           requires   ; mpi [interned] -> require-phase -> sym -> list of (required id phase boolean)
                            provides   ; phase -> sym -> binding or protected
                            phase-to-defined-syms ; phase -> sym -> boolean
                            [can-cross-phase-persistent? #:mutable]
@@ -48,26 +49,34 @@
 (define (make-requires+provides self)
   (requires+provides self
                      (make-hash)    ; require-mpis
+                     (make-hasheq)  ; require-mpis/fast
                      (make-hasheqv) ; require-mpis-in-order
-                     (make-hash)    ; requires
+                     (make-hasheq)  ; requires
                      (make-hasheqv) ; provides
                      (make-hasheqv) ; phase-to-defined-syms
                      #t
                      #t))
 
-;; ----------------------------------------
-
 (struct required (id phase can-be-shadowed?))
+
+(define (intern-mpi r+p mpi)
+  (or (hash-ref (requires+provides-require-mpis/fast r+p)
+                mpi
+                #f)
+      (hash-ref (requires+provides-require-mpis r+p)
+                mpi
+                #f)
+      (begin
+        (hash-set! (requires+provides-require-mpis r+p) mpi mpi)
+        (hash-set! (requires+provides-require-mpis/fast r+p) mpi mpi)
+        mpi)))
+
+;; ----------------------------------------
 
 ;; Register that a module is required at a given phase shift, and return a
 ;; locally interned module path index
 (define (add-required-module! r+p mod-name phase-shift is-cross-phase-persistent?)
-  (define mpi (or (hash-ref (requires+provides-require-mpis r+p)
-                            mod-name
-                            #f)
-                  (begin
-                    (hash-set! (requires+provides-require-mpis r+p) mod-name mod-name)
-                    mod-name)))
+  (define mpi (intern-mpi r+p mod-name))
   (unless (hash-ref (hash-ref (requires+provides-requires r+p) mpi #hasheqv()) phase-shift #f)
     ;; Add to list of requires that are kept in order, so that order
     ;; is preserved on instantiation
@@ -76,10 +85,9 @@
                   (lambda (l) (cons mpi l))
                   null)
     ;; Init list of required identifiers:
-    (hash-update! (requires+provides-requires r+p)
-                  mpi
-                  (lambda (at-mod) (hash-set at-mod phase-shift #hasheq()))
-                  #hasheqv()))
+    (hash-set! (hash-ref! (requires+provides-requires r+p) mpi make-hasheqv)
+               phase-shift
+               (make-hasheq)))
   (unless is-cross-phase-persistent?
     (set-requires+provides-can-cross-phase-persistent?! r+p #f))
   mpi)
@@ -102,19 +110,13 @@
                                                 #:nominal-module nominal-module
                                                 #:nominal-require-phase nominal-require-phase
                                                 #:can-be-shadowed? can-be-shadowed?)
-  (hash-update! (requires+provides-requires r+p)
-                nominal-module
-                (lambda (at-mod)
-                  (hash-update at-mod
-                               nominal-require-phase
-                               (lambda (sym-to-reqds)
-                                 (hash-update sym-to-reqds
-                                              (syntax-e id)
-                                              (lambda (l)
-                                                (cons (required id phase can-be-shadowed?) l))
-                                              null))
-                               #hasheq()))
-                #hasheqv()))
+  (define at-mod (hash-ref! (requires+provides-requires r+p)
+                            (intern-mpi r+p nominal-module)
+                            make-hasheqv))
+  (define sym-to-reqds (hash-ref! at-mod nominal-require-phase make-hasheq))
+  (define sym (syntax-e id))
+  (hash-set! sym-to-reqds sym (cons (required id phase can-be-shadowed?)
+                                    (hash-ref sym-to-reqds sym null))))
 
 ;; Add bindings of an enclosing module
 (define (add-enclosing-module-defined-and-required! r+p
@@ -140,22 +142,21 @@
 (define (remove-required-id! r+p id phase)
   (define b (resolve+shift id phase #:exactly? #t))
   (when b
-    (hash-update! (requires+provides-requires r+p)
-                  (module-binding-nominal-module b)
-                  (lambda (at-mod)
-                    (hash-update at-mod
-                                 (module-binding-nominal-require-phase b)
-                                 (lambda (sym-to-reqds)
-                                   (hash-update
-                                    sym-to-reqds
-                                    (syntax-e id)
-                                    (lambda (l)
-                                      (for/list ([r (in-list l)]
-                                                 #:unless (free-identifier=? (required-id r) id phase phase))
-                                        r))
-                                    null))
-                                 #hasheq()))
-                  #hasheqv())))
+    (define at-mod (hash-ref (requires+provides-requires r+p)
+                             (intern-mpi r+p (module-binding-nominal-module b))
+                             #f))
+    (when at-mod
+      (define sym-to-reqds (hash-ref at-mod
+                                     (module-binding-nominal-require-phase b)
+                                     #f))
+      (when sym-to-reqds
+        (define sym (syntax-e id))
+        (define l (hash-ref sym-to-reqds sym null))
+        (unless (null? l)
+          (hash-set! sym-to-reqds sym
+                     (for/list ([r (in-list l)]
+                                #:unless (free-identifier=? (required-id r) id phase phase))
+                       r)))))))
 
 ;; Check whether an identifier has a binding that is from a non-shadowable
 ;; require; if something is found but it will be replaced, then record that
@@ -188,7 +189,7 @@
       (void)]
      [else
       (define at-mod (hash-ref (requires+provides-requires r+p)
-                               (module-binding-nominal-module b)
+                               (intern-mpi r+p (module-binding-nominal-module b))
                                #f))
       (cond
        [(not at-mod)
@@ -227,7 +228,7 @@
 
 ;; Get all the bindings imported from a given module
 (define (extract-module-requires r+p mod-name phase)
-  (define at-mod (hash-ref (requires+provides-requires r+p) mod-name #f))
+  (define at-mod (hash-ref (requires+provides-requires r+p) (intern-mpi r+p mod-name) #f))
   (and at-mod
        (apply append (hash-values (hash-ref at-mod phase #hasheq())))))
 
@@ -243,7 +244,7 @@
   (define requires (requires+provides-requires r+p))
   (let/ec esc
     (for*/list ([mod-name (in-list (if mod-name
-                                       (list mod-name)
+                                       (list (intern-mpi r+p mod-name))
                                        (hash-keys requires)))]
                 #:unless (eq? mod-name self)
                 [phase-to-requireds (in-value (hash-ref requires mod-name #hasheqv()))]

@@ -189,7 +189,8 @@
                     #:phase-shift 0
                     #:run-phase 0
                     #:requires+provides requires+provides
-                    #:can-be-shadowed? #t))
+                    #:can-be-shadowed? #t
+                    #:initial-require? #t))
 
 ;; ----------------------------------------
 
@@ -202,7 +203,8 @@
                           #:requires+provides [requires+provides #f]
                           #:visit? [visit? #t]
                           #:run? [run? #f]
-                          #:can-be-shadowed? [can-be-shadowed? #f])
+                          #:can-be-shadowed? [can-be-shadowed? #f]
+                          #:initial-require? [initial-require? #f])
   (define module-name (module-path-index-resolve mpi #t))
   (define bind-in-stx (if (adjust-rename? adjust)
                           (adjust-rename-to-id adjust)
@@ -252,11 +254,12 @@
                 (define s (datum->syntax bind-in-stx adjusted-sym))
                 (define bind-phase (phase+ phase-shift provide-phase))
                 (when requires+provides
-                  (check-not-defined #:check-not-required? #t
-                                     requires+provides
-                                     s bind-phase 
-                                     #:unless-matches binding
-                                     #:in in-stx)
+                  (unless initial-require?
+                    (check-not-defined #:check-not-required? #t
+                                       requires+provides
+                                       s bind-phase
+                                       #:unless-matches binding
+                                       #:in in-stx))
                   (add-defined-or-required-id! requires+provides
                                                s bind-phase binding
                                                #:can-be-shadowed? can-be-shadowed?)))
