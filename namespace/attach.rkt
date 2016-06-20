@@ -42,6 +42,7 @@
   
   (define missing (gensym 'missing))
 
+  ;; Loop to check and decide what to transfer
   (let loop ([mpi (module-path-index-join mod-path #f)]
              [phase phase]
              [attach-instances? attach-instances?])
@@ -115,11 +116,17 @@
           ;; Associated supermodule is treated like an associated submodule
           (loop (module-path-index-join `(submod "..") mpi) #f #f)))))
 
-  (parameterize ([current-namespace dest-namespace]) ; for resolver notifications
-    (for* ([(mod-name phases) (in-hash todo)]
-           [(phase m-ns) (in-hash phases)])
-      (define m (namespace->module src-namespace mod-name))
-      (declare-module! dest-namespace m mod-name)
-      (when m-ns
-        (or (namespace->module-namespace dest-namespace mod-name phase)
-            (namespace-install-module-namespace! dest-namespace mod-name phase m m-ns))))))
+  ;; Perform decided transfers
+  (for* ([(mod-name phases) (in-hash todo)]
+         [(phase m-ns) (in-hash phases)])
+    (define m (namespace->module src-namespace mod-name))
+    (declare-module! dest-namespace m mod-name)
+    (when m-ns
+      (or (namespace->module-namespace dest-namespace mod-name phase)
+          (namespace-install-module-namespace! dest-namespace mod-name phase m m-ns))))
+
+  ;; Send resolver notifications for attached declarations
+  (define mnr (current-module-name-resolver))
+  (parameterize ([current-namespace dest-namespace])
+    (for* ([mod-name (in-hash-keys todo)])
+      (mnr mod-name src-namespace))))
