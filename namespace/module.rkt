@@ -195,10 +195,7 @@
     (hash-set! (namespace-module-instances (or (namespace-cross-phase-persistent-namespace ns) ns))
                name
                mi)
-    ;; Cross-phase persistent modules normally have only phase 0,
-    ;; but '#%core also has phase 1
-    (hash-set! (module-instance-phase-level-to-state mi) 0 'started)
-    (hash-set! (module-instance-phase-level-to-state mi) 1 'started)]
+    (hash-set! (module-instance-phase-level-to-state mi) 0 'started)]
    [else
     (hash-set! (namespace-phase-to-namespace m-ns) 0-phase m-ns)
     (hash-set! (namespace-phase-level-to-definitions m-ns)

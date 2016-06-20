@@ -8,6 +8,7 @@ TODO:
  preserved syntax properties
  continuation barrier on macro invocation
  continuation prompt for module body
+ set! on undefined
  enforced namespace constants
  lock on namespace & registry
  local-expand int-def post-expansion action (and logging)

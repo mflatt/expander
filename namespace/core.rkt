@@ -68,8 +68,7 @@
                   (case phase-level
                     [(0)
                      (for ([(sym val) (in-hash core-primitives)])
-                       (namespace-set-variable! ns 0 sym val))]
-                    [(1)
+                       (namespace-set-variable! ns 0 sym val))
                      (for ([(sym proc) (in-hash core-forms)])
                        (namespace-set-transformer! ns 0 sym (core-form proc sym)))])))
    core-module-name))

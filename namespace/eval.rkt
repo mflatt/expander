@@ -97,9 +97,10 @@
 
 ;; ----------------------------------------
 
-(define (do-namespace-require #:run? run? who req ns)
+(define (do-namespace-require #:run? run? #:visit? visit? who req ns)
   (check who namespace? ns)
-  (parse-and-perform-requires! #:run? #t
+  (parse-and-perform-requires! #:run? run?
+                               #:visit? visit?
                                (list (add-scopes (datum->syntax #f req)
                                                  (root-expand-context-module-scopes
                                                   (namespace-get-root-expand-ctx ns))))
@@ -109,10 +110,10 @@
                                (make-requires+provides #f)))
 
 (define (namespace-require req [ns (current-namespace)])
-  (do-namespace-require #:run? #t 'namespace-require req ns))
+  (do-namespace-require #:run? #t #:visit? #f 'namespace-require req ns))
 
 (define (namespace-require/expansion-time req [ns (current-namespace)])
-  (do-namespace-require #:run? #f 'namespace-require/expansion-time req ns))
+  (do-namespace-require #:run? #f #:visit? #t 'namespace-require/expansion-time req ns))
   
 ;; FIXME
 (define (namespace-require/constant req [ns (current-namespace)])
