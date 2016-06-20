@@ -13,6 +13,8 @@
          "../namespace/inspector.rkt"
          "../common/contract.rkt")
 
+;; Provides public versions of taint-related syntax functions
+
 (provide syntax-tainted?
          syntax-arm
          syntax-disarm

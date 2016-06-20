@@ -12,10 +12,10 @@
          current-arm-inspectors)
 
 ;; A tamper status is either
-;;   - #f (clean)
-;;   - 'tainted (tainted)
-;;   - 'tainted/need-propagate *tainted, and status need to be propagated to children)
-;;   - a set of inspectors (armed with a dye pack)
+;;   * #f - clean
+;;   * 'tainted - tainted
+;;   * 'tainted/need-propagate - tainted, and taint needs to be propagated to children
+;;   * a set of inspectors - armed with a dye pack that is removable with those inspectors
 
 (define (tamper-tainted? v)
   (symbol? v))
@@ -34,6 +34,9 @@
 ;; ----------------------------------------
 
 (define (serialize-tamper t)
+  ;; We can't serialize inspectors; any set of inspectors is replaced
+  ;; with the current inspector at deserialization time (which
+  ;; matches declaration time for a module)
   (if (tamper-armed? t) 'armed t))
 
 ;; Set during deserialize to select a code inspector:

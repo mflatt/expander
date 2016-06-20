@@ -212,7 +212,7 @@
   (define ns (expand-context-namespace ctx))
   (namespace-visit-available-modules! ns)
   
-  (define lift-ctx (make-lift-context (make-toplevel-lift ctx)))
+  (define lift-ctx (make-lift-context (make-top-level-lift ctx)))
   (define require-lift-ctx (make-require-lift-context
                             (make-parse-top-lifted-require ns)))
   (define exp-s

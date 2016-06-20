@@ -3,8 +3,9 @@
 ;; A `compiled-in-memory` structure holds the result of compilation.
 ;; It's produced by `compile-top` or `compile-module` and consumed by
 ;; `eval-compiled-in-memory`. The marshaled form is just the linklet
-;; directory, which has all the same information, but loses sharing
-;; with anything else currently in memory.
+;; directory, which has the same essential information, but loses sharing
+;; with anything else currently in memory. The marshaled form also loses
+;; extra inspectors.
 (provide (struct-out compiled-in-memory))
 
 (struct compiled-in-memory (linklet-directory ;; includes content of `{pre,post}-compiled-tops`
@@ -14,7 +15,13 @@
                             phase-to-link-module-uses
                             ;; Maybe provide more capability than the module's declaration inspector:
                             compile-time-inspector
-                            phase-to-link-extra-inspectorsss
+                            ;; For each phase (that has a linklet), optionally report
+                            ;; a list of lists; the outer list matches the order of imports
+                            ;; into the linklet, and each inner list matches the order of
+                            ;; variables from that imported linklet; each member of the
+                            ;; inner list is #f or an extra inspector that has been carried
+                            ;; over from the originally compiled reference
+                            phase-to-link-extra-inspectorsss ; phase -> list of lists
                             ;; For using existing values directly, instead of unmarshaling:
                             mpis
                             syntax-literalss

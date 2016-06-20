@@ -9,12 +9,16 @@
          "context.rkt"
          "def-id.rkt")
 
+;; Helpers to implement the consumer side of `syntax-local-lift-expression`,
+;; `syntax-local-lift-module`, etc. These structures are used by `syntax-local-...`
+;; functions as communicated through the current expand context.
+
 (provide make-lift-context
          add-lifted!
          get-and-clear-lifts!
          
          make-local-lift
-         make-toplevel-lift
+         make-top-level-lift
          wrap-lifts-as-let
          wrap-lifts-as-begin
          
@@ -69,7 +73,7 @@
       (set-box! lift-env (hash-set (unbox lift-env) key variable)))
     (values ids (lifted-bind ids rhs))))
 
-(define (make-toplevel-lift ctx)
+(define (make-top-level-lift ctx)
   (lambda (ids rhs phase)
     ;; Add the namespace's post-expansion scope (i.e., the inside-edge
     ;; scope) so that the binding has a specific phase:

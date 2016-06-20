@@ -33,15 +33,21 @@
      [else (module-path-index-join (resolved-module-path->module-path mod-path) #f)]))
   (define mod-name (module-path-index-resolve mpi #t))
   (define phase (namespace-phase ns))
+  ;; Dispatch to the variant of `dynamic-require` that is determined
+  ;; by the second argument:
   (cond
    [(not sym)
+    ;; Run phase 0; don't visit or make available
     (namespace-module-instantiate! ns mpi phase #:run-phase phase
                                    #:otherwise-available? #f)]
    [(equal? sym 0)
+    ;; Run phase 0, also make available
     (namespace-module-instantiate! ns mpi phase #:run-phase phase)]
    [(void? sym)
+    ;; Just visit
     (namespace-module-visit! ns mpi phase #:visit-phase phase)]
    [else
+    ;; Extract a particular value via phase 0....
     (define m (namespace->module ns mod-name))
     (define binding/maybe-protected (hash-ref (hash-ref (module-provides m) 0 #hasheq())
                                               sym
@@ -55,6 +61,8 @@
                                  "module" mod-name)
           (fail-k))]
      [else
+      ;; The provided binding may correspond to an immediate provide,
+      ;; or it may by re-rpovided from a different module
       (define binding (if (protected? binding/maybe-protected)
                           (protected-binding binding/maybe-protected)
                           binding/maybe-protected))
@@ -69,6 +77,7 @@
                                                   mpi))
                                                 (phase- phase ex-phase)
                                                 #:complain-on-failure? #t))
+      ;; Before continuing, make sure that we're allowed to access the binding
       (when (and (protected? binding/maybe-protected)
                  (and (not (inspector-superior? (current-code-inspector) (namespace-inspector m-ns)))
                       (not (and (module-binding-extra-inspector binding)
@@ -78,14 +87,16 @@
                                "name is protected"
                                "name" sym
                                "module" mod-name))
+      ;; Try to get an exported variable...
       (namespace-get-variable m-ns ex-phase ex-sym
                               (lambda ()
-                                ;; Maybe syntax?
+                                ;; No such variable; maybe it's syntax?
                                 (define missing (gensym 'missing))
                                 (namespace-module-visit! ns mpi phase #:visit-phase phase)
                                 (define t (namespace-get-transformer m-ns ex-phase ex-sym missing))
                                 (cond
                                  [(eq? t missing)
+                                  ;; We can't find a transformer export, either
                                   (if (eq? fail-k default-fail-thunk)
                                       (raise-arguments-error 'dynamic-require
                                                              "name is not provided"
@@ -93,7 +104,7 @@
                                                              "module" mod-name)
                                       (fail-k))]
                                  [else
-                                  ;; expand in a fresh namespace
+                                  ;; Found transformer; expand in a fresh namespace
                                   (define tmp-ns (make-namespace ns))
                                   (define name (resolved-module-path-name mod-name))
                                   (define mod-path (if (path? name)
@@ -102,7 +113,7 @@
                                   (namespace-require mod-path tmp-ns)
                                   (eval sym tmp-ns)])))])]))
 
-;; The `dynamic-require` function checks by recognizing this failure
+;; The `dynamic-require` function cheats by recognizing this failure
 ;; thunk and substituting a more specific error:
 (define (default-fail-thunk)
   (error "failed"))

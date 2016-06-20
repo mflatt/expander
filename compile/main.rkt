@@ -4,6 +4,13 @@
          "multi-top.rkt"
          "module.rkt")
 
+;; Compilation of expanded code produces an S-expression (but enriched
+;; with source locations and properties) where run-time primitive are
+;; accessed directly, and all linklet imports and local variables are
+;; renamed to avoid collisions with the primitive names and to avoid
+;; all shadowing (but the same variable might be used in
+;; non-overlapping local contexts).
+
 ;; Compilation uses one of two protocols, which differ in the shapes
 ;; of linklets that they generate:
 ;;
@@ -25,24 +32,25 @@
 ;;
 ;; * Modules are compiled to a slightly different protocol. Like the
 ;;   top-level protocol, the resulting set of linklets includes on
-;;   linklet per phase plus one linklet for housing potentially
+;;   linklet per phase plus two linklets for housing potentially
 ;;   marshaled data. An additional linklet reports metadata about the
-;;   modules, such as its requires, provides, and submodule names.
-;;   Submodules are represented by nested linklet directories.
+;;   modules, such as its requires and provides. An individual module
+;;   is reprsented by a linklet bundle, and a module is compiled with
+;;   submodulesthrough nested linklet directories.
 ;;
 ;;   Besides the extra metadata module, the handling of syntax-object
 ;;   unmarshaling is a little different for modules than top-level
-;;   forms. Each phase has its own unmarshaling code, and the shared
-;;   linklet to house the data is filled on demand with syntax objects
-;;   by the per-phase linklets.
+;;   forms, because syntax-literal unmarshaling is lazy for modules.
 ;;
 ;; Whichever protocol is used, the result is wrapped in a
 ;; `compiled-in-memory` structure, which retains original module path
 ;; indices and syntax objects. If the compiled code is evaluated
-;; directory, then the retained values are used instead of running
+;; directly, then the retained values are used instead of running
 ;; unmarshaling code in generated linklets. That's both faster an
 ;; preserves some expected sharing. When a `compile-in-memory`
-;; structure is written, it writes the same as a linklet directory.
+;; structure is written, it writes the same as a linklet directory
+;; (i.e., it loses the shortcut information, as well as some
+;; inspector information).
 
 (provide make-compile-context
 

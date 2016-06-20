@@ -28,6 +28,15 @@
          register-required-variable-use!
          generate-links+imports)
 
+;; A compilation header accumulates information about syntax literals
+;; and about referenced required and defined variables. This
+;; information is accumulated while compiling expressions, and then
+;; header information is extracted into deserialization code that
+;; reconstructs syntax literals, module path indexes, and so on. The
+;; header also keeps track of which variable references correspond to
+;; which linklet imports, and it keeps track of compile-time
+;; inspectors that may grant access to some of those imports.
+
 (struct header (module-path-indexes        ; module-path-index -> linklet import position
                 binding-sym-to-define-sym  ; sym -> sym; avoid conflicts with primitives
                 [binding-syms-in-order #:mutable] ; list of sym

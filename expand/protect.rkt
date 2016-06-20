@@ -11,7 +11,10 @@
 (provide resolve+shift/extra-inspector
          check-access)
 
-;; Check inspector-based access to a module's definitions
+;; Check inspector-based access to a module's definitions; a suitable inspector
+;; might be provided by `id`, or the binding might carry an extra inspector
+;; (put there via a provide of a rename transformer, where the extra inspector
+;; was attached to the identifier in the rename transformer)
 (define (check-access b mi id in-s what)
   (define m (module-instance-module mi))
   (when (and m (not (module-no-protected? m)))
@@ -26,6 +29,10 @@
                   (and (module-binding-extra-inspector b)
                        (inspector-superior? (module-binding-extra-inspector b)
                                             (namespace-inspector (module-instance-namespace mi)))))
+        ;; In the error message, use the original expression `in-s` or
+        ;; the symbol protected or defined in the target module ---
+        ;; but only if that name is different from `id`, which we'll
+        ;; certainly include in the error
         (define complain-id (let ([c-id (or in-s (module-binding-sym b))])
                               (and (not (eq? (if (syntax? c-id) (syntax-content c-id) c-id)
                                              (syntax-content id)))

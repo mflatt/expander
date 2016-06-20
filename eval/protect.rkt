@@ -6,12 +6,25 @@
          "../namespace/namespace.rkt"
          "../namespace/module.rkt")
 
+;; Inspectors guarded access to protected values at expansion time. We
+;; run code that references portentially protected values, we have to
+;; check again, in case the compiled form was synthesized or compiled
+;; in a namespace with different protections.
+
+;; When programs are compiled and run in memory (i.e., without going
+;; through serialization), we can trust the protections checked by the
+;; expander --- and the access enabled by compiling from source may be
+;; greater than enabled by serialized bytecode, because inspectors can
+;; be tracked as values and changed at a finer granularity. In that
+;; case, a `compiled-in-memory` record holds extra-inspector
+;; information that is propagated to here.
+
 (provide check-require-access)
 
 (define (check-require-access linklet #:skip-imports skip-num-imports
                               import-module-uses import-module-instances insp
-                              extra-inspector
-                              extra-inspectorsss)
+                              extra-inspector     ; from declaration time
+                              extra-inspectorsss) ; per imported variable; from compilation
   (for ([import-syms (in-list (list-tail (linklet-import-variables linklet) skip-num-imports))]
         [mu (in-list import-module-uses)]
         [mi (in-list import-module-instances)]

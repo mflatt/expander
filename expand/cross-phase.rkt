@@ -7,6 +7,9 @@
          "../common/module-path.rkt"
          "../boot/runtime-primitive.rkt")
 
+;; Check whether a module fits the restricted grammar of a cross-phase
+;; persistent module
+
 (provide check-cross-phase-persistent-form)
 
 (define (check-cross-phase-persistent-form bodys)

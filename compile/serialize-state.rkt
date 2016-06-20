@@ -7,6 +7,9 @@
          intern-shifted-multi-scopes
          intern-mpi-shifts)
 
+;; A `serialize-state` record is threaded through the construction of
+;; a deserialization expression
+
 (struct serialize-state (reachable-scopes       ; the set of all reachable scopes
                          bindings-intern        ; to record pruned binding tables
                          bulk-bindings-intern   ; to record pruned bulk-binding lists

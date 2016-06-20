@@ -3,7 +3,7 @@
 
 (provide syntax-set-inspector)
 
-;; When for deserialized syntax literals to associate the
+;; Used for deserialized syntax literals to associate the
 ;; declaration-time inspector with each syntax object
 (define (syntax-set-inspector s insp)
   (syntax-map s

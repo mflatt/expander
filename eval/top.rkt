@@ -13,7 +13,7 @@
          "protect.rkt")
 
 ;; Run a representation of top-level code as produced by `compile-top`;
-;; see "compile.rkt" and "compile-top.rkt"
+;; see "compile/main.rkt", "compile/top.rkt", and "compile/multi-top.rkt"
 
 (provide eval-top)
 

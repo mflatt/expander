@@ -1,5 +1,10 @@
 #lang racket/base
 
+;; A built-in symbol is one that the compiler must avoid using for a
+;; binding. Built-in symbols include the names of run-time primitives
+;; and identifiers reserved by the compiler itself (see
+;; "reserved-symbol.rkt")
+
 (provide register-built-in-symbol!
          built-in-symbol?
          make-built-in-symbol!)

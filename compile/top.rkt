@@ -33,7 +33,8 @@
   (define phase (compile-context-phase cctx))
 
   (define mpis (make-module-path-index-table))
-  
+
+  ;; Compile the body forms, similar to compiling the body of a module
   (define-values (body-linklets
                   min-phase
                   max-phase
@@ -50,6 +51,8 @@
     (hash->linklet-bundle
      (cond
       [serializable?
+       ;; To support seialization, construct a linklet that will
+       ;; deserialize module path indexes, syntax objects, etc.
        (define syntax-literalss-expr
          (generate-eager-syntax-literals! 
           syntax-literalss
@@ -58,7 +61,7 @@
           (compile-context-self cctx)
           (compile-context-namespace cctx)))
 
-       (define link-cu
+       (define link-linklet
          (compile-linklet
           `(linklet
             #:import ([deserialize ,@deserialize-imports]
@@ -78,13 +81,13 @@
             (define-values (phase-to-link-modules) ,phase-to-link-module-uses-expr)
             (define-values (syntax-literalss) ,syntax-literalss-expr))))
        
-       (hash-set body-linklets 'link link-cu)]
+       (hash-set body-linklets 'link link-linklet)]
       [else
        ;; Will combine the linking unit with non-serialized link info
        body-linklets])))
   
-  ;; If the compiled code is executed directly in its original phase,
-  ;; we'll share the original values
+  ;; If the compiled code is executed directly, it must be in its
+  ;; original phase, and we'll share the original values
   (compiled-in-memory (hash->linklet-directory (hash #f bundle))
                       phase
                       max-phase
@@ -96,6 +99,8 @@
                       null
                       null))
 
+;; Callback for compiling a sequence of expressions: handle `require`
+;; (which is handled separately for modules)
 (define (compile-top-level-require s cctx)
   (define phase (compile-context-phase cctx))
   (case (core-form-sym s phase)

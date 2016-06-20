@@ -644,7 +644,7 @@
     (define lift-ctx (make-lift-context
                       (if local?
                           (make-local-lift lift-env (root-expand-context-counter ctx))
-                          (make-toplevel-lift ctx))
+                          (make-top-level-lift ctx))
                       #:module*-ok? (and (not local?) (eq? context 'module))))
     (define capture-ctx (struct-copy expand-context ctx
                                      [lift-key #:parent root-expand-context lift-key]

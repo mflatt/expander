@@ -1,6 +1,10 @@
 #lang racket/base
 (require "../syntax/binding.rkt")
 
+;; Extract the symbol genrated by the expander for a defined
+;; identifier; we also double-check that he binding is consistent
+;; with being a defined identifier
+
 (provide def-ids-to-binding-syms)
   
 (define (def-ids-to-binding-syms ids phase self)

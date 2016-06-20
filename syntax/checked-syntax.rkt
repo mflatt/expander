@@ -24,6 +24,9 @@
          (rename-in "debug.rkt"
                     [syntax-debug-info raw:syntax-debug-info]))
 
+;; Provides public versions of syntax functions (with contract checks,
+;; for example); see also "checked-taint.rkt"
+
 (provide syntax?
          syntax-e
          syntax-property

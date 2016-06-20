@@ -16,7 +16,7 @@
          "protect.rkt")
 
 ;; Run a representation of top-level code as produced by `compile-module`;
-;; see "compile.rkt" and "compile-module.rkt"
+;; see "compile/main.rkt" and "compile/module.rkt"
 
 (provide eval-module
          compiled-module->declaration-instance)

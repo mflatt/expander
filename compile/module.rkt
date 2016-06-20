@@ -28,6 +28,8 @@
                         #:self [given-self #f]
                         #:as-submodule? [as-submodule? #f]
                         #:serializable? [serializable? (not as-submodule?)])
+  ;; Some information about a module is commuicated here through syntax
+  ;; propertoes, such as 'module-requires
   (define m-m (match-syntax (syntax-disarm s) '(module name initial-require mb)))
   (define m (match-syntax (syntax-disarm (m-m 'mb)) '(#%module-begin body ...)))
   (define enclosing-self (compile-context-module-self cctx))

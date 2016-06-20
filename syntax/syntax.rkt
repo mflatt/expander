@@ -32,7 +32,7 @@
                 bulk-binding-registry ; for resolving bulk bindings on unmarshal
                 srcloc  ; source location
                 props   ; properties
-                inspector ; inspector for access to protected values
+                inspector ; inspector for access to protected bindings
                 [tamper #:mutable]) ; see "tamper.rkt"
         ;; Custom printer:
         #:property prop:custom-write
