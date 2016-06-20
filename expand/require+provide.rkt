@@ -39,7 +39,7 @@
 (struct requires+provides (self       ; module-path-index to recognize definitions among requires
                            require-mpis ; module-path-index to itself as interned
                            require-mpis-in-order ; require-phase -> list of module-path-index
-                           requires   ; module-path-index -> require-phase -> list of (required id phase boolean)
+                           requires   ; module-path-index -> require-phase -> sym -> list of (required id phase boolean)
                            provides   ; phase -> sym -> binding or protected
                            phase-to-defined-syms ; phase -> sym -> boolean
                            [can-cross-phase-persistent? #:mutable]
@@ -78,7 +78,7 @@
     ;; Init list of required identifiers:
     (hash-update! (requires+provides-requires r+p)
                   mpi
-                  (lambda (at-mod) (hash-set at-mod phase-shift null))
+                  (lambda (at-mod) (hash-set at-mod phase-shift #hasheq()))
                   #hasheqv()))
   (unless is-cross-phase-persistent?
     (set-requires+provides-can-cross-phase-persistent?! r+p #f))
@@ -107,8 +107,13 @@
                 (lambda (at-mod)
                   (hash-update at-mod
                                nominal-require-phase
-                               (lambda (l) (cons (required id phase can-be-shadowed?) l))
-                               null))
+                               (lambda (sym-to-reqds)
+                                 (hash-update sym-to-reqds
+                                              (syntax-e id)
+                                              (lambda (l)
+                                                (cons (required id phase can-be-shadowed?) l))
+                                              null))
+                               #hasheq()))
                 #hasheqv()))
 
 ;; Add bindings of an enclosing module
@@ -119,7 +124,8 @@
   (set-requires+provides-all-bindings-simple?! r+p #f)
   (for ([(mod-name at-mod) (in-hash (requires+provides-requires enclosing-r+p))])
     (for* ([(phase at-phase) (in-hash at-mod)]
-           [reqd (in-list at-phase)])
+           [reqds (in-hash-values at-phase)]
+           [reqd (in-list reqds)])
       (add-defined-or-required-id-at-nominal! r+p
                                               (syntax-module-path-index-shift
                                                (required-id reqd)
@@ -139,15 +145,20 @@
                   (lambda (at-mod)
                     (hash-update at-mod
                                  (module-binding-nominal-require-phase b)
-                                 (lambda (l)
-                                   (for/list ([r (in-list l)]
-                                              #:unless (free-identifier=? (required-id r) id phase phase))
-                                     r))
-                                 null))
+                                 (lambda (sym-to-reqds)
+                                   (hash-update
+                                    sym-to-reqds
+                                    (syntax-e id)
+                                    (lambda (l)
+                                      (for/list ([r (in-list l)]
+                                                 #:unless (free-identifier=? (required-id r) id phase phase))
+                                        r))
+                                    null))
+                                 #hasheq()))
                   #hasheqv())))
 
 ;; Check whether an identifier has a binding that is from a non-shadowable
-;; require; if somethign is found but it will be replaced, then record that
+;; require; if something is found but it will be replaced, then record that
 ;; bindings are not simple.
 (define (check-not-defined #:check-not-required? [check-not-required? #f]
                            r+p id phase #:in orig-s
@@ -186,24 +197,25 @@
         ;; a non-simple --- otherwise, we don't care
         (void)]
        [else
-        (for ([r (in-list (hash-ref at-mod
-                                    (module-binding-nominal-require-phase b)
+        (for ([r (in-list (hash-ref (hash-ref at-mod
+                                              (module-binding-nominal-require-phase b)
+                                              #hasheq())
+                                    (syntax-e id)
                                     null))])
-          (when (eq? (syntax-e id) (syntax-e (required-id r)))
-            (cond
-             [(and ok-binding (same-binding? b ok-binding))
-              ;; It's the same binding already, so overall binding hasn't
-              ;; become non-simple
-              (void)]
-             [(required-can-be-shadowed? r)
-              ;; Shadowing --- ok, but non-simple
-              (set-requires+provides-all-bindings-simple?! r+p #f)]
-             [else
-              (raise-syntax-error #f
-                                  (string-append "identifier already "
-                                                 (if defined? "defined" "required"))
-                                  orig-s
-                                  id)])))])])]))
+          (cond
+           [(and ok-binding (same-binding? b ok-binding))
+            ;; It's the same binding already, so overall binding hasn't
+            ;; become non-simple
+            (void)]
+           [(required-can-be-shadowed? r)
+            ;; Shadowing --- ok, but non-simple
+            (set-requires+provides-all-bindings-simple?! r+p #f)]
+           [else
+            (raise-syntax-error #f
+                                (string-append "identifier already "
+                                               (if defined? "defined" "required"))
+                                orig-s
+                                id)]))])])]))
 
 (define (add-defined-syms! r+p syms phase)
   (define phase-to-defined-syms (requires+provides-phase-to-defined-syms r+p))
@@ -217,7 +229,7 @@
 (define (extract-module-requires r+p mod-name phase)
   (define at-mod (hash-ref (requires+provides-requires r+p) mod-name #f))
   (and at-mod
-       (hash-ref at-mod phase #f)))
+       (apply append (hash-values (hash-ref at-mod phase #hasheq())))))
 
 ;; Get all the definitions
 (define (extract-module-definitions r+p)
@@ -238,9 +250,11 @@
                 [phase (in-list (if (eq? phase 'all)
                                     (hash-keys phase-to-requireds)
                                     (list phase)))]
-                [reqd (in-list (hash-ref phase-to-requireds phase
-                                         ;; failure => not required at that phase
-                                         (lambda () (esc #f))))])
+                [reqds (in-hash-values
+                        (hash-ref phase-to-requireds phase
+                                  ;; failure => not required at that phase
+                                  (lambda () (esc #f))))]
+                [reqd (in-list reqds)])
       reqd)))
 
 ;; ----------------------------------------
