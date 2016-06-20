@@ -60,9 +60,7 @@
           (write-string "#<namespace" port)
           (define n (namespace-mpi ns))
           (unless (top-level-module-path-index? n)
-            (fprintf port ":~a" (format-resolved-module-path-name
-                                 (resolved-module-path-name
-                                  (module-path-index-resolve n)))))
+            (fprintf port ":~a" (module-path-index-resolve n)))
           (define phase (namespace-phase ns))
           (unless (zero-phase? phase)
             (fprintf port ":~s" phase))

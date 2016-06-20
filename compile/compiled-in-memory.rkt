@@ -12,6 +12,9 @@
                             phase
                             max-phase
                             phase-to-link-module-uses
+                            ;; Maybe provide more capability than the module's declaration inspector:
+                            compile-time-inspector
+                            phase-to-link-extra-inspectorsss
                             ;; For using existing values directly, instead of unmarshaling:
                             mpis
                             syntax-literalss

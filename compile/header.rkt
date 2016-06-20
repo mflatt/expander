@@ -1,5 +1,6 @@
 #lang racket/base
-(require "../syntax/scope.rkt"
+(require "../common/set.rkt"
+         "../syntax/scope.rkt"
          "module-use.rkt"
          "../common/module-path.rkt"
          "context.rkt"
@@ -31,6 +32,7 @@
                 binding-sym-to-define-sym  ; sym -> sym; avoid conflicts with primitives
                 [binding-syms-in-order #:mutable] ; list of sym
                 require-var-to-import-sym  ; variable-use -> sym
+                import-sym-to-extra-inspectors ; sym -> set of inspectors
                 [require-vars-in-order #:mutable] ; list of variable-use
                 define-and-import-syms     ; hash of sym, to select distinct symbols
                 syntax-literals            ; box of list of syntax-literal
@@ -45,6 +47,7 @@
           (make-hasheq)        ; binding-sym-to-define-sym
           null                 ; binding-syms-in-order
           (make-variable-uses) ; require-var-to-import-sym
+          (make-hasheq)        ; import-sym-to-extra-inspectors
           null                 ; require-vars-in-order
           (make-hasheq)        ; define-and-import-syms
           (box null)
@@ -181,22 +184,28 @@
 
 ;; ----------------------------------------
 
-(define (register-required-variable-use! header mpi phase sym)
+(define (register-required-variable-use! header mpi phase sym extra-inspector)
   (define key (variable-use (module-use mpi phase) sym))
   (define variable-uses (header-require-var-to-import-sym header))
-  (or (hash-ref variable-uses key #f)
-      (let ([sym (select-fresh (variable-use-sym key) header)])
-        (hash-set! variable-uses key sym)
-        (set-header-require-vars-in-order! header
-                                           (cons key
-                                                 (header-require-vars-in-order header)))
-        (hash-set! (header-define-and-import-syms header) sym #t)
-        sym)))
+  (define var-sym
+    (or (hash-ref variable-uses key #f)
+        (let ([sym (select-fresh (variable-use-sym key) header)])
+          (hash-set! variable-uses key sym)
+          (set-header-require-vars-in-order! header
+                                             (cons key
+                                                   (header-require-vars-in-order header)))
+          (hash-set! (header-define-and-import-syms header) sym #t)
+          sym)))
+  (when extra-inspector
+    (define extra-inspectors (header-import-sym-to-extra-inspectors header))
+    (hash-update! extra-inspectors var-sym (lambda (s) (set-add s extra-inspector)) #hasheq()))
+  var-sym)
 
 ;; Returns:
 ;;  link-names : a list of sym
 ;;  link-requires : a list of module path indexes
 ;;  imports : a list of S-expressions for imports; refers to `link-names`
+;;  extra-inspectorsss : a list of list of (or/c #f (set/c inspector?))
 ;;  def-decls : a list of S-expressions for forward-reference declarations
 (define (generate-links+imports header phase cctx)
   ;; Make a link symbol for each distinct module+phase:
@@ -225,6 +234,15 @@
                       #:when (equal? mu (variable-use-module-use vu)))
              (define var-sym (hash-ref (header-require-var-to-import-sym header) vu))
              `[,(variable-use-sym vu) ,var-sym])))
+   ;; Extra inspectors, in parallel to imports
+   (for/list ([mu (in-list link-mod-uses)])
+     (define extra-inspectorss
+       (for/list ([vu (in-list (header-require-vars-in-order header))]
+                  #:when (equal? mu (variable-use-module-use vu)))
+         (define var-sym (hash-ref (header-require-var-to-import-sym header) vu))
+         (hash-ref (header-import-sym-to-extra-inspectors header) var-sym #f)))
+     (and (ormap values extra-inspectorss)
+          extra-inspectorss))
    ;; Declarations (for non-module contexts)
    (for/list ([vu (in-list (header-require-vars-in-order header))]
               #:when (eq? (module-use-module (variable-use-module-use vu))

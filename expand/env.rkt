@@ -84,6 +84,7 @@
 ;; chains to provide an inspector associated with the endpoint identifier; using
 ;; just `resolve+shift` may leave the access with a too-weak inspector.
 (define (binding-lookup b env lift-envs ns phase id
+                        #:in [in-s #f]
                         #:out-of-context-as-variable? [out-of-context-as-variable? #f])
   (cond
    [(module-binding? b)
@@ -93,7 +94,7 @@
     (check-taint id)
     (define t (namespace-get-transformer m-ns (module-binding-phase b) (module-binding-sym b)
                                          variable))
-    (when mi (check-access b mi id (if t "transformer" "variable")))
+    (when mi (check-access b mi id in-s (if t "transformer" "variable")))
     (define insp (and mi (module-instance-module mi) (module-inspector (module-instance-module mi))))
     (values t insp)]
    [(local-binding? b)

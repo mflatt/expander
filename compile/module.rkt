@@ -79,6 +79,7 @@
                   max-phase
                   phase-to-link-module-uses
                   phase-to-link-module-uses-expr
+                  phase-to-link-extra-inspectorsss
                   syntax-literalss
                   root-ctx-syntax-literals)
     (compile-forms bodys body-cctx mpis
@@ -218,6 +219,8 @@
                       0
                       max-phase
                       phase-to-link-module-uses
+                      (current-code-inspector)
+                      phase-to-link-extra-inspectorsss
                       (mpis-as-vector mpis)
                       (syntax-literals-as-vectors all-syntax-literalss 0)
                       (map cdr pre-submodules)

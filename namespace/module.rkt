@@ -42,7 +42,7 @@
          namespace-visit-available-modules!
          namespace-run-available-modules!
 
-         namespace-module-use->instance)
+         namespace-module-use->module+linklet-instances)
 
 (module+ for-module-reflect
   (provide (struct-out module)))
@@ -124,7 +124,8 @@
                                              ;; Fresh set of submodules:
                                              (make-hash))]
                  [available-module-instances (make-hash)]
-                 [module-instances (make-hash)]))
+                 [module-instances (make-hash)]
+                 [declaration-inspector (current-code-inspector)]))
   (hash-set! (namespace-phase-to-namespace m-ns) phase m-ns)
   (hash-set! (namespace-module-instances m-ns) (cons name phase) (make-module-instance m-ns #f))
   m-ns)
@@ -380,21 +381,23 @@
 
 ;; ----------------------------------------
 
-(define (namespace-module-use->instance ns mu 
-                                        #:shift-from [shift-from #f]
-                                        #:shift-to [shift-to #f]
-                                        #:phase-shift phase-shift)
+(define (namespace-module-use->module+linklet-instances ns mu 
+                                                        #:shift-from [shift-from #f]
+                                                        #:shift-to [shift-to #f]
+                                                        #:phase-shift phase-shift)
   (define mod (module-use-module mu))
-  (define m-ns (namespace->module-namespace ns 
-                                            (module-path-index-resolve
-                                             (if shift-from
-                                                 (module-path-index-shift mod shift-from shift-to)
-                                                 mod))
-                                            phase-shift
-                                            #:complain-on-failure? #t))
+  (define mi
+    (namespace->module-instance ns 
+                                (module-path-index-resolve
+                                 (if shift-from
+                                     (module-path-index-shift mod shift-from shift-to)
+                                     mod))
+                                phase-shift
+                                #:complain-on-failure? #t))
+  (define m-ns (module-instance-namespace mi))
   (define d (hash-ref (namespace-phase-level-to-definitions m-ns) (module-use-phase mu) #f))
   (if d
-      (definitions-variables d)
+      (values mi (definitions-variables d))
       (error "namespace mismatch: phase level not found")))
 
 ;; ----------------------------------------

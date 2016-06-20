@@ -18,6 +18,8 @@
                       0
                       0
                       #hasheqv()
+                      #f
+                      #hasheqv()
                       #()
                       #()
                       cims

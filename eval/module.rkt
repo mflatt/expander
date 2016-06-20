@@ -12,7 +12,8 @@
          "../compile/compiled-in-memory.rkt"
          "../expand/context.rkt"
          "../expand/root-expand-context.rkt"
-         "root-context.rkt")
+         "root-context.rkt"
+         "protect.rkt")
 
 ;; Run a representation of top-level code as produced by `compile-module`;
 ;; see "compile.rkt" and "compile-module.rkt"
@@ -60,6 +61,13 @@
   
   (define requires (decl 'requires))
   (define provides (decl 'provides))
+
+  (define extra-inspector (and (compiled-in-memory? c)
+                               (compiled-in-memory-compile-time-inspector c)))
+  (define phase-to-link-extra-inspectorsss
+    (if (compiled-in-memory? c)
+        (compiled-in-memory-phase-to-link-extra-inspectorsss c)
+        #hasheqv()))
   
   (define create-root-expand-context-from-module ; might be used to create root-expand-context
     (make-create-root-expand-context-from-module requires evaled-h))
@@ -79,17 +87,26 @@
                                                     syntax-literals-linklet data-instance
                                                     phase-shift original-self self bulk-binding-registry insp
                                                     create-root-expand-context-from-module))
-                           (define cu (hash-ref evaled-h phase-level #f))
-                           (when cu
-                             (define imports
-                               (for/list ([mu (in-list (hash-ref phase-to-link-modules phase-level))])
-                                 (namespace-module-use->instance ns mu
-                                                                 #:shift-from original-self
-                                                                 #:shift-to self
-                                                                 #:phase-shift
-                                                                 (phase+ (phase- phase-level (module-use-phase mu))
-                                                                         phase-shift))))
-                             (define inst
+                           (define phase-linklet (hash-ref evaled-h phase-level #f))
+                           
+                           (when phase-linklet
+                             (define module-uses (hash-ref phase-to-link-modules phase-level))
+                             (define-values (import-module-instances import-instances)
+                               (for/lists (mis is) ([mu (in-list module-uses)])
+                                 (namespace-module-use->module+linklet-instances
+                                  ns mu
+                                  #:shift-from original-self
+                                  #:shift-to self
+                                  #:phase-shift
+                                  (phase+ (phase- phase-level (module-use-phase mu))
+                                          phase-shift))))
+
+                             (check-require-access phase-linklet #:skip-imports 3
+                                                   module-uses import-module-instances insp
+                                                   extra-inspector
+                                                   (hash-ref phase-to-link-extra-inspectorsss phase-level #f))
+
+                             (define instance-instance
                                (make-instance-instance
                                 #:namespace ns
                                 #:phase-shift phase-shift
@@ -98,12 +115,15 @@
                                 #:inspector insp
                                 #:set-transformer! (lambda (name val)
                                                      (namespace-set-transformer! ns (sub1 phase-level) name val))))
+
                              (define (instantiate-body)
-                               (instantiate-linklet cu (list* data-instance
-                                                              syntax-literals-instance
-                                                              inst
-                                                              imports)
+                               (instantiate-linklet phase-linklet
+                                                    (list* data-instance
+                                                           syntax-literals-instance
+                                                           instance-instance
+                                                           import-instances)
                                                     (namespace->instance ns phase-level)))
+
                              (cond
                               [(zero-phase? phase-level)
                                (instantiate-body)]

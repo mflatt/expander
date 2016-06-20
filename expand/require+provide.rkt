@@ -252,9 +252,9 @@
 
 ;; Register that a binding is provided as a given symbol; report an
 ;; error if the provide is inconsistent with an earlier one
-(define (add-provide! r+p sym phase binding id as-protected?)
+(define (add-provide! r+p sym phase binding immed-binding id as-protected?)
   (when (and as-protected?
-             (not (eq? (module-binding-module binding) (requires+provides-self r+p))))
+             (not (eq? (module-binding-module immed-binding) (requires+provides-self r+p))))
     (raise-syntax-error #f "cannot protect imported identifier with re-provide" sym))
   (hash-update! (requires+provides-provides r+p)
                 phase
@@ -294,28 +294,12 @@
                        #:unless (eq? mpi old-self))
               (module-path-index-shift mpi old-self new-self)))))
   (define (extract-provides)
-    (shift-provides-module-path-index (provides-forward-free=id
-                                       (requires+provides-provides r+p))
+    (shift-provides-module-path-index (requires+provides-provides r+p)
                                       old-self
                                       new-self))
   (let* ([s (syntax-property s 'module-requires (extract-requires))]
          [s (syntax-property s 'module-provides (extract-provides))])
     s))
-
-;; For each binding, flatten `free-identifier=?` equivalences
-;; installed by rename transformers
-(define (provides-forward-free=id provides)
-  (for/hasheqv ([(phase at-phase) (in-hash provides)])
-    (values phase
-            (for/hasheq ([(sym binding) (in-hash at-phase)])
-              (values sym
-                      (let loop ([binding binding])
-                        (cond
-                         [(protected? binding)
-                          (protected (loop (protected-binding binding)))]
-                         [(binding-free=id binding)
-                          (loop (binding-free=id binding))]
-                         [else binding])))))))
 
 ;; ----------------------------------------
 

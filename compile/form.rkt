@@ -97,7 +97,8 @@
                (register-required-variable-use! header
                                                 (compile-context-self cctx)
                                                 phase
-                                                binding-sym))]))
+                                                binding-sym
+                                                #f))]))
          (define rhs (compile (m 'rhs)
                               (struct-copy compile-context cctx
                                            [phase phase]
@@ -197,13 +198,13 @@
                         phase))
 
   ;; Compute linking info for each phase
-  (struct link-info (link-module-uses imports def-decls))
+  (struct link-info (link-module-uses imports extra-inspectorsss def-decls))
   (define phase-to-link-info
     (for/hash ([phase (in-list phases-in-order)])
       (define header (hash-ref phase-to-header phase #f))
-      (define-values (link-module-uses imports def-decls)
+      (define-values (link-module-uses imports extra-inspectorsss def-decls)
         (generate-links+imports header phase cctx))
-      (values phase (link-info link-module-uses imports def-decls))))
+      (values phase (link-info link-module-uses imports extra-inspectorsss def-decls))))
   
   ;; Generate the phase-specific linking units
   (define body-linklets
@@ -250,6 +251,10 @@
                    (list phase `(list ,@(serialize-module-uses (hash-ref phase-to-link-module-uses phase)
                                                                mpis)))))))
 
+  (define phase-to-link-extra-inspectorsss
+    (for/hash ([(phase li) (in-hash phase-to-link-info)])
+      (values phase (link-info-extra-inspectorsss li))))
+
   (define syntax-literalss
     (for/list ([phase (in-range phase (add1 max-phase))])
       (define h (hash-ref phase-to-header phase #f))
@@ -262,6 +267,7 @@
           max-phase
           phase-to-link-module-uses
           phase-to-link-module-uses-expr
+          phase-to-link-extra-inspectorsss
           syntax-literalss
           (and encoded-root-expand-header
                (header-syntax-literals encoded-root-expand-header))))

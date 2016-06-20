@@ -180,7 +180,9 @@
         (register-required-variable-use! (compile-context-header cctx)
                                          mpi
                                          (module-binding-phase b)
-                                         (module-binding-sym b))])]
+                                         (module-binding-sym b)
+                                         (or (module-binding-extra-inspector b)
+                                             (syntax-inspector s)))])]
      [else
       (error "not a reference to a module or local binding:" s)]))
   (correlate s (if rhs

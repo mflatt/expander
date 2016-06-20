@@ -56,7 +56,19 @@
                          #:nominal-phase provide-phase-level
                          #:nominal-sym sym
                          #:nominal-require-phase phase-shift
-                         #:frame-id #f))
+                         #:frame-id #f
+                         #:extra-inspector (and (not (protected? out-binding)) ; see [*] below
+                                                (module-binding-extra-inspector binding))))
+
+;; [*] If a binding has an extra inspector, it's because the binding
+;; was provided as a rename transformer with a module (and the rename
+;; transformer doesn't have 'not-free-identifier=?). But if we're
+;; protecting the rename-transformer output, then the inspector on the
+;; providing module should guard the use of the inspector attached to
+;; the binding. For now, we approximate(!) that conditional use by
+;; just dropping the extra inspector, which means that the original
+;; binding (bounding by te rename transformer) is accessible only if
+;; the end user has access to the original binding directly.
 
 ;; ----------------------------------------
 

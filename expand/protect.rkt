@@ -12,7 +12,7 @@
          check-access)
 
 ;; Check inspector-based access to a module's definitions
-(define (check-access b mi id what)
+(define (check-access b mi id in-s what)
   (define m (module-instance-module mi))
   (when (and m (not (module-no-protected? m)))
     (define access (or (module-access m) (module-compute-access! m)))
@@ -26,12 +26,16 @@
                   (and (module-binding-extra-inspector b)
                        (inspector-superior? (module-binding-extra-inspector b)
                                             (namespace-inspector (module-instance-namespace mi)))))
+        (define complain-id (let ([c-id (or in-s (module-binding-sym b))])
+                              (and (not (eq? (if (syntax? c-id) (syntax-content c-id) c-id)
+                                             (syntax-content id)))
+                                   c-id)))
         (raise-syntax-error #f
-                            (format "access disallowed by code inspector to ~a ~a\n  from module: ~s"
+                            (format "access disallowed by code inspector to ~a ~a\n  from module: ~a"
                                     a
                                     what
                                     (module-path-index-resolve (namespace-mpi (module-instance-namespace mi))))
-                            id #f null)))))
+                            complain-id id null)))))
 
 ;; Like `resolve+shift`, but follow `free-identifier=?` chains to
 ;; attach an inspector at the last step in the chain to the
@@ -39,7 +43,7 @@
 ;; so that we don't expose an inspector that the reference is not
 ;; allowed to reach.
 (define (resolve+shift/extra-inspector id phase ns)
-  (let loop ([id id])
+  (let loop ([id id] [in-s #f])
     (define b (resolve+shift id phase #:immediate? #t))
     (cond
      [(binding-free=id b)
@@ -47,8 +51,8 @@
            (when (and (module-binding? b)
                       (not (top-level-module-path-index? (module-binding-module b))))
              (define mi (binding->module-instance b ns phase id))
-             (check-access b mi id "provided binding"))
-           (define next-b (loop next-id))
+             (check-access b mi id in-s "provided binding"))
+           (define next-b (loop next-id (or in-s id)))
            (cond
             [(and (module-binding? next-b)
                   (not (module-binding-extra-inspector next-b))

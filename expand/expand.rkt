@@ -66,7 +66,7 @@
        (expand-implicit '#%top (substitute-alternate-id s alternate-id) ctx s)]
       [else
        ;; Variable or form as identifier macro
-       (define-values (t insp) (lookup binding ctx id))
+       (define-values (t insp) (lookup binding ctx id #:in (and alternate-id s)))
        (dispatch t insp s id ctx binding)]))]
    [(and (pair? (syntax-e/no-taint (syntax-disarm s)))
          (identifier? (car (syntax-e/no-taint (syntax-disarm s)))))
@@ -86,7 +86,7 @@
        (expand-implicit '#%app (substitute-alternate-id s alternate-id) ctx id)]
       [else
        ;; Find out whether it's bound as a variable, syntax, or core form
-       (define-values (t insp) (lookup binding ctx id))
+       (define-values (t insp) (lookup binding ctx id #:in (and alternate-id (car (syntax-e disarmed-s)))))
        (cond
         [(variable? t)
          ;; Not as syntax or core form, so use implicit `#%app`
@@ -285,6 +285,7 @@
 
 ;; Helper to lookup a binding in an expansion context
 (define (lookup b ctx id
+                #:in [in-s #f]
                 #:out-of-context-as-variable? [out-of-context-as-variable? #f])
   (binding-lookup b
                   (expand-context-env ctx)
@@ -292,6 +293,7 @@
                   (expand-context-namespace ctx)
                   (expand-context-phase ctx)
                   id
+                  #:in in-s
                   #:out-of-context-as-variable? out-of-context-as-variable?))
 
 (define-syntax-rule (guard-stop id ctx s otherwise ...)

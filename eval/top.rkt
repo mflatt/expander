@@ -9,7 +9,8 @@
          "../compile/eager-instance.rkt"
          "../compile/compiled-in-memory.rkt"
          "../compile/multi-top.rkt"
-         "top-level-instance.rkt")
+         "top-level-instance.rkt"
+         "protect.rkt")
 
 ;; Run a representation of top-level code as produced by `compile-top`;
 ;; see "compile.rkt" and "compile-top.rkt"
@@ -68,20 +69,28 @@
   (define max-phase (instance-variable-value link-instance 'max-phase))
   (define phase-shift (phase- (namespace-phase ns) orig-phase))
 
+  (define extra-inspector (and (compiled-in-memory? c)
+                               (compiled-in-memory-compile-time-inspector c)))
+  (define phase-to-link-extra-inspectorsss
+    (if (compiled-in-memory? c)
+        (compiled-in-memory-phase-to-link-extra-inspectorsss c)
+        #hasheqv()))
+
   ;; Call the last thunk in tail position:
   ((for/fold ([prev-thunk void]) ([phase (in-range max-phase (sub1 orig-phase) -1)])
      (prev-thunk) ;; call a not-last thunk before proceeding with the next phase
      
-     (define imports
-       (for/list ([mu (in-list
-                       (hash-ref (instance-variable-value link-instance 'phase-to-link-modules)
-                                 phase
-                                 null))])
-         (namespace-module-use->instance ns mu #:phase-shift (phase- (phase+ phase phase-shift)
-                                                                     (module-use-phase mu)))))
+     (define module-uses (hash-ref (instance-variable-value link-instance 'phase-to-link-modules)
+                                   phase
+                                   null))
+     (define-values (import-module-instances import-instances)
+       (for/lists (mis is) ([mu (in-list module-uses)])
+         (namespace-module-use->module+linklet-instances
+          ns mu #:phase-shift (phase- (phase+ phase phase-shift)
+                                      (module-use-phase mu)))))
 
      (define phase-ns (namespace->namespace-at-phase ns (phase+ phase phase-shift)))
-
+     
      (define inst (make-instance-instance
                    #:namespace phase-ns
                    #:phase-shift phase-shift
@@ -96,9 +105,13 @@
 
      (define linklet
        (eval-linklet (hash-ref h phase #f)))
-     
+
      (cond
       [linklet
+       (check-require-access linklet #:skip-imports 3
+                             module-uses import-module-instances (current-code-inspector)
+                             extra-inspector
+                             (hash-ref phase-to-link-extra-inspectorsss phase #f))
        (define i
          (parameterize ([current-namespace (if (zero-phase? phase)
                                                (current-namespace)
@@ -107,7 +120,7 @@
                                 (list* top-level-instance
                                        link-instance
                                        inst
-                                       imports)
+                                       import-instances)
                                 ;; Instantiation merges with the namespace's current instance:
                                 (namespace->instance ns (phase+ phase phase-shift)))))
        (cond

@@ -7,7 +7,6 @@
          resolved-module-path-name
          resolved-module-path-root-name
          resolved-module-path->module-path
-         format-resolved-module-path-name
          
          module-path-index?
          module-path-index-resolve
@@ -37,9 +36,11 @@
 (struct resolved-module-path (name)
         #:property prop:custom-write
         (lambda (r port mode)
-          (write-string "#<resolved-module-path:" port)
+          (when mode
+            (write-string "#<resolved-module-path:" port))
           (fprintf port "~a" (format-resolved-module-path-name (resolved-module-path-name r)))
-          (write-string ">" port))
+          (when mode
+            (write-string ">" port)))
         #:property prop:serialize
         (lambda (r ser state)
           `(deserialize-resolved-module-path
@@ -131,18 +132,14 @@
                          [(module-path-index-resolved r)
                           (list
                            "+"
-                           (format-resolved-module-path-name
-                            (resolved-module-path-name
-                             (module-path-index-resolved r))))]
+                           (format "~a" (module-path-index-resolved r)))]
                          [else null])))
             (fprintf port ":~.a" (apply string-append
                                         (car l)
                                         (for/list ([i (in-list (cdr l))])
                                           (format " ~a" i))))]
            [(module-path-index-resolved r)
-            (fprintf port "=~a" (format-resolved-module-path-name
-                                 (resolved-module-path-name
-                                  (module-path-index-resolved r))))])
+            (fprintf port "=~a" (module-path-index-resolved r))])
           (write-string ">" port)))
 
 ;; Serialization of a module path index is handled specially, because they
