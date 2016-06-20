@@ -259,7 +259,8 @@
                                        requires+provides
                                        s bind-phase
                                        #:unless-matches binding
-                                       #:in in-stx))
+                                       #:in in-stx)
+                    (remove-required-id! requires+provides s bind-phase))
                   (add-defined-or-required-id! requires+provides
                                                s bind-phase binding
                                                #:can-be-shadowed? can-be-shadowed?)))

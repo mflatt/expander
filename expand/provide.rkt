@@ -151,7 +151,7 @@
   (unless b
     (raise-syntax-error provide-form-name "provided identifier is not defined or required" orig-s spec))
   (define immed-b (resolve+shift spec at-phase #:immediate? #t))
-  (add-provide! rp sym at-phase b immed-b spec protected?))
+  (add-provide! rp sym at-phase b immed-b spec orig-s protected?))
 
 (define (parse-struct! id:struct orig-s fields at-phase ns rp protected?)
   (define (mk fmt)
@@ -216,7 +216,7 @@
                        (hash-set! found except-id #t))))
       (define b (resolve+shift/extra-inspector id phase ns))
       (define immed-b (resolve+shift id phase #:immediate? #t))
-      (add-provide! rp (add-prefix (syntax-e id)) phase b immed-b id protected?)))
+      (add-provide! rp (add-prefix (syntax-e id)) phase b immed-b id orig-s protected?)))
   
   ;; Check that all exclusions matched something to exclude:
   (unless (= (hash-count found) (length except-ids))

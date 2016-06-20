@@ -270,7 +270,7 @@
 
 ;; Register that a binding is provided as a given symbol; report an
 ;; error if the provide is inconsistent with an earlier one
-(define (add-provide! r+p sym phase binding immed-binding id as-protected?)
+(define (add-provide! r+p sym phase binding immed-binding id orig-s as-protected?)
   (when (and as-protected?
              (not (eq? (module-binding-module immed-binding) (requires+provides-self r+p))))
     (raise-syntax-error #f "cannot protect imported identifier with re-provide" sym))
@@ -293,8 +293,9 @@
                     ;; the first once.
                     at-phase]
                    [else
-                    (error "name already provided as a different binding:" sym
-                           b binding)]))
+                    (raise-syntax-error #f
+                                        "identifier already provided (as a different binding)"
+                                        orig-s id)]))
                 #hasheq()))
 
 ;; ----------------------------------------
