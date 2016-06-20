@@ -7,7 +7,8 @@
          "use-site.rkt"
          "context.rkt"
          "expand.rkt"
-         "syntax-local.rkt")
+         "syntax-local.rkt"
+         "log.rkt")
 
 (provide add-intdef-scopes
          add-intdef-bindings
@@ -50,6 +51,7 @@
   (unless (internal-definition-context? intdef)
     (raise-argument-error 'syntax-local-bind-syntaxes "internal-definition-context?" intdef))
   (define ctx (get-current-expand-context 'local-expand))
+  (log-expand ctx 'local-bind ids)
   (define phase (expand-context-phase ctx))
   (define intdef-env (add-intdef-bindings (expand-context-env ctx)
                                           intdef))
@@ -57,6 +59,7 @@
                        (define pre-id (remove-use-site-scopes (flip-introduction-scopes id ctx)
                                                               ctx))
                        (add-intdef-scopes pre-id intdef #:always? #t)))
+  (log-expand ctx 'rename-list intdef-ids)
   (define syms (for/list ([intdef-id (in-list intdef-ids)])
                  (add-local-binding! intdef-id phase (root-expand-context-counter ctx)
                                      #:frame-id (internal-definition-context-frame-id intdef))))
@@ -77,7 +80,8 @@
                                           [val (in-list vals)])
                                  (maybe-install-free=id! val intdef-id phase)
                                  (env-mixin intdef-id sym val (make-weak-hasheq)))
-                               (unbox env-mixins))))
+                               (unbox env-mixins)))
+  (log-expand ctx 'exit-local-bind))
 
 ;; internal-definition-context-binding-identifiers
 (define (internal-definition-context-binding-identifiers intdef)

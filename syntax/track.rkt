@@ -8,25 +8,36 @@
 
 (define (syntax-track-origin new-stx old-stx [id (if (identifier? old-stx)
                                                      old-stx
-                                                     (car (syntax-e/no-taint old-stx)))])
+                                                     (let ([v (syntax-e/no-taint old-stx)])
+                                                       (and (pair? v)
+                                                            (car v))))])
   (define old-props (syntax-props old-stx))
   (cond
    [(zero? (hash-count old-props))
-    (syntax-property new-stx 'origin (list id))]
+    (if id
+        (syntax-property new-stx 'origin (list id))
+        new-stx)]
    [else
     (define new-props (syntax-props new-stx))
     (cond
      [(zero? (hash-count new-props))
-      (define old-origin (hash-ref old-props 'origin missing))
-      (define origin (if (eq? old-origin missing)
-                         (list id)
-                         (cons id old-origin)))
-      (struct-copy syntax new-stx
-                   [props (hash-set old-props 'origin origin)])]
+      (cond
+       [id
+        (define old-origin (hash-ref old-props 'origin missing))
+        (define origin (if (eq? old-origin missing)
+                           (list id)
+                           (cons id old-origin)))
+        (struct-copy syntax new-stx
+                     [props (hash-set old-props 'origin origin)])]
+       [else
+        (struct-copy syntax new-stx
+                     [props old-props])])]
      [else
       ;; Merge properties
       (define old-props-with-origin
-        (hash-set old-props 'origin (cons id (hash-ref old-props 'origin null))))
+        (if id
+            (hash-set old-props 'origin (cons id (hash-ref old-props 'origin null)))
+            old-props))
       (define updated-props
         (cond
          [((hash-count old-props-with-origin) . < . (hash-count new-props))

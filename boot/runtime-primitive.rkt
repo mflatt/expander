@@ -40,7 +40,6 @@
 (define runtime-instances
   '(#%kernel
     #%paramz
-    #%expobs
     #%foreign
     #%unsafe
     #%flfxnum

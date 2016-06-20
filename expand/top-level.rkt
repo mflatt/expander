@@ -11,11 +11,13 @@
          "context.rkt"
          "require.rkt"
          "def-id.rkt"
-         "bind-top.rkt")
+         "bind-top.rkt"
+         "log.rkt")
 
 (add-core-form!
  'define-values
  (lambda (s ctx)
+   (log-expand ctx 'prim-define-values)
    (unless (eq? (expand-context-context ctx) 'top-level)
      (raise-syntax-error #f "not allowed in an expression position" s))
    (define disarmed-s (syntax-disarm s))
@@ -29,6 +31,8 @@
 (add-core-form!
  'define-syntaxes
  (lambda (s ctx)
+   (log-expand ctx 'prim-define-syntaxes)
+   (log-expand ctx 'prepare-env)
    (unless (eq? (expand-context-context ctx) 'top-level)
      (raise-syntax-error #f "not allowed in an expression position" s))
    (define disarmed-s (syntax-disarm s))
@@ -47,6 +51,7 @@
 (add-core-form!
  '#%require
  (lambda (s ctx)
+   (log-expand ctx 'prim-require)
    (unless (eq? (expand-context-context ctx) 'top-level)
      (raise-syntax-error #f "allowed only in a module or the top level" s))
    (define disarmed-s (syntax-disarm s))
@@ -67,4 +72,5 @@
 (add-core-form!
  '#%provide
  (lambda (s ctx)
+   (log-expand ctx 'prim-provide)
    (raise-syntax-error #f "not allowed outside of a module body" s)))

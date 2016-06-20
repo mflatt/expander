@@ -10,7 +10,8 @@
          "syntax-local.rkt"
          "definition-context.rkt"
          "already-expanded.rkt"
-         "lift-key.rkt")
+         "lift-key.rkt"
+         "log.rkt")
 
 (provide local-expand
          local-expand/capture-lifts
@@ -37,11 +38,16 @@
                    #:lift-key lift-key))
 
 (define (syntax-local-expand-expression s)
-  (define exp-s (do-local-expand 'local-expand s 'expression null #f))
-  (values exp-s (already-expanded
-                 exp-s
-                 (root-expand-context-all-scopes-stx
-                  (get-current-expand-context 'syntax-local-expand-expression)))))
+  (define exp-s (do-local-expand 'local-expand s 'expression null #f
+                                 #:skip-log-exit? #t))
+  (define ae (already-expanded
+              exp-s
+              (root-expand-context-all-scopes-stx
+               (get-current-expand-context 'syntax-local-expand-expression))))
+  (let ([ctx (get-current-expand-context)])
+    (log-expand ctx 'opaque-expr ae)
+    (log-expand ctx 'exit-local exp-s))
+  (values exp-s ae))
 
 ;; ----------------------------------------
 
@@ -50,7 +56,8 @@
                          #:as-transformer? [as-transformer? #f]
                          #:lift-key [lift-key (and (or capture-lifts?
                                                        as-transformer?)
-                                                   (generate-lift-key))])
+                                                   (generate-lift-key))]
+                         #:skip-log-exit? [skip-log-exit? #f])
   (unless (syntax? s)
     (raise-argument-error who "syntax?" s))
   (unless (or (list? context)
@@ -72,6 +79,7 @@
     (raise-argument-error who
                           "(or/c #f internal-definitionc-context? (listof internal-definitionc-context?))" 
                           intdefs))
+
   (define ctx (get-current-expand-context who))
   (define same-kind? (or (eq? context
                               (expand-context-context ctx))
@@ -114,9 +122,9 @@
                                             [else #f])]
                                  [post-expansion-scope
                                   #:parent root-expand-context
-                                  (and (and same-kind?
-                                            (memq context '(module module-begin top-level))
-                                            (root-expand-context-post-expansion-scope ctx)))]
+                                  (and same-kind?
+                                       (memq context '(module module-begin top-level))
+                                       (root-expand-context-post-expansion-scope ctx))]
                                  [scopes
                                   (append (if (expand-context-def-ctx-scopes ctx)
                                               (unbox (expand-context-def-ctx-scopes ctx))
@@ -131,7 +139,14 @@
                                                  (add-intdef-scopes
                                                   (root-expand-context-all-scopes-stx ctx)
                                                   intdefs)]))
+
   (define input-s (add-intdef-scopes (flip-introduction-scopes s ctx) intdefs))
+
+  (log-expand local-ctx 'enter-local)
+  (when as-transformer? (log-expand local-ctx 'phase-up))
+  (log-expand local-ctx 'local-pre input-s)
+  (log-expand local-ctx 'start-expand)
+  
   (define output-s (cond
                     [(and as-transformer? capture-lifts?)
                      (expand-transformer input-s local-ctx
@@ -150,4 +165,12 @@
                                          #:lift-key lift-key)]
                     [else
                      (expand input-s local-ctx)]))
-  (flip-introduction-scopes output-s ctx))
+  
+  (log-expand local-ctx 'local-post output-s)
+  
+  (define result-s (flip-introduction-scopes output-s ctx))
+  
+  (unless skip-log-exit?
+    (log-expand local-ctx 'exit-local result-s))
+  
+  result-s)

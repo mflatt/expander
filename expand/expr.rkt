@@ -19,12 +19,13 @@
          "expand.rkt"
          "set-bang-trans.rkt"
          "rename-trans.rkt"
-         "reference-record.rkt")
+         "reference-record.rkt"
+         "log.rkt")
 
 ;; ----------------------------------------
 
 ;; Common expansion for `lambda` and `case-lambda`
-(define (lambda-clause-expander s disarmed-s formals bodys ctx)
+(define (lambda-clause-expander s disarmed-s formals bodys ctx log-renames-tag)
   (define sc (new-scope 'local))
   (define phase (expand-context-phase ctx))
   ;; Parse and check formal arguments:
@@ -38,6 +39,9 @@
   (define body-env (for/fold ([env (expand-context-env ctx)]) ([key (in-list keys)]
                                                                [id (in-list ids)])
                      (env-extend env key (local-variable id))))
+  (define sc-formals (add-scope formals sc))
+  (define sc-bodys (for/list ([body (in-list bodys)]) (add-scope body sc)))
+  (log-expand ctx log-renames-tag sc-formals (datum->syntax #f sc-bodys))
   ;; Expand the function body:
   (define body-ctx (struct-copy expand-context ctx
                                 [env body-env]
@@ -45,17 +49,17 @@
                                 [all-scopes-stx
                                  #:parent root-expand-context
                                  (add-scope (root-expand-context-all-scopes-stx ctx) sc)]))
-  (define exp-body (expand-body bodys sc body-ctx
+  (define exp-body (expand-body sc-bodys body-ctx
                                 #:source s #:disarmed-source disarmed-s))
   ;; Return formals (with new scope) and expanded body:
-  (values (add-scope formals sc)
-          exp-body))
+  (values sc-formals exp-body))
 
 (define (expand-lambda s ctx)
+  (log-expand ctx 'prim-lambda)
   (define disarmed-s (syntax-disarm s))
   (define m (match-syntax disarmed-s '(lambda formals body ...+)))
   (define-values (formals body)
-    (lambda-clause-expander s disarmed-s (m 'formals) (m 'body) ctx))
+    (lambda-clause-expander s disarmed-s (m 'formals) (m 'body) ctx 'lambda-renames))
   (rebuild
    s disarmed-s
    `(,(m 'lambda) ,formals ,body)))
@@ -71,6 +75,7 @@
 (add-core-form!
  'case-lambda
  (lambda (s ctx)
+   (log-expand ctx 'prim-case-lambda)
    (define disarmed-s (syntax-disarm s))
    (define m (match-syntax disarmed-s '(case-lambda [formals body ...+] ...)))
    (define cm (match-syntax disarmed-s '(case-lambda clause ...)))
@@ -80,8 +85,9 @@
       ,@(for/list ([formals (in-list (m 'formals))]
                    [bodys (in-list (m 'body))]
                    [clause (in-list (cm 'clause))])
+          (log-expand ctx 'next)
           (define-values (exp-formals exp-body)
-            (lambda-clause-expander s disarmed-s formals bodys ctx))
+            (lambda-clause-expander s disarmed-s formals bodys ctx 'case-lambda-renames))
           (rebuild clause clause `[,exp-formals ,exp-body]))))))
 
 (define (parse-and-flatten-formals all-formals sc s)
@@ -107,10 +113,13 @@
 ;; ----------------------------------------
 
 ;; Common expansion for `let[rec]-[syntaxes+]values`
-(define (make-let-values-form #:syntaxes? [syntaxes? #f]
+(define (make-let-values-form #:log-tag log-tag
+                              #:syntaxes? [syntaxes? #f]
                               #:rec? [rec? #f]
-                              #:split-by-reference? [split-by-reference? #f])
+                              #:split-by-reference? [split-by-reference? #f]
+                              #:renames-log-tag [renames-log-tag 'let-renames])
   (lambda (s ctx)
+    (log-expand ctx log-tag)
     (define disarmed-s (syntax-disarm s))
     (define m (if syntaxes?
                   (match-syntax disarmed-s '(letrec-syntaxes+values
@@ -140,9 +149,16 @@
    (define val-keyss (for/list ([ids (in-list val-idss)])
                        (for/list ([id (in-list ids)])
                          (add-local-binding! id phase counter #:frame-id frame-id))))
+   ;; Add new scope to body:
+   (define bodys (for/list ([body (in-list (m 'body))]) (add-scope body sc)))
+   (log-expand ctx renames-log-tag val-idss (datum->syntax #f bodys))
    ;; Evaluate compile-time expressions (if any):
+   (when syntaxes?
+     (log-expand ctx 'prepare-env)
+     (log-expand ctx 'enter-bind))
    (define trans-valss (for/list ([rhs (in-list (if syntaxes? (m 'trans-rhs) '()))]
                                   [ids (in-list trans-idss)])
+                         (log-expand ctx 'next)
                          (eval-for-syntaxes-binding (add-scope rhs sc) ids ctx)))
    ;; Fill expansion-time environment:
    (define rec-val-env
@@ -160,6 +176,8 @@
                                             [id (in-list ids)])
                        (maybe-install-free=id! val id phase)
                        (env-extend env key val))))
+   (when syntaxes?
+     (log-expand ctx 'exit-bind))
    ;; Expand right-hand sides and body
    (define expr-ctx (as-expression-context ctx))
    (define orig-rrs (expand-context-reference-records expr-ctx))
@@ -176,13 +194,17 @@
      (if syntaxes?
          (datum->syntax (syntax-shift-phase-level core-stx phase) 'letrec-values)
          (m 'let-values)))
+   
    (define (get-body track?)
+     (log-expand ctx 'next-group)
      (define body-ctx (struct-copy expand-context rec-ctx
                                    [reference-records orig-rrs]))
-     (define exp-body (expand-body (m 'body) sc (as-tail-context body-ctx #:wrt ctx)
+     (define exp-body (expand-body bodys (as-tail-context body-ctx #:wrt ctx)
                                    #:source s #:disarmed-source disarmed-s))
      (if track?
-         (syntax-track-origin exp-body s)
+         (let ([result-s (syntax-track-origin exp-body s)])
+           (log-expand ctx 'tag result-s)
+           result-s)
          exp-body))
    
    (define result-s
@@ -192,6 +214,7 @@
         s disarmed-s
         `(,letrec-values-id ,(for/list ([ids (in-list val-idss)]
                                         [rhs (in-list (m 'val-rhs))])
+                               (log-expand ctx 'next)
                                `[,ids ,(if rec?
                                            (expand (add-scope rhs sc)
                                                    (as-named-context rec-ctx ids))
@@ -199,6 +222,8 @@
                                                    (as-named-context expr-ctx ids)))])
           ,(get-body #f)))]
       [else
+       (log-expand ctx 'next-group)
+       (log-expand ctx 'letrec-values)
        (define val-rhss (for/list ([rhs (in-list (m 'val-rhs))])
                           (add-scope rhs sc)))
        (expand-and-split-bindings-by-reference
@@ -213,24 +238,27 @@
 
 (add-core-form!
  'let-values
- (make-let-values-form))
+ (make-let-values-form #:log-tag 'prim-let-values))
 
 (add-core-form!
  'letrec-values
- (make-let-values-form #:rec? #t))
+ (make-let-values-form #:rec? #t #:log-tag 'prim-letrec-values))
 
 (add-core-form!
  'letrec-syntaxes+values
- (make-let-values-form #:syntaxes? #t #:rec? #t #:split-by-reference? #t))
+ (make-let-values-form #:syntaxes? #t #:rec? #t #:split-by-reference? #t
+                       #:log-tag 'prim-letrec-syntaxes+values
+                       #:renames-log-tag 'letrec-syntaxes-renames))
 
 ;; ----------------------------------------
 
 (add-core-form!
  '#%stratified-body
  (lambda (s ctx)
+   (log-expand ctx 'prim-#%stratified)
    (define disarmed-s (syntax-disarm s))
    (define m (match-syntax disarmed-s '(#%stratified-body body ...+)))
-   (expand-body (m 'body) #f ctx #:stratified? #t #:track? #t
+   (expand-body (m 'body) ctx #:stratified? #t #:track? #t
                 #:source s #:disarmed-source disarmed-s)))
 
 ;; ----------------------------------------
@@ -238,6 +266,7 @@
 (add-core-form!
  '#%datum
  (lambda (s ctx)
+   (log-expand ctx 'prim-#%datum)
    (define disarmed-s (syntax-disarm s))
    (define m (match-syntax disarmed-s '(#%datum . datum)))
    (define datum (m 'datum))
@@ -250,25 +279,11 @@
     (list (datum->syntax (syntax-shift-phase-level core-stx phase) 'quote)
           datum))))
 
-;; Sensible `#%app` disallows empty combinations
-#|
-(add-core-form!
- '#%app
- (lambda (s ctx)
-   (define disarmed-s (syntax-disarm s))
-   (define m (match-syntax disarmed-s '(#%app rator rand ...)))
-   (rebuild
-    s disarmed-s
-    (list* (m '#%app)
-           (expand (m 'rator) ctx)
-           (for/list ([rand (in-list (m 'rand))])
-             (expand rand ctx))))))
-|#
-
 ;; '#%kernel `#%app` treats an empty combination as a literal null
 (add-core-form!
  '#%app
  (lambda (s ctx)
+   (log-expand ctx 'prim-#%app)
    (define disarmed-s (syntax-disarm s))
    (define m (match-syntax disarmed-s '(#%app e ...)))
    (define es (m 'e))
@@ -294,12 +309,14 @@
 (add-core-form!
  'quote
  (lambda (s ctx)
+   (log-expand ctx 'prim-quote)
    (match-syntax (syntax-disarm s) '(quote datum))
    s))
 
 (add-core-form!
  'quote-syntax
  (lambda (s ctx)
+   (log-expand ctx 'prim-quote-syntax)
    (define disarmed-s (syntax-disarm s))
    (define m-local (try-match-syntax disarmed-s '(quote-syntax datum #:local)))
    (define m (or m-local
@@ -323,20 +340,27 @@
 (add-core-form!
  'if
  (lambda (s ctx)
+   (log-expand ctx 'prim-if)
    (define disarmed-s (syntax-disarm s))
    (define m (match-syntax disarmed-s '(if tst thn els)))
    (define expr-ctx (as-expression-context ctx))
    (define tail-ctx (as-tail-context expr-ctx #:wrt ctx))
+   (log-expand ctx 'next-group)
    (rebuild
     s disarmed-s
     (list (m 'if)
           (expand (m 'tst) expr-ctx)
-          (expand (m 'thn) tail-ctx)
-          (expand (m 'els) tail-ctx)))))
+          (begin
+            (log-expand ctx 'next)
+            (expand (m 'thn) tail-ctx))
+          (begin
+            (log-expand ctx 'next)
+            (expand (m 'els) tail-ctx))))))
 
 (add-core-form!
  'with-continuation-mark
  (lambda (s ctx)
+   (log-expand ctx 'prim-with-continuation-mark)
    (define disarmed-s (syntax-disarm s))
    (define m (match-syntax disarmed-s '(with-continuation-mark key val body)))
    (define expr-ctx (as-expression-context ctx))
@@ -344,32 +368,45 @@
     s disarmed-s
     (list (m 'with-continuation-mark)
           (expand (m 'key) expr-ctx)
-          (expand (m 'val) expr-ctx)
-          (expand (m 'body) (as-tail-context expr-ctx #:wrt ctx))))))
+          (begin
+            (log-expand ctx 'next)
+            (expand (m 'val) expr-ctx))
+          (begin
+            (log-expand ctx 'next)
+            (expand (m 'body) (as-tail-context expr-ctx #:wrt ctx)))))))
 
-(define (make-begin)
+(define (make-begin log-tag #:list-start-index list-start-index)
  (lambda (s ctx)
+   (log-expand ctx log-tag)
    (define disarmed-s (syntax-disarm s))
    (define m (match-syntax disarmed-s '(begin e ...+)))
    (define expr-ctx (as-expression-context ctx))
    (define es (m 'e))
    (define last-i (sub1 (length es)))
+   (define exp-es
+     (for/list ([e (in-list es)]
+                [i (in-naturals)])
+       (when (= i list-start-index)
+         (log-expand ctx 'enter-list (list-tail es i)))
+       (log-expand ctx 'next)
+       (expand e (if (= i last-i)
+                     (as-tail-context expr-ctx #:wrt ctx)
+                     expr-ctx))))
+   (when (and (= 1 list-start-index)
+              (null? (cdr es)))
+     (log-expand ctx 'enter-list (cdr es)))
+   (log-expand ctx 'exit-list (list-tail exp-es list-start-index))
    (rebuild
     s disarmed-s
-    (cons (m 'begin)
-          (for/list ([e (in-list es)]
-                     [i (in-naturals)])
-            (expand e (if (= i last-i)
-                          (as-tail-context expr-ctx #:wrt ctx)
-                          expr-ctx)))))))
+    (cons (m 'begin) exp-es))))
 
 (add-core-form!
  'begin
- (make-begin))
+ (make-begin 'prim-begin0 #:list-start-index 0))
 
 (add-core-form!
  'begin0
- (make-begin))
+ (make-begin 'prim-begin0 #:list-start-index 1))
 
 (define (register-eventual-variable!? id ctx)
   (cond
@@ -386,6 +423,7 @@
 (add-core-form!
  '#%top
  (lambda (s ctx [implicit-omitted? #f])
+   (log-expand ctx 'prim-#%top)
    (define disarmed-s (syntax-disarm s))
    (define id (cond
                [implicit-omitted?
@@ -432,6 +470,7 @@
 (add-core-form!
  'set!
  (lambda (s ctx)
+   (log-expand ctx 'prim-set!)
    (define disarmed-s (syntax-disarm s))
    (define m (match-syntax disarmed-s '(set! id rhs)))
    (define id (m 'id))
@@ -444,11 +483,13 @@
      (define-values (t insp) (if binding
                                  (lookup binding ctx s)
                                  (values #f #f)))
+     (log-expand ctx 'resolve id)
      (cond
       [(or (variable? t)
            (and (not binding)
                 (or (register-eventual-variable!? id ctx)
                     (expand-context-allow-unbound? ctx))))
+       (log-expand ctx 'next)
        (rebuild
         s disarmed-s
         (list (m 'set!)
@@ -488,6 +529,7 @@
 (add-core-form!
  '#%variable-reference
  (lambda (s ctx)
+   (log-expand ctx 'prim-#%variable-reference)
    (define disarmed-s (syntax-disarm s))
    (define id-m (try-match-syntax disarmed-s '(#%variable-reference id)))
    (define top-m (and (not id-m)
@@ -509,13 +551,17 @@
 (add-core-form!
  '#%expression
  (lambda (s ctx)
+   (log-expand ctx 'prim-#%expression)
    (define disarmed-s (syntax-disarm s))
    (define m (match-syntax disarmed-s '(#%expression e)))
    (define exp-e (expand (m 'e) (as-tail-context (as-expression-context ctx)
                                                  #:wrt ctx)))
    (case (and (not (expand-context-preserve-#%expression-and-do-not-add-#%top? ctx))
               (expand-context-context ctx))
-     [(expression) (syntax-track-origin exp-e s)]
+     [(expression)
+      (define result-s (syntax-track-origin exp-e s))
+      (log-expand ctx 'tag result-s)
+      result-s]
      [else (rebuild
             s disarmed-s
             `(,(m '#%expression) ,exp-e))])))

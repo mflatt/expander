@@ -23,6 +23,7 @@
          "require.rkt"
          "provide.rkt"
          "def-id.rkt"
+         "log.rkt"
          "../compile/main.rkt"
          "../eval/top.rkt"
          "../eval/module.rkt"
@@ -33,17 +34,20 @@
  'module
  (lambda (s ctx)
    (unless (eq? (expand-context-context ctx) 'top-level)
+     (log-expand ctx 'prim-module)
      (raise-syntax-error #f "allowed only at the top level" s))
    (expand-module s ctx #f)))
 
 (add-core-form!
  'module*
  (lambda (s ctx)
+   (log-expand ctx 'prim-module)
    (raise-syntax-error #f "illegal use (not in a module top-level)" s)))
 
 (add-core-form!
  '#%module-begin
  (lambda (s ctx)
+   (log-expand ctx 'prim-module-begin)
    (unless (eq? (expand-context-context ctx) 'module-begin)
      (raise-syntax-error #f "not in a module-definition context" s))
    (unless (expand-context-module-begin-k ctx)
@@ -59,6 +63,7 @@
 (add-core-form!
  '#%declare
  (lambda (s ctx)
+   (log-expand ctx 'prim-declare)
    ;; The `#%module-begin` expander handles `#%declare`
    (raise-syntax-error #f "not allowed outside of a module body" s)))
 
@@ -69,6 +74,7 @@
                        #:enclosing-is-cross-phase-persistent? [enclosing-is-cross-phase-persistent? #f]
                        #:enclosing-requires+provides [enclosing-r+p #f]
                        #:mpis-for-enclosing-reset [mpis-for-enclosing-reset #f])
+  (log-expand init-ctx 'prim-module)
   (define disarmed-s (syntax-disarm s))
   (define m (match-syntax disarmed-s '(module id:module-name initial-require body ...)))
    
@@ -164,6 +170,7 @@
                                                    keep-enclosing-scope-at-phase)
        (namespace-module-visit! m-ns enclosing-mod
                                 keep-enclosing-scope-at-phase)]))
+   (log-expand init-ctx 'prepare-env)
    (initial-require!)
 
    ;; To detect whether the body is expanded multiple times:
@@ -172,22 +179,22 @@
    ;; The primitive `#%module-body` form calls this function to expand the
    ;; current module's body
    (define (module-begin-k mb-s ctx)
-     (define disarmed-mb-s (syntax-disarm mb-s))
-     (define mb-m (match-syntax disarmed-mb-s '(#%module-begin body ...)))
-     
      ;; In case the module body is expanded multiple times, we clear
      ;; the requires, provides and definitions information each time
      (when again?
        (requires+provides-reset! requires+provides)
        (initial-require!))
      (set! again? #t)
-
+     
      ;; In case `#%module-begin` expansion is forced on syntax that
      ;; that wasn't already introduced into the mdoule's inside scope,
      ;; add it to all the given body forms
-     (define bodys
-       (for/list ([body (in-list (mb-m 'body))])
-         (add-scope body inside-scope)))
+     (define added-s (add-scope mb-s inside-scope))
+     (log-expand ctx 'rename-one added-s)
+
+     (define disarmed-mb-s (syntax-disarm added-s))
+     (define mb-m (match-syntax disarmed-mb-s '(#%module-begin body ...)))
+     (define bodys (mb-m 'body))
      
      ;; For variable repeferences before corresponding binding (phase >= 1)
      (define need-eventually-defined (make-hasheqv)) ; phase -> list of id
@@ -224,7 +231,7 @@
                                                [need-eventually-defined (and (phase . >= . 1)
                                                                              need-eventually-defined)]
                                                [declared-submodule-names declared-submodule-names]
-                                               [lifts (make-lift-context ; FIXME: share single instance for same phase?
+                                               [lifts (make-lift-context
                                                        (make-wrap-as-definition self frame-id
                                                                                 inside-scope initial-require-s
                                                                                 defined-syms requires+provides))]
@@ -257,6 +264,8 @@
          ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
          ;; Pass 2: finish expanding expressions
          
+         (log-expand partial-body-ctx 'next-group)
+         
          (define body-ctx (struct-copy expand-context partial-body-ctx
                                        [only-immediate? #f]
                                        [frame-id #:parent root-expand-context #f]
@@ -278,6 +287,8 @@
      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
      ;; Pass 3: resolve provides at all phases
      
+     (log-expand ctx 'next-group)
+     
      (define fully-expanded-bodys-except-post-submodules
        (resolve-provides expression-expanded-bodys
                          #:original s
@@ -298,6 +309,8 @@
 
      ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
      ;; Pass 4: expand `module*` submodules
+     
+     (log-expand ctx 'next)
 
      (define submod-ctx (struct-copy expand-context ctx
                                      [frame-id #:parent root-expand-context #f]
@@ -348,8 +361,9 @@
      (struct-copy expand-context ctx
                   [context 'module-begin]
                   [module-begin-k module-begin-k]))
-      
-   ;; Add `#%module-begin` around the body if it's not already present
+   
+   ;; Add `#%module-begin` around the body if it's not already present;
+   ;; also logs 'rename-one
    (define mb
      (ensure-module-begin bodys
                           #:module-name-sym module-name-sym
@@ -377,7 +391,7 @@
    (imitate-generic-module-path-index! self)
    (for ([mpi (in-list (unbox mpis-to-reset))])
      (imitate-generic-module-path-index! mpi))
-   
+
    (let* ([result-s
            (rebuild
             s disarmed-s
@@ -390,6 +404,7 @@
           [result-s (if (requires+provides-all-bindings-simple? requires+provides)
                         (syntax-property result-s 'module-body-context-simple? #t)
                         result-s)])
+     (log-expand ctx 'rename-one result-s)
      result-s))
 
 ;; ----------------------------------------
@@ -411,6 +426,7 @@
      [(= 1 (length bodys))
       ;; Maybe it's already a `#%module-begin` form, or maybe it
       ;; will expand to one
+      (log-expand ctx 'rename-one (car bodys))
       (cond
        [(eq? '#%module-begin (core-form-sym (syntax-disarm (car bodys)) phase))
         ;; Done
@@ -428,7 +444,8 @@
          [else
           ;; No, it didn't expand to `#%module-begin`
           (add-module-begin (list partly-expanded-body) s initial-require-s phase module-name-sym 
-                            (make-mb-ctx))])])]
+                            (make-mb-ctx)
+                            #:log-rename-one? #f)])])]
      [else
       ;; Multiple body forms definitely need a `#%module-begin` wrapper
       (add-module-begin bodys s initial-require-s phase module-name-sym
@@ -436,7 +453,8 @@
   (add-enclosing-name-property mb module-name-sym))
 
 ;; Add `#%module-begin`, because it's needed
-(define (add-module-begin bodys s initial-require-s phase module-name-sym mb-ctx)
+(define (add-module-begin bodys s initial-require-s phase module-name-sym mb-ctx
+                          #:log-rename-one? [log-rename-one? #t])
   (define mb-id (datum->syntax initial-require-s '#%module-begin))
   ;; If `mb-id` is not bound, we'd like to give a clear error message
   (unless (resolve mb-id phase)
@@ -445,6 +463,9 @@
               initial-require-s
               `(,mb-id ,@bodys)
               s))
+  (log-expand mb-ctx 'tag mb)
+  (when log-rename-one?
+    (log-expand mb-ctx 'rename-one mb))
   (define partly-expanded-mb (expand (add-enclosing-name-property mb module-name-sym)
                                      mb-ctx))
   (unless (eq? '#%module-begin (core-form-sym (syntax-disarm partly-expanded-mb) phase))
@@ -534,13 +555,22 @@
             (loop #t (add-post-expansion-scope bodys partial-body-ctx)))]
        [else null])]
      [else
+      (log-expand partial-body-ctx 'next)
       (define exp-body (expand (car bodys) partial-body-ctx))
       (define disarmed-exp-body (syntax-disarm exp-body))
+      (define lifted-defns (get-and-clear-lifts! (expand-context-lifts partial-body-ctx)))
+      (cond
+       [(null? lifted-defns)
+        (log-expand partial-body-ctx 'rename-list lifted-defns)
+        (log-expand partial-body-ctx 'module-lift-loop (append lifted-defns (cons exp-body (cdr bodys))))]
+       [else
+        (log-expand partial-body-ctx 'module-lift-end-loop (cons exp-body (cdr bodys)))])
+      (log-expand partial-body-ctx 'rename-one exp-body)
       (append
        ;; Save any requires lifted during partial expansion
        (get-and-clear-require-lifts! (expand-context-require-lifts partial-body-ctx))
        ;; Ditto for expressions
-       (get-and-clear-lifts! (expand-context-lifts partial-body-ctx))
+       lifted-defns
        ;; Ditto for modules, which need to be processed
        (loop #f (get-and-clear-module-lifts! (expand-context-module-lifts partial-body-ctx)))
        ;; Dispatch on form revealed by partial expansion
@@ -548,20 +578,27 @@
          [(begin)
           (define m (match-syntax disarmed-exp-body '(begin e ...)))
           (define (track e) (syntax-track-origin e exp-body))
-          (loop tail? (append (map track (m 'e)) (cdr bodys)))]
+          (define spliced-bodys (append (map track (m 'e)) (cdr bodys)))
+          (log-expand partial-body-ctx 'splice spliced-bodys)
+          (loop tail? spliced-bodys)]
          [(begin-for-syntax)
+          (log-expand partial-body-ctx 'enter-prim exp-body)
+          (log-expand partial-body-ctx 'enter-prim-begin-for-syntax)
           (define m (match-syntax disarmed-exp-body '(begin-for-syntax e ...)))
           (define nested-bodys (pass-1-and-2-loop (m 'e) (add1 phase)))
           (define ct-m-ns (namespace->namespace-at-phase m-ns (add1 phase)))
           (namespace-run-available-modules! m-ns (add1 phase)) ; to support running `begin-for-syntax`
           (eval-nested-bodys nested-bodys (add1 phase) ct-m-ns self partial-body-ctx)
           (namespace-visit-available-modules! m-ns phase) ; since we're shifting back a phase
+          (log-expand partial-body-ctx 'exit-prim)
           (cons
            (rebuild
             exp-body disarmed-exp-body
             `(,(m 'begin-for-syntax) ,@nested-bodys))
            (loop tail? (cdr bodys)))]
          [(define-values)
+          (log-expand partial-body-ctx 'enter-prim exp-body)
+          (log-expand partial-body-ctx 'enter-prim-define-values)
           (define m (match-syntax disarmed-exp-body '(define-values (id ...) rhs)))
           (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
           (check-no-duplicate-ids ids phase exp-body)
@@ -571,11 +608,14 @@
                                                       #:frame-id frame-id
                                                       #:requires+provides requires+provides))
           (add-defined-syms! requires+provides syms phase)
+          (log-expand partial-body-ctx 'exit-prim)
           (cons (rebuild 
                  exp-body disarmed-exp-body
                  `(,(m 'define-values) ,ids ,(m 'rhs)))
                 (loop tail? (cdr bodys)))]
          [(define-syntaxes)
+          (log-expand partial-body-ctx 'enter-prim exp-body)
+          (log-expand partial-body-ctx 'enter-prim-define-syntaxes)
           (define m (match-syntax disarmed-exp-body '(define-syntaxes (id ...) rhs)))
           (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
           (check-no-duplicate-ids ids phase exp-body)
@@ -596,17 +636,21 @@
                 [id (in-list ids)])
             (maybe-install-free=id! val id phase)
             (namespace-set-transformer! m-ns phase sym val))
+          (log-expand partial-body-ctx 'exit-prim)
           (cons (rebuild 
                  exp-body disarmed-exp-body
                  `(,(m 'define-syntaxes) ,ids ,exp-rhs))
                 (loop tail? (cdr bodys)))]
          [(#%require)
+          (log-expand partial-body-ctx 'enter-prim exp-body)
+          (log-expand partial-body-ctx 'enter-prim-require)
           (define ready-body (remove-use-site-scopes disarmed-exp-body partial-body-ctx))
           (define m (match-syntax ready-body '(#%require req ...)))
           (parse-and-perform-requires! (m 'req) exp-body #:self self
                                        m-ns phase #:run-phase phase
                                        requires+provides
                                        #:declared-submodule-names declared-submodule-names)
+          (log-expand partial-body-ctx 'exit-prim)
           (cons exp-body
                 (loop tail? (cdr bodys)))]
          [(#%provide)
@@ -618,6 +662,7 @@
           (define ready-body (remove-use-site-scopes exp-body partial-body-ctx))
           (define submod
             (expand-submodule ready-body self partial-body-ctx
+                              #:is-star? #f
                               #:declared-submodule-names declared-submodule-names
                               #:mpis-to-reset mpis-to-reset))
           (cons submod
@@ -694,6 +739,7 @@
             (loop #t bodys))]
        [else bodys])]
      [else
+      (log-expand body-ctx 'next)
       (define disarmed-body (syntax-disarm (car bodys)))
       (define exp-body
         (case (core-form-sym disarmed-body phase)
@@ -708,7 +754,7 @@
            (car bodys)]
           [else
            (expand (car bodys) (as-expression-context body-ctx))]))
-      (define lifts
+      (define lifted-defns
         ;; If there were any lifts, the right-hand sides need to be expanded
         (loop #f (get-and-clear-lifts! (expand-context-lifts body-ctx))))
       (define lifted-requires
@@ -724,9 +770,14 @@
                                        body-ctx
                                        #:mpis-to-reset mpis-to-reset
                                        #:declared-submodule-names declared-submodule-names))
+      (cond
+       [(null? lifted-defns)
+        (log-expand body-ctx 'module-lift-loop lifted-defns)]
+       [else
+        (log-expand body-ctx 'module-lift-end-loop (cons exp-body (cdr bodys)))])
       (append
        lifted-requires
-       lifts
+       lifted-defns
        lifted-modules
        (cons exp-body
              (loop tail? (cdr bodys))))])))
@@ -762,6 +813,8 @@
       (define disarmed-body (syntax-disarm (car bodys)))
       (case (core-form-sym disarmed-body phase)
         [(#%provide)
+         (log-expand ctx 'enter-prim (car bodys))
+         (log-expand ctx 'enter-prim-provide)
          (define m (match-syntax disarmed-body '(#%provide spec ...)))
          (define specs
            (parse-and-expand-provides! (m 'spec) (car bodys)
@@ -773,6 +826,7 @@
                                                           [requires+provides requires+provides]
                                                           [declared-submodule-names declared-submodule-names])
                                        expand rebuild))
+         (log-expand ctx 'exit-prim)
          (cons (rebuild
                 (car bodys) disarmed-body
                 `(,(m '#%provide) ,@specs))
@@ -862,6 +916,7 @@
              (define shifted-s (syntax-shift-phase-level (car bodys) neg-phase))
              (define submod
                (expand-submodule shifted-s self submod-ctx
+                                 #:is-star? #t
                                  #:keep-enclosing-scope-at-phase neg-phase
                                  #:enclosing-requires+provides requires+provides
                                  #:enclosing-is-cross-phase-persistent? enclosing-is-cross-phase-persistent?
@@ -870,6 +925,7 @@
              (syntax-shift-phase-level submod phase)]
             [else
              (expand-submodule (car bodys) self submod-ctx
+                               #:is-star? #t
                                #:mpis-to-reset mpis-to-reset
                                #:declared-submodule-names declared-submodule-names)]))
          (cons submod
@@ -933,11 +989,15 @@
 ;; ----------------------------------------
 
 (define (expand-submodule s self ctx
+                          #:is-star? is-star?
                           #:keep-enclosing-scope-at-phase [keep-enclosing-scope-at-phase #f]
                           #:enclosing-requires+provides [enclosing-r+p #f]
                           #:enclosing-is-cross-phase-persistent? [enclosing-is-cross-phase-persistent? #f]
                           #:mpis-to-reset mpis-to-reset
                           #:declared-submodule-names declared-submodule-names)
+  (log-expand ctx 'enter-prim s)
+  (log-expand ctx (if is-star? 'enter-prim-submodule* 'enter-prim-submodule))
+  
   ;; Register name and check for duplicates
   (define m (match-syntax s '(module name . _)))
   (define name (syntax-e (m 'name)))
@@ -971,6 +1031,8 @@
                                            #:full-module-name (resolved-module-path-name module-name))
                      #:as-submodule? #t)
      #:as-submodule? #t))
+  
+  (log-expand ctx 'exit-prim submod)
 
   ;; Return the expanded submodule
   submod)

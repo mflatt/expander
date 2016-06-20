@@ -15,11 +15,12 @@
          copy-root-expand-context
          current-expand-context
          get-current-expand-context
+
+         current-expand-observe
          
          as-expression-context
          as-tail-context
          as-named-context)
-
 
 ;; An `expand-context` has the rest of the information for an expansion 
 (struct expand-context root-expand-context (context    ; 'expression, 'module, or 'top-level
@@ -45,7 +46,8 @@
                                             require-lifts   ; lifted `require`s
                                             to-module-lifts ; lifted `provide` and end declarations
                                             requires+provides ; enclosing module's requires+provides during `provide`
-                                            name))     ; #f or identifier to name the expression
+                                            name       ; #f or identifier to name the expression
+                                            observer)) ; logging observer (for the macro debugger)
 
 (define (make-expand-context ns)
   (define root-ctx (namespace-get-root-expand-ctx ns))
@@ -81,7 +83,8 @@
                   #f   ; require-lifts
                   #f   ; lifts-to-module
                   #f   ; requires+provides
-                  #f)) ; name
+                  #f   ; name
+                  (current-expand-observe)))
 
 (define (copy-root-expand-context ctx root-ctx)
   (struct-copy expand-context ctx
@@ -104,6 +107,19 @@
       (if fail-ok?
           #f
           (error who "not currently expanding"))))
+
+;; ----------------------------------------
+
+;; For macro debugging; see "log.rkt"
+
+(define current-expand-observe (make-parameter #f
+                                               (lambda (v)
+                                                 (unless (or (not v)
+                                                             (procedure? v))
+                                                   (raise-argument-error 'current-expand-observe
+                                                                          "(or/c procedure? #f)"
+                                                                          v))
+                                                 v)))
 
 ;; ----------------------------------------
 

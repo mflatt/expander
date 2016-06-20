@@ -13,6 +13,7 @@
          "lift-context.rkt"
          "require+provide.rkt"
          "protect.rkt"
+         "log.rkt"
          "../common/module-path.rkt"
          "../namespace/namespace.rkt"
          "../namespace/module.rkt"
@@ -152,13 +153,16 @@
                           "(or #f (procedure-arity-includes/c 0))" 
                           failure-thunk))
   (define ctx (get-current-expand-context who))
+  (log-expand ctx 'local-value id)
   (define phase (expand-context-phase ctx))
   (let loop ([id id])
     (define b (if immediate?
                   (resolve+shift id phase #:immediate? #t)
                   (resolve+shift/extra-inspector id phase (expand-context-namespace ctx))))
+    (log-expand ctx 'resolve id)
     (cond
      [(not b)
+      (log-expand ctx 'local-value-result #f)
       (if failure-thunk
           (failure-thunk)
           (error 'syntax-local-value "unbound identifier: ~v" id))]
@@ -166,15 +170,19 @@
       (define-values (v insp) (lookup b ctx id #:out-of-context-as-variable? #t))
       (cond
        [(or (variable? v) (core-form? v))
+        (log-expand ctx 'local-value-result #f)
         (if failure-thunk
             (failure-thunk)
             (error 'syntax-local-value "identifier is not bound to syntax: ~v" id))]
-       [(rename-transformer? v)
-        (if immediate?
-            (values v (rename-transformer-target v))
-            (loop (rename-transformer-target v)))]
-       [immediate? (values v #f)]
-       [else v])])))
+       [else
+        (log-expand ctx 'local-value-result #t)
+        (cond
+         [(rename-transformer? v)
+          (if immediate?
+              (values v (rename-transformer-target v))
+              (loop (rename-transformer-target v)))]
+         [immediate? (values v #f)]
+         [else v])])])))
 
 (define (syntax-local-value id [failure-thunk #f])
   (do-syntax-local-value 'syntax-local-value #:immediate? #f id failure-thunk))
@@ -194,6 +202,7 @@
                 (set-box! counter (add1 (unbox counter)))
                 (define name (string->unreadable-symbol (format "lifted/~a" (unbox counter))))
                 (add-scope (datum->syntax #f name) (new-scope 'macro))))
+  (log-expand ctx 'local-lift ids s)
   (map (lambda (id) (flip-introduction-scopes id ctx))
        ;; returns converted ids:
        (add-lifted! lifts
@@ -222,7 +231,8 @@
      (add-lifted-module! (expand-context-module-lifts ctx) s phase)]
     [else
      (raise-arguments-error 'syntax-local-lift-module "not a module form"
-                            "given form" s)]))
+                            "given form" s)])
+  (log-expand ctx 'lift-statement s))
 
 ;; ----------------------------------------
 
@@ -234,52 +244,59 @@
   (define ctx (get-current-expand-context who))
   (define phase (expand-context-phase ctx))
   (define lift-ctx (get ctx))
-  (add! lift-ctx
-        (filter (if intro?
-                    (flip-introduction-scopes s ctx)
-                    s)
-                phase
-                lift-ctx)
-        phase))
+  (define added-s (filter (if intro?
+                              (flip-introduction-scopes s ctx)
+                              s)
+                          phase
+                          lift-ctx))
+  (add! lift-ctx added-s phase)
+  (values ctx added-s))
 
 (define (syntax-local-lift-require s use-s)
   (define sc (new-scope 'macro))
-  (do-local-lift-to-module 'syntax-local-lift-module-require
-                           expand-context-require-lifts
-                           add-lifted-require!
-                           s #:intro? #f
-                           #:more-checks
-                           (lambda ()
-                             (check 'syntax-local-lift-module-require
-                                    syntax?
-                                    use-s))
-                           (lambda (s phase require-lift-ctx)
-                             (wrap-form '#%require
-                                        (add-scope s sc)
-                                        phase)))
-  (add-scope use-s sc))
+  (define-values (ctx added-s)
+    (do-local-lift-to-module 'syntax-local-lift-module-require
+                             expand-context-require-lifts
+                             add-lifted-require!
+                             s #:intro? #f
+                             #:more-checks
+                             (lambda ()
+                               (check 'syntax-local-lift-module-require
+                                      syntax?
+                                      use-s))
+                             (lambda (s phase require-lift-ctx)
+                               (wrap-form '#%require
+                                          (add-scope s sc)
+                                          phase))))
+  (define result-s (add-scope use-s sc))
+  (log-expand ctx 'lift-require added-s use-s result-s)
+  result-s)
 
 (define (syntax-local-lift-provide s)
-  (do-local-lift-to-module 'syntax-local-lift-module-end-declaration
-                           expand-context-to-module-lifts
-                           add-lifted-to-module-provide!
-                           s
-                           (lambda (s phase to-module-lift-ctx)
-                             (wrap-form '#%provide s phase))))
+  (define-values (ctx result-s)
+    (do-local-lift-to-module 'syntax-local-lift-module-end-declaration
+                             expand-context-to-module-lifts
+                             add-lifted-to-module-provide!
+                             s
+                             (lambda (s phase to-module-lift-ctx)
+                               (wrap-form '#%provide s phase))))
+  (log-expand ctx 'lift-provide result-s))
 
 (define (syntax-local-lift-module-end-declaration s)
-  (do-local-lift-to-module 'syntax-local-lift-module-end-declaration
-                           expand-context-to-module-lifts
-                           add-lifted-to-module-end!
-                           s
-                           (lambda (orig-s phase to-module-lift-ctx)
-                             (define s (if (to-module-lift-context-end-as-expressions? to-module-lift-ctx)
-                                           (wrap-form '#%expression orig-s phase)
-                                           orig-s))
-                             (for/fold ([s s]) ([phase (in-range phase 0 -1)])
-                               (wrap-form 'begin-for-syntax
-                                          s
-                                          (sub1 phase))))))
+  (define-values (ctx also-s)
+    (do-local-lift-to-module 'syntax-local-lift-module-end-declaration
+                             expand-context-to-module-lifts
+                             add-lifted-to-module-end!
+                             s
+                             (lambda (orig-s phase to-module-lift-ctx)
+                               (define s (if (to-module-lift-context-end-as-expressions? to-module-lift-ctx)
+                                             (wrap-form '#%expression orig-s phase)
+                                             orig-s))
+                               (for/fold ([s s]) ([phase (in-range phase 0 -1)])
+                                 (wrap-form 'begin-for-syntax
+                                            s
+                                            (sub1 phase))))))
+  (log-expand ctx 'lift-statement s))
 
 (define (wrap-form sym s phase)
   (datum->syntax

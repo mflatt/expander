@@ -20,7 +20,8 @@
          "../expand/lift-context.rkt"
          "../expand/require.rkt"
          "../expand/require+provide.rkt"
-         "reflect.rkt")
+         "reflect.rkt"
+         "../expand/log.rkt")
 
 (provide eval
          compile
@@ -84,7 +85,9 @@
 
 ;; This `expand` is suitable as an expand handler (if such a thing
 ;; existed) to be called by `expand` and `expand-syntax`.
-(define (expand s [ns (current-namespace)])
+(define (expand s [ns (current-namespace)]
+                #:log-expand? [log-expand? #f])
+  (when log-expand? (log-expand-start))
   (per-top-level s ns
                  #:single expand-single
                  #:combine cons

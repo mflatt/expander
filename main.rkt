@@ -11,6 +11,7 @@
          "boot/kernel.rkt"
          "boot/main-primitive.rkt"
          "boot/utils-primitive.rkt"
+         "boot/expobs-primitive.rkt"
          "boot/place-primitive.rkt"
          "boot/runtime-primitive.rkt"
          "boot/handler.rkt"
@@ -66,6 +67,7 @@
   (declare-hash-based-module! '#%utils utils-primitives #:namespace ns)
   (declare-hash-based-module! '#%place-struct place-struct-primitives #:namespace ns)
   (declare-hash-based-module! '#%boot boot-primitives #:namespace ns)
+  (declare-hash-based-module! '#%expobs expobs-primitives #:namespace ns)
   (declare-kernel-module! ns
                           #:eval eval
                           #:main-ids (for/set ([name (in-hash-keys main-primitives)])
@@ -78,6 +80,7 @@
   (declare-reexporting-module! '#%builtin (list* '#%place-struct
                                                  '#%utils
                                                  '#%boot
+                                                 '#%expobs
                                                  runtime-instances)
                                #:namespace ns
                                #:reexport? #f)

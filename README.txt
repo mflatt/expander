@@ -6,11 +6,11 @@ TODO:
  bug fix for local definition contexts (MB's example)
  load handler's direct loading of submodules
  preserved syntax properties
- expander observer
  continuation barrier on macro invocation
  continuation prompt for module body
  enforced namespace constants
  lock on namespace & registry
+ local-expand int-def post-expansion action (and logging)
 
 ----------------------------------------
 

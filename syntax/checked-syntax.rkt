@@ -22,7 +22,9 @@
                     [read-syntax raw:read-syntax]
                     [read-syntax/recursive raw:read-syntax/recursive])
          (rename-in "debug.rkt"
-                    [syntax-debug-info raw:syntax-debug-info]))
+                    [syntax-debug-info raw:syntax-debug-info])
+         (only-in "../expand/context.rkt" get-current-expand-context)
+         "../expand/log.rkt")
 
 ;; Provides public versions of syntax functions (with contract checks,
 ;; for example); see also "checked-taint.rkt"
@@ -164,7 +166,10 @@
   (check 'syntax-track-origin syntax? new-stx)
   (check 'syntax-track-origin syntax? old-stx)
   (check 'syntax-track-origin identifier? id)
-  (raw:syntax-track-origin new-stx old-stx id))
+  (define s (raw:syntax-track-origin new-stx old-stx id))
+  (define ctx (get-current-expand-context #:fail-ok? #t))
+  (when ctx (log-expand ctx 'track-origin s))
+  s)
 
 ;; ----------------------------------------
 
