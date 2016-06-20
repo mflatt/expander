@@ -143,26 +143,31 @@
    (define mpis-to-reset (box null))
      
    ;; Initial require
-   (cond
-    [(not keep-enclosing-scope-at-phase)
-     ;; Install the initial require
-     (perform-initial-require! initial-require self
-                               initial-require-s
-                               m-ns
-                               requires+provides)]
-    [else
-     ;; For `(module* name #f ....)`, just register the enclosing module
-     ;; as an import and visit it
-     (add-required-module! requires+provides
-                           enclosing-mod
-                           keep-enclosing-scope-at-phase
-                           enclosing-is-cross-phase-persistent?)
-     (add-enclosing-module-defined-and-required! requires+provides
-                                                 #:enclosing-requires+provides enclosing-r+p
-                                                 enclosing-mod
-                                                 keep-enclosing-scope-at-phase)
-     (namespace-module-visit! m-ns enclosing-mod
-                              keep-enclosing-scope-at-phase)])
+   (define (initial-require!)
+     (cond
+      [(not keep-enclosing-scope-at-phase)
+       ;; Install the initial require
+       (perform-initial-require! initial-require self
+                                 initial-require-s
+                                 m-ns
+                                 requires+provides)]
+      [else
+       ;; For `(module* name #f ....)`, just register the enclosing module
+       ;; as an import and visit it
+       (add-required-module! requires+provides
+                             enclosing-mod
+                             keep-enclosing-scope-at-phase
+                             enclosing-is-cross-phase-persistent?)
+       (add-enclosing-module-defined-and-required! requires+provides
+                                                   #:enclosing-requires+provides enclosing-r+p
+                                                   enclosing-mod
+                                                   keep-enclosing-scope-at-phase)
+       (namespace-module-visit! m-ns enclosing-mod
+                                keep-enclosing-scope-at-phase)]))
+   (initial-require!)
+
+   ;; To detect whether the body is expanded multiple times:
+   (define again? #f)
    
    ;; The primitive `#%module-body` form calls this function to expand the
    ;; current module's body
@@ -171,10 +176,11 @@
      (define mb-m (match-syntax disarmed-mb-s '(#%module-begin body ...)))
      
      ;; In case the module body is expanded multiple times, we clear
-     ;; the set of provides and definitions each time (but we
-     ;; accumulate requires, since those may have been used for
-     ;; earlier expansions)
-     (reset-provides-and-defines! requires+provides)
+     ;; the requires, provides and definitions information each time
+     (when again?
+       (requires+provides-reset! requires+provides)
+       (initial-require!))
+     (set! again? #t)
 
      ;; In case `#%module-begin` expansion is forced on syntax that
      ;; that wasn't already introduced into the mdoule's inside scope,

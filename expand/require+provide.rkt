@@ -27,7 +27,7 @@
          extract-module-definitions
          extract-all-module-requires
          
-         reset-provides-and-defines!
+         requires+provides-reset!
          add-provide!
          
          attach-require-provide-properties
@@ -46,6 +46,8 @@
                            [can-cross-phase-persistent? #:mutable]
                            [all-bindings-simple? #:mutable])) ; tracks whether bindings are easily reconstructed
 
+(struct required (id phase can-be-shadowed?))
+
 (define (make-requires+provides self)
   (requires+provides self
                      (make-hash)    ; require-mpis
@@ -57,7 +59,13 @@
                      #t
                      #t))
 
-(struct required (id phase can-be-shadowed?))
+(define (requires+provides-reset! r+p)
+  (hash-clear! (requires+provides-require-mpis-in-order r+p))
+  (hash-clear! (requires+provides-requires r+p))
+  (hash-clear! (requires+provides-provides r+p))
+  (hash-clear! (requires+provides-phase-to-defined-syms r+p)))
+
+;; ----------------------------------------
 
 (define (intern-mpi r+p mpi)
   (or (hash-ref (requires+provides-require-mpis/fast r+p)
@@ -259,11 +267,6 @@
       reqd)))
 
 ;; ----------------------------------------
-
-;; Clear recorded provides
-(define (reset-provides-and-defines! r+p)
-  (hash-clear! (requires+provides-provides r+p))
-  (hash-clear! (requires+provides-phase-to-defined-syms r+p)))
 
 ;; Register that a binding is provided as a given symbol; report an
 ;; error if the provide is inconsistent with an earlier one
