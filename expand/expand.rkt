@@ -91,8 +91,8 @@
      (expand-implicit '#%top (substitute-alternate-id s alternate-id) ctx s)]
     [else
      ;; Variable or form as identifier macro
-     (define-values (t insp) (lookup binding ctx id #:in (and alternate-id s)))
-     (dispatch t insp s id ctx binding)])))
+     (define-values (t insp-of-t) (lookup binding ctx id #:in (and alternate-id s)))
+     (dispatch t insp-of-t s id ctx binding)])))
 
 ;; An "application" form that starts with an identifier
 (define (expand-id-application-form s ctx alternate-id)
@@ -112,14 +112,14 @@
      (expand-implicit '#%app (substitute-alternate-id s alternate-id) ctx id)]
     [else
      ;; Find out whether it's bound as a variable, syntax, or core form
-     (define-values (t insp) (lookup binding ctx id #:in (and alternate-id (car (syntax-e disarmed-s)))))
+     (define-values (t insp-of-t) (lookup binding ctx id #:in (and alternate-id (car (syntax-e disarmed-s)))))
      (cond
       [(variable? t)
        ;; Not as syntax or core form, so use implicit `#%app`
        (expand-implicit '#%app (substitute-alternate-id s alternate-id) ctx id)]
       [else
        ;; Syntax or core form as "application"
-       (dispatch t insp s id ctx binding)])])))
+       (dispatch t insp-of-t s id ctx binding)])])))
 
 ;; Handle an implicit: `#%app`, `#%top`, or `#%datum`; this is similar
 ;; to handling an id-application form, but there are several little
@@ -137,10 +137,10 @@
     [(eq? b 'ambiguous)
      (raise-ambiguous-error id ctx)]
     [else
-     (define-values (t insp) (lookup b ctx id))
+     (define-values (t insp-of-t) (lookup b ctx id))
      (cond
       [(transformer? t)
-       (dispatch-transformer t insp (make-explicit sym s disarmed-s) id ctx b)]
+       (dispatch-transformer t insp-of-t (make-explicit sym s disarmed-s) id ctx b)]
       [(expand-context-only-immediate? ctx)
        (log-expand ctx 'exit-check s)
        s]
@@ -179,12 +179,12 @@
 ;; other compile-time value (which is an error), or a token
 ;; indicating that the binding is a run-time variable; note that
 ;; `s` is not disarmed
-(define (dispatch t insp s id ctx binding)
+(define (dispatch t insp-of-t s id ctx binding)
   (cond
    [(core-form? t)
     (dispatch-core-form t s ctx)]
    [(transformer? t)
-    (dispatch-transformer t insp s id ctx binding)]
+    (dispatch-transformer t insp-of-t s id ctx binding)]
    [(variable? t)
     (dispatch-variable t s id ctx binding)]
    [else
@@ -213,7 +213,7 @@
 
 ;; Call a macro expander, taking into account whether it works
 ;; in the current context, whether to expand just once, etc.
-(define (dispatch-transformer t insp s id ctx binding)
+(define (dispatch-transformer t insp-of-t s id ctx binding)
   (cond
    [(not-in-this-expand-context? t ctx)
     (log-expand ctx 'enter-macro s)
@@ -224,7 +224,7 @@
     (log-expand* ctx #:when (expand-context-only-immediate? ctx) ['visit s] ['resolves id])
     ;; Apply transformer and expand again
     (define-values (exp-s re-ctx)
-      (apply-transformer t insp s id ctx binding))
+      (apply-transformer t insp-of-t s id ctx binding))
     (log-expand* ctx #:when (expand-context-only-immediate? ctx) ['return exp-s])
     (cond
      [(expand-context-just-once? ctx) exp-s]
@@ -254,8 +254,10 @@
 ;; ----------------------------------------
 
 ;; Given a macro transformer `t`, apply it --- adding appropriate
-;; scopes to represent the expansion step
-(define (apply-transformer t insp s id ctx binding)
+;; scopes to represent the expansion step; the `insp-of-t` inspector
+;; is the inspector of the module that defines `t`, which gives it
+;; priviledge for `syntax-arm` and similar
+(define (apply-transformer t insp-of-t s id ctx binding)
   (log-expand ctx 'enter-macro s)
   (define disarmed-s (syntax-disarm s))
   (define intro-scope (new-scope 'macro))
@@ -271,7 +273,7 @@
   ;; for `syntax-local-....` functions, and we may accumulate scopes from
   ;; definition contexts created by the transformer
   (define transformed-s
-    (apply-transformer-in-context t cleaned-s ctx insp
+    (apply-transformer-in-context t cleaned-s ctx insp-of-t
                                   intro-scope use-scopes def-ctx-scopes
                                   id))
   
@@ -290,7 +292,7 @@
 ;; With all the pre-call scope work done and post-call scope work in
 ;; the continuation, actually call the transformer function in the
 ;; appropriate context
-(define (apply-transformer-in-context t cleaned-s ctx insp
+(define (apply-transformer-in-context t cleaned-s ctx insp-of-t
                                       intro-scope use-scopes def-ctx-scopes
                                       id)
   (log-expand ctx 'macro-pre-x cleaned-s)
@@ -303,7 +305,7 @@
                    [current-namespace (namespace->namespace-at-phase
                                        (expand-context-namespace ctx)
                                        (add1 (expand-context-phase ctx)))]
-                   [current-module-code-inspector (or insp (current-module-code-inspector))])
+                   [current-module-code-inspector (or insp-of-t (current-module-code-inspector))])
       (call-with-continuation-barrier
        (lambda ()
          ;; Call the transformer!

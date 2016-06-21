@@ -11,6 +11,46 @@ TODO:
 
 ----------------------------------------
 
+Running:
+
+ % racket demo.rkt
+
+   Runs the examples/tests in "demo.rkt". The tests are not remotely
+   complete, but they're a quick and useful sanity check. The
+   "demo.rkt" module uses the somewhat internal interface exported by
+   `main`, where the expansion, compilation, and evaluation aer less
+   overloaded and more controlable.
+
+ % racket run.rkt -c <dir>
+
+   Runs the expander to load itself from source. Expanded and compiled
+   modules are stored in <dir>, somewhat like bytecode files, but
+   there's not automatically dependency tracking; throw away <dir> if
+   the expander or any source changes.
+
+ % racket run.rkt -c <dir> -l <module-path>
+ % racket run.rkt -c <dir> -t <file-path-for-module>
+
+   Runs the expander to load the specified module (instead of the
+   default module, which is the expander itself).
+
+ % racket run.rkt -c <dir> -f <file-path-for-top-level>
+
+   Loads the given file as a sequence of top-level forms.
+
+ % racket run.rkt -c <dir> -e -l <module-path>
+
+   Expands the given file, instead of compiling and running it.
+
+ % racket run.rkt -c <dir> -x
+
+   Reports extraction for bootstrap. Currently, there will be
+   failures, because the runtime system doesn't yet implement linklets
+   and interfaces, and because the runtime system's `read-syntax` and
+   simple syntax-manipulation functions are used.
+
+----------------------------------------
+
 Roadmap to a few key pieces:
 
  syntax/ - syntax-object and binding representation
@@ -51,40 +91,34 @@ needs `syntax?` must import "syntax/syntax.rkt" or
 
 ----------------------------------------
 
-Running:
+Some naming conventions:
 
- % racket demo.rkt
+ s or stx - a syntax object
 
-   Runs the examples/tests in "demo.rkt". The tests are not remotely
-   complete, but they're a quick and useful sanity check. The
-   "demo.rkt" module uses the somewhat internal interface exported by
-   `main`, where the expansion, compilation, and evaluation aer less
-   overloaded and more controlable.
+ sc - a scope
 
- % racket run.rkt -c <dir>
+ scs - a set or list of scopes
 
-   Runs the expander to load itself from source. Expanded and compiled
-   modules are stored in <dir>, somewhat like bytecode files, but
-   there's not automatically dependency tracking; throw away <dir> if
-   the expander or any source changes.
+ id - an identifier (obviously)
 
- % racket run.rkt -c <dir> -l <module-path>
- % racket run.rkt -c <dir> -t <file-path-for-module>
+ b - a binding; sometimes spelled out as `binding`
 
-   Runs the expander to load the specified module (instead of the
-   default module, which is the expander itself).
+ m - a result of syntax matching
 
- % racket run.rkt -c <dir> -f <file-path-for-top-level>
+ m - a module
 
-   Loads the given file as a sequence of top-level forms.
+ ns - a namespace
 
- % racket run.rkt -c <dir> -e -l <module-path>
+ ctx - an expansion context (including the expand-time environment)
 
-   Expands the given file, instead of compiling and running it.
+ cctx - a compilation context (including a compile-tme environment)
 
- % racket run.rkt -c <dir> -x
+ insp - an inspector
 
-   Reports extraction for bootstrap. Currently, there will be
-   failures, because the runtime system doesn't yet implement linklets
-   and interfaces, and because the runtime system's `read-syntax` and
-   simple syntax-manipulation functions are used.
+ mpi - a module path index
+
+ mod-name - a resolved module path, usually; sometimes used for other
+  forms of module reference (FIXME)
+
+ <subscript>-<something> - like <something>, but specifically one for
+   <subscript>; for example, `m-ns` is a namespace for some module
