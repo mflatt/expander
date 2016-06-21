@@ -68,8 +68,9 @@
    [else (error "bad binding")]))
 
 (define (identifier-binding-symbol id phase)
-  (define b (resolve+shift id phase))
+  (define b (resolve+shift id phase #:unbound-sym? #t))
   (cond
+   [(symbol? b) b]
    [(module-binding? b)
     (module-binding-sym b)]
    [(local-binding? b)

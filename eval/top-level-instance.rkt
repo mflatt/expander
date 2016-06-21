@@ -1,6 +1,7 @@
 #lang racket/base
 (require "../syntax/to-list.rkt"
          "../syntax/scope.rkt"
+         "../syntax/binding.rkt"
          "../common/phase.rkt"
          "../namespace/namespace.rkt"
          "../expand/root-expand-context.rkt"
@@ -17,12 +18,14 @@
 (instance-set-variable-value!
  top-level-instance
  'top-level-bind!
- (lambda (id mpi orig-phase phase-shift ns sym)
+ (lambda (id mpi orig-phase phase-shift ns sym trans-val)
    (define phase (phase+ orig-phase phase-shift))
    (define b (make-module-binding mpi phase sym
                                   #:frame-id (root-expand-context-frame-id
                                               (namespace-get-root-expand-ctx ns))))
-   (add-binding! id b phase)))
+   (add-binding! id b phase)
+   (when trans-val
+     (maybe-install-free=id! trans-val id phase))))
 
 (instance-set-variable-value!
  top-level-instance

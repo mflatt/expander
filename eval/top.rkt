@@ -104,7 +104,8 @@
                                                                     val))))
 
      (define linklet
-       (eval-linklet (hash-ref h phase #f)))
+       (let ([l (hash-ref h phase #f)])
+         (and l (eval-linklet l))))
 
      (cond
       [linklet

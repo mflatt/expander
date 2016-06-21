@@ -121,11 +121,13 @@
                                      [gen-sym (in-list gen-syms)])
                             `(set! ,def-sym ,gen-sym))
                         (void)))
-           (add-body! phase (compile-top-level-bind
-                             ids binding-syms
-                             (struct-copy compile-context cctx
-                                          [phase phase]
-                                          [header header])))])]
+           (unless (null? ids)
+             (add-body! phase (compile-top-level-bind
+                               ids binding-syms
+                               (struct-copy compile-context cctx
+                                            [phase phase]
+                                            [header header])
+                               #f)))])]
         [(define-syntaxes)
          (define m (match-syntax body '(define-syntaxes (id ...) rhs)))
          (define ids (m 'id))
@@ -148,13 +150,14 @@
                                      (void)))]
           [else
            (add-body! (add1 phase)
-                      (generate-top-level-define-syntaxes gen-syms rhs transformer-set!s))])
-         (unless (compile-context-module-self cctx)
-           (add-body! phase (compile-top-level-bind
-                             ids binding-syms
-                             (struct-copy compile-context cctx
-                                          [phase phase]
-                                          [header header]))))
+                      (generate-top-level-define-syntaxes
+                       gen-syms rhs transformer-set!s
+                       (compile-top-level-bind
+                        ids binding-syms
+                        (struct-copy compile-context cctx
+                                     [phase phase]
+                                     [header header])
+                        gen-syms)))])
          (set! saw-define-syntaxes? #t)]
         [(begin-for-syntax)
          (define m (match-syntax body `(begin-for-syntax e ...)))
@@ -278,7 +281,7 @@
 ;; adjusts the binding of defined identifiers. This mingling of
 ;; evaluation and expansion is the main weirdness of the top
 ;; level.
-(define (compile-top-level-bind ids binding-syms cctx)
+(define (compile-top-level-bind ids binding-syms cctx trans-exprs)
   (define phase (compile-context-phase cctx))
   (define self (compile-context-self cctx))
   (define header (compile-context-header cctx))
@@ -293,12 +296,15 @@
   ;; Generate calls to `top-level-bind!`:
   `(begin
     ,@(for/list ([id (in-list ids)]
-                 [binding-sym (in-list binding-syms)])
+                 [binding-sym (in-list binding-syms)]
+                 [trans-expr (in-list (or trans-exprs
+                                          (for/list ([id (in-list ids)])
+                                            `'#f)))])
         (define id-stx
           (compile-quote-syntax (remove-scope id top-level-bind-scope)
                                 phase
                                 cctx))
-        `(,top-level-bind!-id ,id-stx ,self-expr ,phase ,phase-shift-id ,ns-id ',binding-sym))))
+        `(,top-level-bind!-id ,id-stx ,self-expr ,phase ,phase-shift-id ,ns-id ',binding-sym ,trans-expr))))
 
 ;; To support namespace-relative binding, bundle scope information for
 ;; the current namespace into a syntax object
@@ -309,13 +315,14 @@
 ;; ----------------------------------------
 
 ;; Handle the `define-syntaxes`-with-zero-results hack for the top level
-(define (generate-top-level-define-syntaxes gen-syms rhs transformer-set!s)
+(define (generate-top-level-define-syntaxes gen-syms rhs transformer-set!s finish)
   `(call-with-values
     (lambda () ,rhs)
     (case-lambda
       [,gen-syms
        (begin
          ,@transformer-set!s
+         ,finish
          (void))]
       [() (void)]
       [args
