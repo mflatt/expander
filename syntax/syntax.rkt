@@ -2,6 +2,7 @@
 (require "../compile/serialize-property.rkt"
          "../compile/serialize-state.rkt"
          "../common/set.rkt"
+         "preserved.rkt"
          "tamper.rkt"
          "datum-map.rkt")
 
@@ -14,10 +15,6 @@
  datum->syntax
  
  syntax-map
- 
- syntax-property
- syntax-property-symbol-keys
- syntax-property-remove
  
  prop:propagation
  
@@ -56,6 +53,13 @@
             ,(ser (intern-shifted-multi-scopes (syntax-shifted-multi-scopes s) state))
             ,(ser (intern-mpi-shifts (syntax-mpi-shifts s) state))
             ,(ser (syntax-srcloc s))
+            ,(ser (intern-properties
+                   (syntax-props s)
+                   (lambda ()
+                     (for/hash ([(k v) (in-hash (syntax-props s))]
+                                #:when (preserved-property-value? v))
+                       (values k (check-value-to-preserve (plain-property-value v) syntax?))))
+                   state))
             ,(serialize-state-inspector-id state)
             ,(ser (serialize-tamper (syntax-tamper s)))))
         #:property prop:reach-scopes
@@ -65,7 +69,10 @@
                      ((propagation-ref prop) s)
                      (syntax-content s)))
           (reach (syntax-scopes s))
-          (reach (syntax-shifted-multi-scopes s))))
+          (reach (syntax-shifted-multi-scopes s))
+          (for ([(k v) (in-hash (syntax-props s))]
+                #:when (preserved-property-value? (plain-property-value v)))
+            (reach v))))
 
 ;; Property to abstract over handling of propagation for
 ;; serialization; property value takes a syntax object and
@@ -123,7 +130,8 @@
   (syntax-map s
               (lambda (tail? x) (if tail? x (wrap x)))
               #f
-              #f))
+              #f
+              disallow-cycles))
 
 ;; `(syntax-map s f d->s)` walks over `s`:
 ;; 
@@ -139,7 +147,7 @@
 ;;  * the `s-e` function extrcts content of a syntax object; if it's
 ;;    #f, then there's no loop over the content
 ;;
-(define (syntax-map s f d->s s-e)
+(define (syntax-map s f d->s s-e [seen #f])
   (let loop ([s s])
     (datum-map s
                (lambda (tail? v)
@@ -149,41 +157,25 @@
                                                (loop (s-e v))
                                                (syntax-content v)))
                                    v)]
-                  [else (f tail? v)])))))
+                  [else (f tail? v)]))
+               seen)))
+
+(define disallow-cycles
+  (hasheq 'cycle-fail
+          (lambda (s)
+            (raise-arguments-error 'datum->syntax
+                                   "cannot create syntax from cyclic datum"
+                                   s))))
 
 ;; ----------------------------------------
 
-(define syntax-property
-  (case-lambda
-    [(s key)
-     (unless (syntax? s)
-       (raise-argument-error 'syntax-property "syntax" s))
-     (hash-ref (syntax-props s) key #f)]
-    [(s key val)
-     (unless (syntax? s)
-       (raise-argument-error 'syntax-property "syntax" s))
-     (struct-copy syntax s
-                  [props (hash-set (syntax-props s) key val)])]))
-
-(define syntax-property-symbol-keys
-  (lambda (s)
-    (unless (syntax? s)
-      (raise-argument-error 'syntax-property-symbol-keys "syntax" s))
-    (for/list ([(k v) (in-hash (syntax-props s))]
-               #:when (and (symbol? k) (symbol-interned? k)))
-      k)))
-
-(define (syntax-property-remove s key)
-  (if (hash-ref (syntax-props s) key #f)
-      (struct-copy syntax s
-                   [props (hash-remove (syntax-props s) key)])
-      s))
-
-;; ----------------------------------------
-
-(define (deserialize-syntax content scopes shifted-multi-scopes mpi-shifts srcloc inspector tamper)
+(define (deserialize-syntax content scopes shifted-multi-scopes mpi-shifts srcloc props inspector tamper)
   (syntax content
           scopes #f shifted-multi-scopes
-          mpi-shifts #f srcloc empty-props
+          mpi-shifts #f srcloc
+          (if props
+              (for/hash ([(k v) (in-hash props)])
+                (values k (preserved-property-value v)))
+              empty-props)
           inspector
           (deserialize-tamper tamper)))

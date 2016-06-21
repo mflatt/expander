@@ -1,5 +1,6 @@
 #lang racket/base
 (require "syntax.rkt"
+         "property.rkt"
          "to-list.rkt"
          "scope.rkt"
          (rename-in "taint.rkt"

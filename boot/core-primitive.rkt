@@ -65,6 +65,7 @@
                       syntax-span
                       syntax->list
                       syntax-property
+                      syntax-property-preserved?
                       syntax-property-symbol-keys
                       syntax-original?
                       

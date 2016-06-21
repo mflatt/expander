@@ -1,9 +1,11 @@
 #lang racket/base
 (require "../syntax/syntax.rkt"
+         "../syntax/property.rkt"
          "../syntax/datum-map.rkt"
          (prefix-in host:
                     (only-in racket/base
-                             syntax? syntax-e syntax-property syntax-property-symbol-keys
+                             syntax? syntax-e syntax-property syntax-property-preserved?
+                             syntax-property-symbol-keys
                              syntax-source syntax-line syntax-column
                              syntax-position syntax-span)))
 
@@ -30,9 +32,10 @@
                  (define keys (host:syntax-property-symbol-keys v))
                  (cond
                   [(null? keys) s]
-                  [(and (null? (cdr keys)) (eq? (car keys) 'paren-shap)) s]
+                  [(and (null? (cdr keys)) (eq? (car keys) 'paren-shape)) s]
                   [else (for/fold ([s s]) ([key (in-list keys)])
-                          (syntax-property s key (host:syntax-property v key)))])]
+                          (syntax-property s key (host:syntax-property v key)
+                                           (host:syntax-property-preserved? v key)))])]
                 [else v]))))
 
 (define original-property-sym

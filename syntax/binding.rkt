@@ -4,6 +4,7 @@
          "../compile/serialize-state.rkt"
          "../common/memo.rkt"
          "syntax.rkt"
+         "property.rkt"
          "scope.rkt"
          "../common/phase.rkt"
          "full-binding.rkt"

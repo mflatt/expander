@@ -1,6 +1,7 @@
 #lang racket/base
 (require racket/promise
          "../syntax/syntax.rkt"
+         "../syntax/property.rkt"
          "../syntax/scope.rkt"
          "../syntax/taint.rkt"
          "../syntax/match.rkt"

@@ -5,7 +5,8 @@
          
          intern-scopes
          intern-shifted-multi-scopes
-         intern-mpi-shifts)
+         intern-mpi-shifts
+         intern-properties)
 
 ;; A `serialize-state` record is threaded through the construction of
 ;; a deserialization expression
@@ -16,7 +17,9 @@
                          scopes                 ; interned scope sets
                          shifted-multi-scopes   ; interned shifted multi-scope lists
                          mpi-shifts             ; interned module path index shifts
-                         inspector-id))         ; symbol name bound to declaraiton-time inspector
+                         props                  ; map full props to previously calculated
+                         interned-props         ; intern filtered props
+                         inspector-id))         ; symbol name bound to declaration-time inspector
 
 (define (make-serialize-state reachable-scopes inspector-id)
   (serialize-state reachable-scopes
@@ -25,6 +28,8 @@
                    (make-hash)     ; scopes
                    (make-hash)     ; shifted-multi-scopes
                    (make-hasheq)   ; mpi-shifts
+                   (make-hasheq)   ; props
+                   (make-hash)     ; interned-props
                    inspector-id))
 
 (define (intern-scopes scs state)
@@ -52,3 +57,20 @@
         (let ([v (cons (car mpi-shifts) tail)])
           (hash-set! tail-table (car mpi-shifts) v)
           v))]))
+
+(define (intern-properties all-props get-preserved-props state)
+  (define v (hash-ref (serialize-state-props state) all-props 'no))
+  (cond
+   [(eq? v 'no)
+    (define preserved-props (get-preserved-props))
+    (define p
+      (cond
+       [(zero? (hash-count preserved-props)) #f]
+       [(hash-ref (serialize-state-interned-props state) preserved-props #f)
+        => (lambda (p) p)]
+       [else
+        (hash-set! (serialize-state-interned-props state) preserved-props preserved-props)
+        preserved-props]))
+    (hash-set! (serialize-state-props state) all-props p)
+    p]
+   [else v]))

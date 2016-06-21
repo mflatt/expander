@@ -5,7 +5,6 @@ See "demo.rkt" for examples.
 TODO:
  bug fix for local definition contexts (MB's example)
  load handler's direct loading of submodules
- preserved syntax properties
  continuation barrier on macro invocation
  continuation prompt for module body
  set! on undefined
@@ -44,6 +43,12 @@ Roadmap to a few key pieces:
  demo.rkt - exercises the expander and compiler (uses "main.rkt")
 
  run.rkt - starts a Racket replacement (uses "main.rkt")
+
+Beware that names are routinely shadowed when they are provided by
+`racket/base` but replaced by the expander's implementation. For
+example, `syntax?` is shadowed, and any part of the expander that
+needs `syntax?` must import "syntax/syntax.rkt" or
+"syntax/checked-syntax.rkt".
 
 ----------------------------------------
 

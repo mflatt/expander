@@ -1,6 +1,8 @@
 #lang racket/base
 (require "syntax.rkt"
-         "scope.rkt")
+         "scope.rkt"
+         "property.rkt"
+         "preserved.rkt")
 
 (provide syntax-track-origin)
 
@@ -23,7 +25,8 @@
      [(zero? (hash-count new-props))
       (cond
        [id
-        (define old-origin (hash-ref old-props 'origin missing))
+        (define old-origin (plain-property-value
+                            (hash-ref old-props 'origin missing)))
         (define origin (if (eq? old-origin missing)
                            (list id)
                            (cons id old-origin)))
@@ -45,15 +48,22 @@
             (define new-v (hash-ref new-props k missing))
             (hash-set new-props k (if (eq? new-v missing)
                                       v
-                                      (cons new-v v))))]
+                                      (cons/preserve new-v v))))]
          [else
           (for/fold ([old-props old-props-with-origin]) ([(k v) (in-hash new-props)])
             (define old-v (hash-ref old-props k missing))
             (hash-set old-props k (if (eq? old-v missing)
                                       v
-                                      (cons v old-v))))]))
+                                      (cons/preserve v old-v))))]))
       (struct-copy syntax new-stx
                    [props updated-props])])]))
+
+(define (cons/preserve a b)
+  (if (or (preserved-property-value? a)
+          (preserved-property-value? b))
+      (preserved-property-value (cons (plain-property-value a)
+                                      (plain-property-value b)))
+      (cons a b)))
 
 (module+ test
   (define (check-track new-props old-props expected-props-except-origin)

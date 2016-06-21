@@ -3,6 +3,7 @@
          (rename-in "syntax.rkt"
                     [syntax->datum raw:syntax->datum]
                     [datum->syntax raw:datum->syntax])
+         "property.rkt"
          (rename-in "to-list.rkt"
                     [syntax->list raw:syntax->list])
          (rename-in "scope.rkt"
@@ -32,6 +33,7 @@
 (provide syntax?
          syntax-e
          syntax-property
+         syntax-property-preserved?
          syntax-property-symbol-keys
          syntax-original?
          syntax->datum
