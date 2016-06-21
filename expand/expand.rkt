@@ -14,6 +14,7 @@
          "../syntax/track.rkt"
          "../syntax/error.rkt"
          "syntax-id-error.rkt"
+         "syntax-implicit-error.rkt"
          "free-id-set.rkt"
          "dup-check.rkt"
          "use-site.rkt"
@@ -49,6 +50,7 @@
 
 ;; ----------------------------------------
 
+;; Main expander dispatch
 (define (expand s ctx
                 ;; Aplying a rename transformer substitutes
                 ;; an id without changing `s`
@@ -56,134 +58,121 @@
   (log-expand ctx (if (expand-context-only-immediate? ctx) 'enter-check 'visit) s)
   (cond
    [(identifier? s)
-    (define id (or alternate-id s))
-    (guard-stop
-     id ctx s
-     (define binding (resolve+shift id (expand-context-phase ctx)
-                                    #:ambiguous-value 'ambiguous
-                                    #:immediate? #t))
-     (log-expand* ctx #:unless (expand-context-only-immediate? ctx) ['resolve id])
-     (cond
-      [(eq? binding 'ambiguous)
-       (raise-ambiguous-error id ctx)]
-      [(not binding)
-       ;; The implicit `#%top` form handles unbound identifiers
-       (expand-implicit '#%top (substitute-alternate-id s alternate-id) ctx s)]
-      [else
-       ;; Variable or form as identifier macro
-       (define-values (t insp) (lookup binding ctx id #:in (and alternate-id s)))
-       (dispatch t insp s id ctx binding)]))]
-   [(and (pair? (syntax-e/no-taint (syntax-disarm s)))
-         (identifier? (car (syntax-e/no-taint (syntax-disarm s)))))
-    ;; An "application" form that starts with an identifier
-    (define disarmed-s (syntax-disarm s #f))
-    (define id (or alternate-id (car (syntax-e disarmed-s))))
-    (guard-stop
-     id ctx s
-     (define binding (resolve+shift id (expand-context-phase ctx)
-                                    #:ambiguous-value 'ambiguous
-                                    #:immediate? #t))
-     (log-expand* ctx #:unless (expand-context-only-immediate? ctx) ['resolve id])
-     (cond
-      [(eq? binding 'ambiguous)
-       (raise-ambiguous-error id ctx)]
-      [(not binding)
-       ;; The `#%app` binding might do something with unbound ids
-       (expand-implicit '#%app (substitute-alternate-id s alternate-id) ctx id)]
-      [else
-       ;; Find out whether it's bound as a variable, syntax, or core form
-       (define-values (t insp) (lookup binding ctx id #:in (and alternate-id (car (syntax-e disarmed-s)))))
-       (cond
-        [(variable? t)
-         ;; Not as syntax or core form, so use implicit `#%app`
-         (expand-implicit '#%app (substitute-alternate-id s alternate-id) ctx id)]
-        [else
-         ;; Syntax or core form as "application"
-         (dispatch t insp s id ctx binding)])]))]
+    (expand-identifier s ctx alternate-id)]
+   [(and (pair? (syntax-e/no-taint s))
+         (identifier? (car (syntax-e/no-taint s))))
+    (expand-id-application-form s ctx alternate-id)]
    [(or (pair? (syntax-e (syntax-disarm s)))
         (null? (syntax-e (syntax-disarm s))))
     ;; An "application" form that doesn't start with an identifier, so
     ;; use implicit `#%app`
     (expand-implicit '#%app s ctx #f)]
    [(already-expanded? (syntax-e/no-taint s))
-    ;; An expression that is already fully expanded via `local-expand-expression`
-    (define ae (syntax-e s))
-    (unless (bound-identifier=? (root-expand-context-all-scopes-stx ctx)
-                                (already-expanded-all-scopes-stx ae)
-                                (expand-context-phase ctx))
-      (raise-syntax-error #f
-                          (string-append "expanded syntax not in its original lexical context;\n"
-                                         " extra bindings or scopes in the current context")
-                          (already-expanded-s ae)))
-    (define result-s (syntax-track-origin (already-expanded-s ae) s))
-    (log-expand* ctx ['tag result-s] ['opaque-expr result-s])
-    result-s]
+    (expand-already-expanded s ctx)]
    [else
     ;; Anything other than an identifier or parens triggers the
     ;; implicit `#%datum` form
     (expand-implicit '#%datum s ctx #f)]))
 
-;; Handle an implicit: `#%app`, `#%top`, or `#%datum`
+;; An identifier by itself (i.e., not after an open parenthesis)
+(define (expand-identifier s ctx alternate-id)
+  (define id (or alternate-id s))
+  (guard-stop
+   id ctx s
+   (define binding (resolve+shift id (expand-context-phase ctx)
+                                  #:ambiguous-value 'ambiguous
+                                  #:immediate? #t))
+   (log-expand* ctx #:unless (expand-context-only-immediate? ctx) ['resolve id])
+   (cond
+    [(eq? binding 'ambiguous)
+     (raise-ambiguous-error id ctx)]
+    [(not binding)
+     ;; The implicit `#%top` form handles unbound identifiers
+     (expand-implicit '#%top (substitute-alternate-id s alternate-id) ctx s)]
+    [else
+     ;; Variable or form as identifier macro
+     (define-values (t insp) (lookup binding ctx id #:in (and alternate-id s)))
+     (dispatch t insp s id ctx binding)])))
+
+;; An "application" form that starts with an identifier
+(define (expand-id-application-form s ctx alternate-id)
+  (define disarmed-s (syntax-disarm s #f))
+  (define id (or alternate-id (car (syntax-e disarmed-s))))
+  (guard-stop
+   id ctx s
+   (define binding (resolve+shift id (expand-context-phase ctx)
+                                  #:ambiguous-value 'ambiguous
+                                  #:immediate? #t))
+   (log-expand* ctx #:unless (expand-context-only-immediate? ctx) ['resolve id])
+   (cond
+    [(eq? binding 'ambiguous)
+     (raise-ambiguous-error id ctx)]
+    [(not binding)
+     ;; The `#%app` binding might do something with unbound ids
+     (expand-implicit '#%app (substitute-alternate-id s alternate-id) ctx id)]
+    [else
+     ;; Find out whether it's bound as a variable, syntax, or core form
+     (define-values (t insp) (lookup binding ctx id #:in (and alternate-id (car (syntax-e disarmed-s)))))
+     (cond
+      [(variable? t)
+       ;; Not as syntax or core form, so use implicit `#%app`
+       (expand-implicit '#%app (substitute-alternate-id s alternate-id) ctx id)]
+      [else
+       ;; Syntax or core form as "application"
+       (dispatch t insp s id ctx binding)])])))
+
+;; Handle an implicit: `#%app`, `#%top`, or `#%datum`; this is similar
+;; to handling an id-application form, but there are several little
+;; differences: the binding must be a core form or transformer,
+;; an implicit `#%top` is handled specially, and so on
 (define (expand-implicit sym s ctx trigger-id)
   (define disarmed-s (syntax-disarm s))
   (define id (datum->syntax disarmed-s sym))
   (guard-stop
    id ctx s
-   ;; Instead of calling `expand` with a new form that starts `id`,
-   ;; we reimplement the "applicaiton"-form case of `expand` so that
-   ;; we provide an error if the implicit form is not suitably bound
    (define b (resolve+shift id (expand-context-phase ctx)
                             #:ambiguous-value 'ambiguous
                             #:immediate? #t))
-   (when (eq? b 'ambiguous)
-     (raise-ambiguous-error id ctx))
-   (define-values (t insp) (if b
-                               (lookup b ctx id)
-                               (values #f #f)))
    (cond
-    [(core-form? t)
+    [(eq? b 'ambiguous)
+     (raise-ambiguous-error id ctx)]
+    [else
+     (define-values (t insp) (lookup b ctx id))
      (cond
+      [(transformer? t)
+       (dispatch-transformer t insp (make-explicit sym s disarmed-s) id ctx b)]
       [(expand-context-only-immediate? ctx)
        (log-expand ctx 'exit-check s)
        s]
-      [(and (eq? sym '#%top)
-            (eq? (core-form-name t) '#%top)
-            (expand-context-preserve-#%expression-and-do-not-add-#%top? ctx))
-       ;; Special favor to `local-expand`: call `#%top` form without
-       ;; making `#%top` explicit in the form
-       (log-expand ctx 'enter-prim s)
-       (define result-s ((core-form-expander t) s ctx #t))
-       (log-expand* ctx ['exit-prim result-s] ['return result-s])
-       result-s]
+      [(core-form? t)
+       (cond
+        [(and (eq? sym '#%top)
+              (eq? (core-form-name t) '#%top)
+              (expand-context-preserve-#%expression-and-do-not-add-#%top? ctx))
+         (dispatch-implicit-#%top-core-form t s ctx)]
+        [else
+         (dispatch-core-form t (make-explicit sym s disarmed-s) ctx)])]
       [else
-       (dispatch t insp (syntax-rearm (datum->syntax disarmed-s (cons sym disarmed-s) s s) s) id ctx b)])]
-    [(transformer? t)
-     (dispatch t insp (syntax-rearm (datum->syntax disarmed-s (cons sym disarmed-s) s s) s) id ctx b)]
-    [(expand-context-only-immediate? ctx)
-     (log-expand ctx 'exit-check s)
-     s]
-    [else
-     (define phase (expand-context-phase ctx))
-     (define what
-       (case sym
-         [(#%app) "function application"]
-         [(#%datum) "literal data"]
-         [(#%top)
-          (if (expand-context-allow-unbound? ctx)
-              "reference to a top-level identifier"
-              "reference to an unbound identifier")]))
-     (define unbound? (and trigger-id (not (resolve trigger-id phase))))
-     (raise-syntax-error #f
-                         (format (if unbound?
-                                     "unbound identifier;\n also, no ~a transformer is bound~a"
-                                     (string-append what " is not allowed;\n no ~a syntax transformer is bound~a"))
-                                 sym
-                                 (case phase
-                                   [(0) ""]
-                                   [(1) " in the transformer phase"]
-                                   [else (format " at phase ~a" phase)]))
-                         (and unbound? trigger-id) (and (not unbound?) s) null
-                         (if unbound? (syntax-debug-info-string trigger-id ctx) ""))])))
+       (raise-syntax-implicit-error s sym trigger-id ctx)])])))
+
+;; An expression that is already fully expanded via `local-expand-expression`
+(define (expand-already-expanded s ctx)
+  (define ae (syntax-e s))
+  (unless (bound-identifier=? (root-expand-context-all-scopes-stx ctx)
+                              (already-expanded-all-scopes-stx ae)
+                              (expand-context-phase ctx))
+    (raise-syntax-error #f
+                        (string-append "expanded syntax not in its original lexical context;\n"
+                                       " extra bindings or scopes in the current context")
+                        (already-expanded-s ae)))
+  (define result-s (syntax-track-origin (already-expanded-s ae) s))
+  (log-expand* ctx ['tag result-s] ['opaque-expr result-s])
+  result-s)
+
+(define (make-explicit sym s disarmed-s)
+  (syntax-rearm (datum->syntax disarmed-s (cons sym disarmed-s) s s) s))
+
+;; ----------------------------------------
 
 ;; Expand `s` given that the value `t` of the relevant binding,
 ;; where `t` is either a core form, a macro transformer, some
@@ -193,53 +182,76 @@
 (define (dispatch t insp s id ctx binding)
   (cond
    [(core-form? t)
-    (cond
-     [(expand-context-only-immediate? ctx)
-      (log-expand ctx 'exit-check s)
-      s]
-     [else
-      (log-expand ctx 'enter-prim s)
-      (define result-s ((core-form-expander t) s ctx))
-      (log-expand* ctx ['exit-prim result-s] ['return result-s])
-      result-s])]
+    (dispatch-core-form t s ctx)]
    [(transformer? t)
-    (cond
-     [(not-in-this-expand-context? t ctx)
-      (log-expand ctx 'enter-macro s)
-      (define adj-s (avoid-current-expand-context (substitute-alternate-id s id) t ctx))
-      (log-expand ctx 'exit-macro s)
-      (expand adj-s ctx)]
-     [else
-      (log-expand* ctx #:when (expand-context-only-immediate? ctx) ['visit s] ['resolves id])
-      ;; Apply transformer and expand again
-      (define-values (exp-s re-ctx)
-        (apply-transformer t insp s id ctx binding))
-      (log-expand* ctx #:when (expand-context-only-immediate? ctx) ['return exp-s])
-      (cond
-       [(expand-context-just-once? ctx) exp-s]
-       [else (expand exp-s re-ctx
-                     #:alternate-id (and (rename-transformer? t)
-                                         (rename-transformer-target t)))])])]
+    (dispatch-transformer t insp s id ctx binding)]
    [(variable? t)
-    (cond
-     [(expand-context-only-immediate? ctx)
-      (log-expand ctx 'exit-check s)
-      id]
-     [else
-      (log-expand ctx 'variable s)
-      ;; A reference to a variable expands to itself --- but if the
-      ;; binding's frame has a reference record, then register the
-      ;; use
-      (when (and (local-binding? binding)
-                 (reference-record? (binding-frame-id binding)))
-        (reference-record-used! (binding-frame-id binding) (local-binding-key binding)))
-      ;; If the variable is locally bound, replace the use's scopes with the binding's scopes
-      (define result-s (substitute-variable id t #:no-stops? (free-id-set-empty? (expand-context-stops ctx))))
-      (log-expand ctx 'return result-s)
-      result-s])]
+    (dispatch-variable t s id ctx binding)]
    [else
     ;; Some other compile-time value:
     (raise-syntax-error #f "illegal use of syntax" t)]))
+
+;; Call a core-form expander (e.g., `lambda`)
+(define (dispatch-core-form t s ctx)
+  (cond
+   [(expand-context-only-immediate? ctx)
+    (log-expand ctx 'exit-check s)
+    s]
+   [else
+    (log-expand ctx 'enter-prim s)
+    (define result-s ((core-form-expander t) s ctx))
+    (log-expand* ctx ['exit-prim result-s] ['return result-s])
+    result-s]))
+
+;; Special favor to `local-expand` from `expand-implicit`: call
+;; `#%top` form without making `#%top` explicit in the form
+(define (dispatch-implicit-#%top-core-form t s ctx)
+  (log-expand ctx 'enter-prim s)
+  (define result-s ((core-form-expander t) s ctx #t))
+  (log-expand* ctx ['exit-prim result-s] ['return result-s])
+  result-s)
+
+;; Call a macro expander, taking into account whether it works
+;; in the current context, whether to expand just once, etc.
+(define (dispatch-transformer t insp s id ctx binding)
+  (cond
+   [(not-in-this-expand-context? t ctx)
+    (log-expand ctx 'enter-macro s)
+    (define adj-s (avoid-current-expand-context (substitute-alternate-id s id) t ctx))
+    (log-expand ctx 'exit-macro s)
+    (expand adj-s ctx)]
+   [else
+    (log-expand* ctx #:when (expand-context-only-immediate? ctx) ['visit s] ['resolves id])
+    ;; Apply transformer and expand again
+    (define-values (exp-s re-ctx)
+      (apply-transformer t insp s id ctx binding))
+    (log-expand* ctx #:when (expand-context-only-immediate? ctx) ['return exp-s])
+    (cond
+     [(expand-context-just-once? ctx) exp-s]
+     [else (expand exp-s re-ctx
+                   #:alternate-id (and (rename-transformer? t)
+                                       (rename-transformer-target t)))])]))
+
+;; Handle the expansion of a variable to itself
+(define (dispatch-variable t s id ctx binding)
+  (cond
+   [(expand-context-only-immediate? ctx)
+    (log-expand ctx 'exit-check s)
+    id]
+   [else
+    (log-expand ctx 'variable s)
+    ;; A reference to a variable expands to itself --- but if the
+    ;; binding's frame has a reference record, then register the
+    ;; use
+    (when (and (local-binding? binding)
+               (reference-record? (binding-frame-id binding)))
+      (reference-record-used! (binding-frame-id binding) (local-binding-key binding)))
+    ;; If the variable is locally bound, replace the use's scopes with the binding's scopes
+    (define result-s (substitute-variable id t #:no-stops? (free-id-set-empty? (expand-context-stops ctx))))
+    (log-expand ctx 'return result-s)
+    result-s]))
+
+;; ----------------------------------------
 
 ;; Given a macro transformer `t`, apply it --- adding appropriate
 ;; scopes to represent the expansion step
@@ -252,29 +264,18 @@
   (define-values (use-s use-scopes) (maybe-add-use-site-scope intro-s ctx binding))
   ;; Avoid accidental transfer of taint-controlling properties:
   (define cleaned-s (syntax-remove-taint-dispatch-properties use-s))
+  ;; Prepare to accumulate definition contexts created by the transformer
+  (define def-ctx-scopes (box null))
+  
   ;; Call the transformer; the current expansion context may be needed
   ;; for `syntax-local-....` functions, and we may accumulate scopes from
   ;; definition contexts created by the transformer
-  (define def-ctx-scopes (box null))
-  (define m-ctx (struct-copy expand-context ctx
-                             [current-introduction-scopes (cons intro-scope
-                                                                use-scopes)]
-                             [def-ctx-scopes def-ctx-scopes]))
-  (log-expand ctx 'macro-pre-x cleaned-s)
   (define transformed-s
-    (parameterize ([current-expand-context m-ctx]
-                   [current-namespace (namespace->namespace-at-phase
-                                       (expand-context-namespace ctx)
-                                       (add1 (expand-context-phase ctx)))]
-                   [current-module-code-inspector (or insp (current-module-code-inspector))])
-      (call-with-continuation-barrier
-       (lambda ()
-         ((transformer->procedure t) cleaned-s)))))
-  (log-expand ctx 'macro-post-x transformed-s)
-  (unless (syntax? transformed-s)
-    (raise-argument-error (syntax-e id)
-                          "received value from syntax expander was not syntax"
-                          "received" transformed-s))
+    (apply-transformer-in-context t cleaned-s ctx insp
+                                  intro-scope use-scopes def-ctx-scopes
+                                  id))
+  
+  ;; Flip the introduction scope
   (define result-s (flip-scope transformed-s intro-scope))
   ;; In a definition context, we need to add the inside-edge scope to
   ;; any expansion result
@@ -283,15 +284,36 @@
   (define tracked-s (syntax-track-origin post-s cleaned-s id))
   (define rearmed-s (taint-dispatch tracked-s (lambda (t-s) (syntax-rearm t-s s)) (expand-context-phase ctx)))
   (log-expand ctx 'exit-macro rearmed-s)
-  (values
-   rearmed-s
-   ;; Move any accumulated definition-context scopes to the `scopes`
-   ;; list for further expansion:
-   (if (null? (unbox def-ctx-scopes))
-       ctx
-       (struct-copy expand-context ctx
-                    [scopes (append (unbox def-ctx-scopes)
-                                    (expand-context-scopes ctx))]))))
+  (values rearmed-s
+          (accumulate-def-ctx-scopes ctx def-ctx-scopes)))
+
+;; With all the pre-call scope work done and post-call scope work in
+;; the continuation, actually call the transformer function in the
+;; appropriate context
+(define (apply-transformer-in-context t cleaned-s ctx insp
+                                      intro-scope use-scopes def-ctx-scopes
+                                      id)
+  (log-expand ctx 'macro-pre-x cleaned-s)
+  (define m-ctx (struct-copy expand-context ctx
+                             [current-introduction-scopes (cons intro-scope
+                                                                use-scopes)]
+                             [def-ctx-scopes def-ctx-scopes]))
+  (define transformed-s
+    (parameterize ([current-expand-context m-ctx]
+                   [current-namespace (namespace->namespace-at-phase
+                                       (expand-context-namespace ctx)
+                                       (add1 (expand-context-phase ctx)))]
+                   [current-module-code-inspector (or insp (current-module-code-inspector))])
+      (call-with-continuation-barrier
+       (lambda ()
+         ;; Call the transformer!
+         ((transformer->procedure t) cleaned-s)))))
+  (log-expand ctx 'macro-post-x transformed-s)
+  (unless (syntax? transformed-s)
+    (raise-argument-error (syntax-e id)
+                          "received value from syntax expander was not syntax"
+                          "received" transformed-s))
+  transformed-s)
 
 (define (maybe-add-use-site-scope s ctx binding)
   (cond
@@ -320,6 +342,17 @@
      s
      (root-expand-context-post-expansion-scope ctx))]
    [else s]))
+
+(define (accumulate-def-ctx-scopes ctx def-ctx-scopes)
+  ;; Move any accumulated definition-context scopes to the `scopes`
+  ;; list for further expansion:
+  (if (null? (unbox def-ctx-scopes))
+      ctx
+      (struct-copy expand-context ctx
+                   [scopes (append (unbox def-ctx-scopes)
+                                   (expand-context-scopes ctx))])))
+
+;; ----------------------------------------
 
 ;; Helper to lookup a binding in an expansion context
 (define (lookup b ctx id
