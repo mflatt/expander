@@ -130,7 +130,8 @@
                               [else
                                ;; For phase level 1 and up, set the expansion context
                                ;; to point back to the module's info:
-                               (parameterize ([current-expand-context (delay (make-expand-context ns))]
+                               (define ns-1 (namespace->namespace-at-phase ns (phase+ phase-shift (sub1 phase-level))))
+                               (parameterize ([current-expand-context (delay (make-expand-context ns-1))]
                                               [current-namespace ns]
                                               [current-module-code-inspector insp])
                                  (instantiate-body))])))))
