@@ -235,7 +235,7 @@
 ;; generic module path, so that compilation can recognize references within
 ;; the module to itself, and so on
 (define generic-self-mpis (make-weak-hash))
-(define generic-module-name 'expanded)
+(define generic-module-name '|expanded module|)
 
 ;; Return a module path index that is the same for a given
 ;; submodule path in the given self module path index
