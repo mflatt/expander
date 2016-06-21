@@ -314,7 +314,8 @@
 
 ;; ----------------------------------------
 
-;; Handle the `define-syntaxes`-with-zero-results hack for the top level
+;; Handle the `define-syntaxes`-with-zero-results hack for the top level;
+;; beware that we make two copies of `finish`
 (define (generate-top-level-define-syntaxes gen-syms rhs transformer-set!s finish)
   `(call-with-values
     (lambda () ,rhs)
@@ -324,7 +325,11 @@
          ,@transformer-set!s
          ,finish
          (void))]
-      [() (void)]
+      [()
+       (let-values ([,gen-syms (values ,@(for/list ([s (in-list gen-syms)]) `'#f))])
+         (begin
+           ,finish
+           (void)))]
       [args
        ;; Provoke the wrong-number-of-arguments error:
        (let-values ([,gen-syms (apply values args)])
