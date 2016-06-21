@@ -147,7 +147,7 @@
                                               #:can-be-shadowed? #t))))
 
 ;; Removes a required identifier, in anticiation of it being defined
-(define (remove-required-id! r+p id phase)
+(define (remove-required-id! r+p id phase #:unless-matches binding)
   (define b (resolve+shift id phase #:exactly? #t))
   (when b
     (define at-mod (hash-ref (requires+provides-requires r+p)
@@ -161,10 +161,11 @@
         (define sym (syntax-e id))
         (define l (hash-ref sym-to-reqds sym null))
         (unless (null? l)
-          (hash-set! sym-to-reqds sym
-                     (for/list ([r (in-list l)]
-                                #:unless (free-identifier=? (required-id r) id phase phase))
-                       r)))))))
+          (unless (same-binding? b binding)
+            (hash-set! sym-to-reqds sym
+                       (for/list ([r (in-list l)]
+                                  #:unless (free-identifier=? (required-id r) id phase phase))
+                         r))))))))
 
 ;; Check whether an identifier has a binding that is from a non-shadowable
 ;; require; if something is found but it will be replaced, then record that
@@ -284,10 +285,7 @@
                     (hash-set at-phase sym (if as-protected?
                                                (protected binding)
                                                binding))]
-                   [(and (eq? (module-path-index-resolve (module-binding-module b))
-                              (module-path-index-resolve (module-binding-module binding)))
-                         (eqv? (module-binding-phase b) (module-binding-phase binding))
-                         (eq? (module-binding-sym b) (module-binding-sym binding)))
+                   [(same-binding? b binding)
                     ;; If `binding` has different nominal info (i.e., same binding
                     ;; required from different syntactic sources), we keep only
                     ;; the first once.

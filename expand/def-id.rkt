@@ -57,7 +57,7 @@
     (hash-set! defined-syms-at-phase defined-sym id)
     (define b (make-module-binding self phase defined-sym #:frame-id frame-id))
     (when requires+provides
-      (remove-required-id! requires+provides id phase))
+      (remove-required-id! requires+provides id phase #:unless-matches b))
     (add-binding! id b phase)
     (when requires+provides
       (add-defined-or-required-id! requires+provides id phase b))
