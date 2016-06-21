@@ -281,7 +281,7 @@
   (define post-s (maybe-add-post-expansion-scope result-s ctx))
    ;; Track expansion:
   (define tracked-s (syntax-track-origin post-s cleaned-s id))
-  (define rearmed-s (taint-dispatch tracked-s (lambda (t-s) (syntax-rearm t-s s))))
+  (define rearmed-s (taint-dispatch tracked-s (lambda (t-s) (syntax-rearm t-s s)) (expand-context-phase ctx)))
   (log-expand ctx 'exit-macro rearmed-s)
   (values
    rearmed-s

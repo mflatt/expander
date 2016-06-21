@@ -36,7 +36,8 @@
    [use-mode?
     (taint-dispatch
      s
-     (lambda (s) (raw:syntax-arm s insp)))]
+     (lambda (s) (raw:syntax-arm s insp))
+     (syntax-local-phase-level))]
    [else
     (raw:syntax-arm s insp)]))
 

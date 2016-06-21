@@ -12,7 +12,7 @@
 (provide taint-dispatch
          syntax-remove-taint-dispatch-properties)
 
-(define (taint-dispatch s proc)
+(define (taint-dispatch s proc phase)
   (let loop ([s s] [mode (syntax-taint-mode-property s)])
     (case mode
       [(opaque) (proc s)]
@@ -49,7 +49,7 @@
         [else (loop s 'transparent)])]
       [else
        (define c (syntax-e s))
-       (case (core-form-sym c (syntax-local-phase-level))
+       (case (core-form-sym c phase)
          [(begin begin-for-syntax module #%module-begin)
           (loop s 'transparent)]
          [(define-values define-syntaxes)
