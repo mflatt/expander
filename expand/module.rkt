@@ -908,12 +908,13 @@
         [(module*)
          ;; Ensure that the enclosing module is declared:
          (force declare-enclosing-module)
+         (define ready-body (remove-use-site-scopes (car bodys) submod-ctx))
          (define submod
            (cond
             [(try-match-syntax disarmed-body '(module* name #f . _))
              ;; Need to shift the submodule relative to the enclosing module:
              (define neg-phase (phase- 0 phase))
-             (define shifted-s (syntax-shift-phase-level (car bodys) neg-phase))
+             (define shifted-s (syntax-shift-phase-level ready-body neg-phase))
              (define submod
                (expand-submodule shifted-s self submod-ctx
                                  #:is-star? #t
@@ -924,7 +925,7 @@
                                  #:declared-submodule-names declared-submodule-names))
              (syntax-shift-phase-level submod phase)]
             [else
-             (expand-submodule (car bodys) self submod-ctx
+             (expand-submodule ready-body self submod-ctx
                                #:is-star? #t
                                #:mpis-to-reset mpis-to-reset
                                #:declared-submodule-names declared-submodule-names)]))
