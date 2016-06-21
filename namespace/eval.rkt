@@ -1,6 +1,5 @@
 #lang racket/base
 (require (only-in "../syntax/syntax.rkt" syntax-mpi-shifts)
-         (only-in "../syntax/scope.rkt" add-binding!)
          (only-in "../syntax/binding.rkt" resolve+shift syntax-transfer-shifts)
          "../syntax/inspector.rkt"
          "../syntax/module-binding.rkt"

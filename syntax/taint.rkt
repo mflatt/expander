@@ -7,6 +7,7 @@
          taint-content
          
          syntax-tainted?
+         syntax-clean?
          syntax-arm
          syntax-disarm
          syntax-rearm
@@ -29,6 +30,9 @@
 
 (define (syntax-tainted? s)
   (tamper-tainted? (syntax-tamper s)))
+
+(define (syntax-clean? s)
+  (tamper-clean? (syntax-tamper s)))
 
 (define (syntax-arm s insp)
   (define t (syntax-tamper s))

@@ -7,6 +7,7 @@
          "../expand/root-expand-context.rkt"
          "../syntax/module-binding.rkt"
          "../host/linklet.rkt"
+         "../expand/env.rkt"
          "../expand/require.rkt"
          "../expand/require+provide.rkt")
 

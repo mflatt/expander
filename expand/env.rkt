@@ -26,6 +26,10 @@
          (struct-out local-variable)
          substitute-variable
 
+         add-binding!
+         add-bulk-binding!
+         add-local-binding!
+         
          binding-lookup)
 
 ;; ----------------------------------------
@@ -73,6 +77,29 @@
 
 ;; A subset of compile-time values are primitive forms
 (struct core-form (expander name) #:transparent)
+
+;; ---------------------------------------- 
+
+(define (add-binding! id binding phase #:in [in-s #f])
+  (check-id-taint id in-s)
+  (add-binding-in-scopes! (syntax-scope-set id phase) (syntax-e id) binding))
+
+(define (add-bulk-binding! s binding phase #:in [in-s #f])
+  (when (syntax-tainted? s)
+    (raise-syntax-error #f "cannot bind from tainted syntax" in-s s))
+  (add-bulk-binding-in-scopes! (syntax-scope-set s phase) binding))
+
+;; Helper for registering a local binding in a set of scopes:
+(define (add-local-binding! id phase counter #:frame-id [frame-id #f] #:in [in-s #f])
+  (check-id-taint id in-s)
+  (set-box! counter (add1 (unbox counter)))
+  (define key (string->uninterned-symbol (format "~a_~a" (syntax-e id) (unbox counter))))
+  (add-binding-in-scopes! (syntax-scope-set id phase) (syntax-e id) (make-local-binding key #:frame-id frame-id))
+  key)
+
+(define (check-id-taint id in-s)
+  (when (syntax-tainted? id)
+    (raise-syntax-error #f "cannot bind tainted identifier" in-s id)))
 
 ;; ---------------------------------------- 
 

@@ -24,8 +24,6 @@
  identifier-binding
  identifier-binding-symbol
  
- add-local-binding!
- 
  maybe-install-free=id!
  binding-set-free=id
 
@@ -94,14 +92,6 @@
     'lexical]
    [else #f]))
 
-;; Helper for registering a local binding in a set of scopes:
-(define (add-local-binding! id phase counter #:frame-id [frame-id #f])
-  (set-box! counter (add1 (unbox counter)))
-  (define key (string->uninterned-symbol (format "~a_~a" (syntax-e id) (unbox counter))))
-  (add-binding! id (make-local-binding key #:frame-id frame-id) phase)
-  key)
-
-
 ;; ----------------------------------------
 
 (define (maybe-install-free=id! val id phase)
@@ -109,7 +99,7 @@
     (define free=id (rename-transformer-target val))
     (unless (syntax-property free=id 'not-free-identifier=?)
       (define b (resolve+shift id phase #:exactly? #t #:immediate? #t))
-      (add-binding! id (binding-set-free=id b free=id) phase))))
+      (add-binding-in-scopes! (syntax-scope-set id phase) (syntax-e id) (binding-set-free=id b free=id)))))
 
 ;; Helper to add a `free-identifier=?` equivance to a binding
 (define (binding-set-free=id b free=id)

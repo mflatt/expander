@@ -10,6 +10,7 @@
          "../namespace/module.rkt"
          "../syntax/match.rkt"
          "require+provide.rkt"
+         "env.rkt"
          "../common/module-path.rkt"
          "../syntax/bulk-binding.rkt")
 
@@ -220,6 +221,7 @@
   (bind-all-provides!
    m
    bind-in-stx phase-shift m-ns interned-mpi
+   #:in orig-s
    #:only (cond
            [(adjust-only? adjust) (set->list (adjust-only-syms adjust))]
            [(adjust-rename? adjust) (list (adjust-rename-from-sym adjust))]
@@ -290,6 +292,7 @@
 ;; ----------------------------------------
 
 (define (bind-all-provides! m in-stx phase-shift ns mpi
+                            #:in orig-s
                             #:only only-syms
                             #:can-bulk? can-bulk?
                             #:filter filter)
@@ -314,4 +317,5 @@
       (add-bulk-binding! in-stx
                          (bulk-binding provides self mpi provide-phase-level phase-shift
                                        (namespace-bulk-binding-registry ns))
-                         phase))))
+                         phase
+                         #:in orig-s))))

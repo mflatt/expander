@@ -453,7 +453,7 @@
          (define new-dups (check-no-duplicate-ids ids phase exp-body dups))
          (define counter (root-expand-context-counter ctx))
          (define keys (for/list ([id (in-list ids)])
-                        (add-local-binding! id phase counter #:frame-id frame-id)))
+                        (add-local-binding! id phase counter #:frame-id frame-id #:in exp-body)))
          (define extended-env (for/fold ([env (expand-context-env body-ctx)]) ([key (in-list keys)]
                                                                                [id (in-list ids)])
                                 (env-extend env key (local-variable id))))
@@ -495,7 +495,7 @@
          (define new-dups (check-no-duplicate-ids ids phase exp-body dups))
          (define counter (root-expand-context-counter ctx))
          (define keys (for/list ([id (in-list ids)])
-                        (add-local-binding! id phase counter #:frame-id frame-id)))
+                        (add-local-binding! id phase counter #:frame-id frame-id #:in exp-body)))
          (log-expand body-ctx 'prepare-env)
          (define vals (eval-for-syntaxes-binding (m 'rhs) ids ctx))
          (define extended-env (for/fold ([env (expand-context-env body-ctx)]) ([key (in-list keys)]

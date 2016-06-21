@@ -22,9 +22,9 @@
 (define runtime-mpi (module-path-index-join ''#%runtime #f))
 
 (define (add-runtime-primitive! sym)
-  (add-binding! (datum->syntax runtime-stx sym)
-                (make-module-binding runtime-mpi 0 sym)
-                0))
+  (add-binding-in-scopes! (syntax-scope-set runtime-stx 0)
+                          sym
+                          (make-module-binding runtime-mpi 0 sym)))
 
 ;; This is only a subset that we need to have bound;
 ;; the rest are added in "kernel.rkt"

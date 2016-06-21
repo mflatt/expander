@@ -6,7 +6,8 @@
          "require+provide.rkt"
          "../namespace/namespace.rkt"
          "context.rkt"
-         "root-expand-context.rkt")
+         "root-expand-context.rkt"
+         "env.rkt")
 
 (provide select-defined-syms-and-bind!
          select-defined-syms-and-bind!/ctx
@@ -36,7 +37,8 @@
                                        self phase all-scopes-stx
                                        #:frame-id frame-id
                                        #:top-level-bind-scope [top-level-bind-scope #f]
-                                       #:requires+provides [requires+provides #f])
+                                       #:requires+provides [requires+provides #f]
+                                       #:in [orig-s #f])
   (define defined-syms-at-phase
     (or (hash-ref defined-syms phase #f) (let ([ht (make-hasheq)])
                                            (hash-set! defined-syms phase ht)
@@ -58,7 +60,7 @@
     (define b (make-module-binding self phase defined-sym #:frame-id frame-id))
     (when requires+provides
       (remove-required-id! requires+provides id phase #:unless-matches b))
-    (add-binding! id b phase)
+    (add-binding! id b phase #:in orig-s)
     (when requires+provides
       (add-defined-or-required-id! requires+provides id phase b))
     defined-sym))

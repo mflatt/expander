@@ -30,8 +30,8 @@
 
          syntax-swap-scopes
 
-         add-binding!
-         add-bulk-binding!
+         add-binding-in-scopes!
+         add-bulk-binding-in-scopes!
          
          prop:bulk-binding
          (struct-out bulk-binding-class)
@@ -607,11 +607,7 @@
                                         sym
                                         (hash-set sym-bindings scopes binding))))
 
-(define (add-binding! id binding phase)
-  (add-binding-in-scopes! (syntax-scope-set id phase) (syntax-e id) binding))
-
-(define (add-bulk-binding! s binding phase)
-  (define scopes (syntax-scope-set s phase))
+(define (add-bulk-binding-in-scopes! scopes binding)
   (define max-sc (find-max-scope scopes))
   (set-scope-bulk-bindings! max-sc
                             (cons (bulk-binding-at scopes binding)

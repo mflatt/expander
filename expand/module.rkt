@@ -607,7 +607,8 @@
           (define syms (select-defined-syms-and-bind! ids defined-syms 
                                                       self phase all-scopes-stx
                                                       #:frame-id frame-id
-                                                      #:requires+provides requires+provides))
+                                                      #:requires+provides requires+provides
+                                                      #:in exp-body))
           (add-defined-syms! requires+provides syms phase)
           (log-expand partial-body-ctx 'exit-prim)
           (cons (rebuild 
@@ -624,7 +625,8 @@
           (define syms (select-defined-syms-and-bind! ids defined-syms
                                                       self phase all-scopes-stx
                                                       #:frame-id frame-id
-                                                      #:requires+provides requires+provides))
+                                                      #:requires+provides requires+provides
+                                                      #:in exp-body))
           (add-defined-syms! requires+provides syms phase)
           ;; Expand and evaluate RHS:
           (define-values (exp-rhs vals)

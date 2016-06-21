@@ -4,6 +4,7 @@
          "../common/phase.rkt"
          "../syntax/scope.rkt"
          "../syntax/binding.rkt"
+         "../syntax/taint.rkt"
          "env.rkt"
          "context.rkt"
          "expand.rkt"
@@ -134,12 +135,14 @@
   (define ext-scs (syntax-scope-set ext-s phase))
   (define base-scs (syntax-scope-set (or base-s empty-syntax) phase))
   (define delta-scs (set->list (set-subtract ext-scs base-scs)))
+  (define maybe-taint (if (syntax-clean? ext-s) values syntax-taint))
   (lambda (s [mode 'add])
-    (case mode
-      [(add) (add-scopes s delta-scs)]
-      [(remove) (remove-scopes s delta-scs)]
-      [(flip) (flip-scopes s delta-scs)]
-      [else (raise-argument-error 'syntax-introducer "(or/c 'add 'remove 'flip)" mode)])))
+    (maybe-taint
+     (case mode
+       [(add) (add-scopes s delta-scs)]
+       [(remove) (remove-scopes s delta-scs)]
+       [(flip) (flip-scopes s delta-scs)]
+       [else (raise-argument-error 'syntax-introducer "(or/c 'add 'remove 'flip)" mode)]))))
   
 ;; ----------------------------------------
 
@@ -380,6 +383,9 @@
 (define (syntax-local-get-shadower id [only-generated? #f])
   (check 'syntax-local-get-shadower identifier? id)
   (define ctx (get-current-expand-context 'syntax-local-get-shadower))
-  (add-scopes id (set->list
-                  (syntax-scope-set (root-expand-context-all-scopes-stx ctx)
-                                    (expand-context-phase ctx)))))
+  (define new-id (add-scopes id (set->list
+                                 (syntax-scope-set (root-expand-context-all-scopes-stx ctx)
+                                                   (expand-context-phase ctx)))))
+  (if (syntax-clean? id)
+      new-id
+      (syntax-taint new-id)))

@@ -36,7 +36,7 @@
   ;; expand-time environment:
   (define counter (root-expand-context-counter ctx))
   (define keys (for/list ([id (in-list ids)])
-                 (add-local-binding! id phase counter)))
+                 (add-local-binding! id phase counter #:in s)))
   (define body-env (for/fold ([env (expand-context-env ctx)]) ([key (in-list keys)]
                                                                [id (in-list ids)])
                      (env-extend env key (local-variable id))))
@@ -152,10 +152,10 @@
    (define counter (root-expand-context-counter ctx))
    (define trans-keyss (for/list ([ids (in-list trans-idss)])
                          (for/list ([id (in-list ids)])
-                           (add-local-binding! id phase counter))))
+                           (add-local-binding! id phase counter #:in s))))
    (define val-keyss (for/list ([ids (in-list val-idss)])
                        (for/list ([id (in-list ids)])
-                         (add-local-binding! id phase counter #:frame-id frame-id))))
+                         (add-local-binding! id phase counter #:frame-id frame-id #:in s))))
    ;; Add new scope to body:
    (define bodys (for/list ([body (in-list (m 'body))]) (add-scope body sc)))
    (log-expand ctx renames-log-tag val-idss (datum->syntax #f bodys))

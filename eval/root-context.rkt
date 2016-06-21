@@ -2,6 +2,7 @@
 (require "../expand/root-expand-context.rkt"
          "../expand/require.rkt"
          "../expand/def-id.rkt"
+         "../expand/env.rkt"
          "../syntax/syntax.rkt"
          "../syntax/scope.rkt"
          "../syntax/binding.rkt"
