@@ -5,8 +5,7 @@
                   [read-syntax/recursive host:read-syntax/recursive]))
 
 (provide read-syntax
-         read-syntax/recursive
-         original-property-sym)
+         read-syntax/recursive)
 
 (define (read-syntax src in)
   (host-syntax->syntax (host:read-syntax src in)))

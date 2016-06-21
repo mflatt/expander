@@ -1,6 +1,7 @@
 #lang racket/base
 (require "../syntax/syntax.rkt"
          "../syntax/property.rkt"
+         "../syntax/original.rkt"
          "../syntax/datum-map.rkt"
          (prefix-in host:
                     (only-in racket/base
@@ -9,8 +10,7 @@
                              syntax-source syntax-line syntax-column
                              syntax-position syntax-span)))
 
-(provide original-property-sym
-         host-syntax->syntax)
+(provide host-syntax->syntax)
 
 (define (host-syntax->syntax v)
   (datum-map v
@@ -37,9 +37,6 @@
                           (syntax-property s key (host:syntax-property v key)
                                            (host:syntax-property-preserved? v key)))])]
                 [else v]))))
-
-(define original-property-sym
-  (gensym 'original))
 
 (define original-props
   (syntax-props (syntax-property empty-syntax original-property-sym #t)))

@@ -4,6 +4,7 @@
                     [syntax->datum raw:syntax->datum]
                     [datum->syntax raw:datum->syntax])
          "property.rkt"
+         "original.rkt"
          (rename-in "to-list.rkt"
                     [syntax->list raw:syntax->list])
          (rename-in "scope.rkt"

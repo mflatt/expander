@@ -4,7 +4,7 @@
          "to-list.rkt"
          "scope.rkt"
          "../namespace/core.rkt"
-         (only-in "../host/host-syntax-to-syntax.rkt" original-property-sym))
+         "original.rkt")
 
 ;; The `taint-dispatch` function recognizes syntax properties and
 ;; bindings that adjust the way that a syntax object is armed.
