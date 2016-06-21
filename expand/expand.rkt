@@ -4,6 +4,7 @@
          "../syntax/property.rkt"
          "../syntax/scope.rkt"
          "../syntax/taint.rkt"
+         "../syntax/taint-dispatch.rkt"
          "../syntax/match.rkt"
          "../namespace/namespace.rkt"
          "../namespace/module.rkt"
@@ -155,9 +156,9 @@
        (log-expand* ctx ['exit-prim result-s] ['return result-s])
        result-s]
       [else
-       (dispatch t insp (datum->syntax disarmed-s (cons sym disarmed-s) s s) id ctx b)])]
+       (dispatch t insp (syntax-rearm (datum->syntax disarmed-s (cons sym disarmed-s) s s) s) id ctx b)])]
     [(transformer? t)
-     (dispatch t insp (datum->syntax disarmed-s (cons sym disarmed-s) s s) id ctx b)]
+     (dispatch t insp (syntax-rearm (datum->syntax disarmed-s (cons sym disarmed-s) s s) s) id ctx b)]
     [(expand-context-only-immediate? ctx)
      (log-expand ctx 'exit-check s)
      s]
@@ -250,8 +251,7 @@
   ;; In a definition context, we need use-site scopes
   (define-values (use-s use-scopes) (maybe-add-use-site-scope intro-s ctx binding))
   ;; Avoid accidental transfer of taint-controlling properties:
-  (define cleaned-s (syntax-property-remove (syntax-property-remove use-s 'taint-mode)
-                                            'certify-mode))
+  (define cleaned-s (syntax-remove-taint-dispatch-properties use-s))
   ;; Call the transformer; the current expansion context may be needed
   ;; for `syntax-local-....` functions, and we may accumulate scopes from
   ;; definition contexts created by the transformer
@@ -260,7 +260,7 @@
                              [current-introduction-scopes (cons intro-scope
                                                                 use-scopes)]
                              [def-ctx-scopes def-ctx-scopes]))
-  (log-expand ctx 'macro-pre-x use-s)
+  (log-expand ctx 'macro-pre-x cleaned-s)
   (define transformed-s
     (parameterize ([current-expand-context m-ctx]
                    [current-namespace (namespace->namespace-at-phase
@@ -269,7 +269,7 @@
                    [current-module-code-inspector (or insp (current-module-code-inspector))])
       (call-with-continuation-barrier
        (lambda ()
-         ((transformer->procedure t) use-s)))))
+         ((transformer->procedure t) cleaned-s)))))
   (log-expand ctx 'macro-post-x transformed-s)
   (unless (syntax? transformed-s)
     (raise-argument-error (syntax-e id)
@@ -280,10 +280,11 @@
   ;; any expansion result
   (define post-s (maybe-add-post-expansion-scope result-s ctx))
    ;; Track expansion:
-  (define tracked-s (syntax-track-origin post-s s id))
-  (log-expand ctx 'enter-macro tracked-s)
+  (define tracked-s (syntax-track-origin post-s cleaned-s id))
+  (define rearmed-s (taint-dispatch tracked-s (lambda (t-s) (syntax-rearm t-s s))))
+  (log-expand ctx 'exit-macro rearmed-s)
   (values
-   tracked-s
+   rearmed-s
    ;; Move any accumulated definition-context scopes to the `scopes`
    ;; list for further expansion:
    (if (null? (unbox def-ctx-scopes))

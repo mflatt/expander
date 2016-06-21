@@ -89,7 +89,7 @@
 
 (define (wrap-lifts-as-let lifts body s phase)
   (datum->syntax
-   s
+   #f
    (for/fold ([body body]) ([lift (in-list (reverse lifts))])
      (unless (lifted-bind? lift)
        (error "non-bindings in `lift-context`"))

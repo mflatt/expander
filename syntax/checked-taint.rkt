@@ -1,8 +1,8 @@
 #lang racket/base
 (require "syntax.rkt"
-         "property.rkt"
          "to-list.rkt"
          "scope.rkt"
+         "taint-dispatch.rkt"
          (rename-in "taint.rkt"
                     [syntax-tainted? raw:syntax-tainted?]
                     [syntax-arm raw:syntax-arm]
@@ -70,47 +70,3 @@
       (current-code-inspector)))
 
 ;; ----------------------------------------
-
-(define (taint-dispatch s proc)
-  (let loop ([s s] [mode (or (syntax-property s 'taint-mode)
-                             (syntax-property s 'certify-mode))])
-    (case mode
-      [(opaque) (proc s)]
-      [(transparent)
-       (define c (syntax-map (or (syntax->list s)
-                                 (syntax-e s))
-                             (lambda (tail? d) d)
-                             (lambda (s d) (loop s #f))
-                             #f))
-       (datum->syntax #f c s s)]
-      [(transparent-binding)
-       (define c (syntax-e s))
-       (cond
-        [(pair? c)
-         (define cd (if (syntax? (cdr c))
-                        (syntax-e (cdr c))
-                        (cdr c)))
-         (cond
-          [(or (pair? cd)
-               (and (syntax? cd) (pair? (syntax-e cd))))
-           (define d (if (syntax? cd) (syntax-e cd) cd))
-           (datum->syntax s
-                          (cons (loop (car c) #f)
-                                (cons (loop (car d) 'transparent)
-                                      (syntax-map (cdr d)
-                                                  (lambda (tail? d) d)
-                                                  (lambda (s d) (loop s #f))
-                                                  #f)))
-                          s
-                          s)]
-          [else (loop s 'transparent)])]
-        [else (loop s 'transparent)])]
-      [else
-       (define c (syntax-e s))
-       (case (core-form-sym c (syntax-local-phase-level))
-         [(begin module #%module-begin)
-          (loop s 'transparent)]
-         [(define-values define-syntaxes)
-          (loop s 'transparent-binding)]
-         [else
-          (loop s 'opaque)])])))

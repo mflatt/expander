@@ -56,4 +56,3 @@
       (struct-copy syntax s
                    [props (hash-remove (syntax-props s) key)])
       s))
-
