@@ -222,7 +222,7 @@
     (cond
      [(expand-context-only-immediate? ctx)
       (log-expand ctx 'exit-check s)
-      s]
+      id]
      [else
       (log-expand ctx 'variable s)
       ;; A reference to a variable expands to itself --- but if the
