@@ -55,7 +55,8 @@
   (cond
    [use-mode? (taint-dispatch
                s
-               (lambda (s) (raw:syntax-rearm s from-s)))]
+               (lambda (s) (raw:syntax-rearm s from-s))
+               (syntax-local-phase-level))]
    [else
     (raw:syntax-rearm s from-s)]))
 
