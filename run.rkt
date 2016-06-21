@@ -25,6 +25,7 @@
 (define time-expand? #f)
 (define quiet-load? #f)
 (define boot-module (path->complete-path "main.rkt"))
+(define submod-name #f)
 (define load-file #f)
 (define args
   (command-line
@@ -56,6 +57,9 @@
    [("-f") file "Load non-module file in `racket/base` namespace"
     (set! boot-module 'racket/base)
     (set! load-file file)]
+   #:once-each
+   [("--submod") name "Load specified submodule"
+    (set! submod-name (string->symbol name))]
    #:args args args))
 
 (define cache (make-cache cache-dir))
@@ -153,7 +157,9 @@
  [else
   ;; Load and run the requested module
   (parameterize ([current-command-line-arguments (list->vector args)])
-    (namespace-require boot-module))])
+    (namespace-require (if submod-name
+                           `(submod ,boot-module ,submod-name)
+                           boot-module)))])
 
 (when extract?
   ;; Extract a bootstrapping slice of the requested module
