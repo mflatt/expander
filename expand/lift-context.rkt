@@ -139,8 +139,15 @@
               (and (lift-context? module-lifts)
                    (lift-context-module*-ok? module-lifts)))
     (case (core-form-sym s phase)
+      [(module) (void)]
       [(module*)
-       (error "cannot lift `module*` outside of a module:" s)]))
+       (raise-arguments-error 'syntax-local-lift-module
+                              "cannot lift `module*' to a top-level context" 
+                              "syntax" s)]
+      [else 
+       (raise-arguments-error 'syntax-local-lift-module
+                              "not a `module' declaration" 
+                              "syntax" s)]))
   (cond
    [(module-lift-context? module-lifts)
     (box-cons! (module-lift-context-lifts module-lifts) s)]
@@ -149,7 +156,7 @@
     ;; modules and other lifts in order
     (box-cons! (lift-context-lifts module-lifts) s)]
    [else
-    (error "unrecognized lift-context type for module lift")]))
+    (error "internal error: unrecognized lift-context type for module lift")]))
 
 ;; ----------------------------------------
 
