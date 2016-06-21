@@ -513,7 +513,9 @@
         [else
          (define-values (exp-s re-ctx)
            (apply-transformer t insp s id ctx binding))
-         (expand exp-s re-ctx)])]
+         (cond
+          [(expand-context-just-once? ctx) exp-s]
+          [else (expand exp-s re-ctx)])])]
       [(rename-transformer? t)
        (cond
         [(not-in-this-expand-context? t ctx)
