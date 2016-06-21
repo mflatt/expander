@@ -106,10 +106,7 @@
                                  [else
                                   ;; Found transformer; expand in a fresh namespace
                                   (define tmp-ns (make-namespace ns))
-                                  (define name (resolved-module-path-name mod-name))
-                                  (define mod-path (if (path? name)
-                                                       name
-                                                       `(quote ,name)))
+                                  (define mod-path (resolved-module-path->module-path mod-name))
                                   (namespace-require mod-path tmp-ns)
                                   (eval sym tmp-ns)])))])]))
 
