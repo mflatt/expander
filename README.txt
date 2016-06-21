@@ -11,7 +11,6 @@ TODO:
  set! on undefined
  enforced namespace constants
  lock on namespace & registry
- local-expand int-def post-expansion action (and logging)
 
 ----------------------------------------
 

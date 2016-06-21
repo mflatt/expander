@@ -122,9 +122,16 @@
                                             [else #f])]
                                  [post-expansion-scope
                                   #:parent root-expand-context
-                                  (and same-kind?
-                                       (memq context '(module module-begin top-level))
-                                       (root-expand-context-post-expansion-scope ctx))]
+                                  (if intdefs
+                                      (new-scope 'macro) ; placeholder; action uses `indefs`
+                                      (and same-kind?
+                                           (memq context '(module module-begin top-level))
+                                           (root-expand-context-post-expansion-scope ctx)))]
+                                 [post-expansion-scope-action
+                                  (if intdefs
+                                      (lambda (s placeholder-sc)
+                                        (add-intdef-scopes s intdefs))
+                                      (expand-context-post-expansion-scope-action ctx))]
                                  [scopes
                                   (append (if (expand-context-def-ctx-scopes ctx)
                                               (unbox (expand-context-def-ctx-scopes ctx))
@@ -144,8 +151,7 @@
 
   (log-expand local-ctx 'enter-local)
   (when as-transformer? (log-expand local-ctx 'phase-up))
-  (log-expand local-ctx 'local-pre input-s)
-  (log-expand local-ctx 'start-expand)
+  (log-expand* local-ctx ['local-pre input-s] ['start-expand])
   
   (define output-s (cond
                     [(and as-transformer? capture-lifts?)

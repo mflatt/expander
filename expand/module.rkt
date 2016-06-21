@@ -132,7 +132,7 @@
    (define ctx (struct-copy expand-context (copy-root-expand-context init-ctx root-ctx)
                             [allow-unbound? #f]
                             [namespace m-ns]
-                            [post-expansion-scope-mode 'add]
+                            [post-expansion-scope-action add-scope]
                             [phase phase]
                             [just-once? #f]))
    
