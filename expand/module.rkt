@@ -456,14 +456,12 @@
 ;; Add `#%module-begin`, because it's needed
 (define (add-module-begin bodys s initial-require-s phase module-name-sym mb-ctx
                           #:log-rename-one? [log-rename-one? #t])
-  (define mb-id (datum->syntax initial-require-s '#%module-begin))
+  (define disarmed-initial-require-s (syntax-disarm initial-require-s))
+  (define mb-id (datum->syntax disarmed-initial-require-s '#%module-begin))
   ;; If `mb-id` is not bound, we'd like to give a clear error message
   (unless (resolve mb-id phase)
     (raise-syntax-error #f "no #%module-begin binding in the module's language" s))
-  (define mb (datum->syntax
-              initial-require-s
-              `(,mb-id ,@bodys)
-              s))
+  (define mb (datum->syntax disarmed-initial-require-s `(,mb-id ,@bodys) s))
   (log-expand mb-ctx 'tag mb)
   (when log-rename-one?
     (log-expand mb-ctx 'rename-one mb))
