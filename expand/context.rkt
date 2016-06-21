@@ -115,9 +115,10 @@
 (define current-expand-observe (make-parameter #f
                                                (lambda (v)
                                                  (unless (or (not v)
-                                                             (procedure? v))
+                                                             (and (procedure? v)
+                                                                  (procedure-arity-includes? v 2)))
                                                    (raise-argument-error 'current-expand-observe
-                                                                          "(or/c procedure? #f)"
+                                                                          "(or/c (procedure-arity-includes/c 2) #f)"
                                                                           v))
                                                  v)))
 

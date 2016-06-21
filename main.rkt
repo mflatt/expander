@@ -67,7 +67,8 @@
   (declare-hash-based-module! '#%utils utils-primitives #:namespace ns)
   (declare-hash-based-module! '#%place-struct place-struct-primitives #:namespace ns)
   (declare-hash-based-module! '#%boot boot-primitives #:namespace ns)
-  (declare-hash-based-module! '#%expobs expobs-primitives #:namespace ns)
+  (declare-hash-based-module! '#%expobs expobs-primitives #:namespace ns
+                              #:protected? #t)
   (declare-kernel-module! ns
                           #:eval eval
                           #:main-ids (for/set ([name (in-hash-keys main-primitives)])

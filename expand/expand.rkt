@@ -51,7 +51,7 @@
                 ;; Aplying a rename transformer substitutes
                 ;; an id without changing `s`
                 #:alternate-id [alternate-id #f])
-  (log-expand ctx (if (expand-context-only-immediate? ctx) 'check 'visit) s)
+  (log-expand ctx (if (expand-context-only-immediate? ctx) 'enter-check 'visit) s)
   (cond
    [(identifier? s)
     (define id (or alternate-id s))
