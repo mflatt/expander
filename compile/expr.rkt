@@ -39,7 +39,7 @@
          (error "not a core form:" s)]
         [(module module*)
          (error "not a core expression form:" s)]
-        [(lambda λ)
+        [(lambda)
          (define m (match-syntax s '(lambda formals body)))
          (correlate s `(lambda ,@(compile-lambda (m 'formals) (m 'body) cctx)))]
         [(case-lambda)

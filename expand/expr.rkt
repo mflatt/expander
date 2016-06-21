@@ -54,23 +54,29 @@
   ;; Return formals (with new scope) and expanded body:
   (values sc-formals exp-body))
 
-(define (expand-lambda s ctx)
-  (log-expand ctx 'prim-lambda)
-  (define disarmed-s (syntax-disarm s))
-  (define m (match-syntax disarmed-s '(lambda formals body ...+)))
-  (define-values (formals body)
-    (lambda-clause-expander s disarmed-s (m 'formals) (m 'body) ctx 'lambda-renames))
-  (rebuild
-   s disarmed-s
-   `(,(m 'lambda) ,formals ,body)))
+(define (make-expand-lambda get-lambda)
+  (lambda (s ctx)
+    (log-expand ctx 'prim-lambda)
+    (define disarmed-s (syntax-disarm s))
+    (define m (match-syntax disarmed-s '(lambda formals body ...+)))
+    (define-values (formals body)
+      (lambda-clause-expander s disarmed-s (m 'formals) (m 'body) ctx 'lambda-renames))
+    (rebuild
+     s disarmed-s
+     `(,(get-lambda ctx (m 'lambda)) ,formals ,body))))
 
 (add-core-form!
  'lambda
- expand-lambda)
+ (make-expand-lambda (lambda (ctx lam-id) lam-id)))
 
 (add-core-form!
  'λ
- expand-lambda)
+ (make-expand-lambda
+  (lambda (ctx lam-id)
+    (datum->syntax (syntax-shift-phase-level core-stx (expand-context-phase ctx))
+                   'lambda
+                   lam-id
+                   lam-id))))
 
 (add-core-form!
  'case-lambda
