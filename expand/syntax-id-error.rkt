@@ -5,10 +5,10 @@
          "context.rkt"
          "../syntax/debug.rkt")
 
-(provide raise-ambigious-error
+(provide raise-ambiguous-error
          syntax-debug-info-string)
 
-(define (raise-ambigious-error id ctx)
+(define (raise-ambiguous-error id ctx)
   (raise-syntax-error #f
                       "identifier's binding is ambiguous"
                       id #f null

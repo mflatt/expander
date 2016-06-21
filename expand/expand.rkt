@@ -65,7 +65,7 @@
      (log-expand* ctx #:unless (expand-context-only-immediate? ctx) ['resolve id])
      (cond
       [(eq? binding 'ambiguous)
-       (raise-ambigious-error id ctx)]
+       (raise-ambiguous-error id ctx)]
       [(not binding)
        ;; The implicit `#%top` form handles unbound identifiers
        (expand-implicit '#%top (substitute-alternate-id s alternate-id) ctx s)]
@@ -86,7 +86,7 @@
      (log-expand* ctx #:unless (expand-context-only-immediate? ctx) ['resolve id])
      (cond
       [(eq? binding 'ambiguous)
-       (raise-ambigious-error id ctx)]
+       (raise-ambiguous-error id ctx)]
       [(not binding)
        ;; The `#%app` binding might do something with unbound ids
        (expand-implicit '#%app (substitute-alternate-id s alternate-id) ctx id)]
@@ -136,7 +136,7 @@
                             #:ambiguous-value 'ambiguous
                             #:immediate? #t))
    (when (eq? b 'ambiguous)
-     (raise-ambigious-error id ctx))
+     (raise-ambiguous-error id ctx))
    (define-values (t insp) (if b
                                (lookup b ctx id)
                                (values #f #f)))

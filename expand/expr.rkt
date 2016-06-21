@@ -444,7 +444,7 @@
                             #:ambiguous-value 'ambiguous))
    (cond
     [(eq? b 'ambiguous)
-     (raise-ambigious-error id ctx)]
+     (raise-ambiguous-error id ctx)]
     [(and b
           (module-binding? b)
           (eq? (module-binding-module b) (namespace-mpi (expand-context-namespace ctx))))
@@ -486,7 +486,7 @@
                                     #:ambiguous-value 'ambiguous
                                     #:immediate? #t))
      (when (eq? binding 'ambiguous)
-       (raise-ambigious-error id ctx))
+       (raise-ambiguous-error id ctx))
      (define-values (t insp) (if binding
                                  (lookup binding ctx s)
                                  (values #f #f)))
@@ -549,7 +549,7 @@
      (define binding (resolve+shift id (expand-context-phase ctx)
                                     #:ambiguous-value 'ambiguous))
      (when (eq? binding 'ambiguous)
-       (raise-ambigious-error id ctx))
+       (raise-ambiguous-error id ctx))
      (unless binding
        (raise-syntax-error #f "unbound identifier" s id null
                            (syntax-debug-info-string id ctx))))
