@@ -81,7 +81,7 @@
                   '()  ; lift-envs
                   #f   ; module-lifts
                   #f   ; require-lifts
-                  #f   ; lifts-to-module
+                  #f   ; to-module-lifts
                   #f   ; requires+provides
                   #f   ; name
                   (current-expand-observe)))

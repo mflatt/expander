@@ -258,13 +258,13 @@
 (define (syntax-local-lift-require s use-s)
   (define sc (new-scope 'macro))
   (define-values (ctx added-s)
-    (do-local-lift-to-module 'syntax-local-lift-module-require
+    (do-local-lift-to-module 'syntax-local-lift-require
                              expand-context-require-lifts
                              add-lifted-require!
                              s #:intro? #f
                              #:more-checks
                              (lambda ()
-                               (check 'syntax-local-lift-module-require
+                               (check 'syntax-local-lift-require
                                       syntax?
                                       use-s))
                              (lambda (s phase require-lift-ctx)
