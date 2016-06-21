@@ -64,4 +64,4 @@
       (syntax-property s 'certify-mode)))
 
 (define (syntax-remove-taint-dispatch-properties s)
-  (syntax-property-remove (syntax-property-remove s 'taint-mode) 'use-mode))
+  (syntax-property-remove (syntax-property-remove s 'taint-mode) 'certify-mode))
