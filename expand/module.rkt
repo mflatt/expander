@@ -1046,6 +1046,7 @@
     (case (core-form-sym (syntax-disarm body) phase)
       [(module)
        (expand-submodule body self ctx
+                         #:is-star? #f
                          #:mpis-to-reset mpis-to-reset
                          #:declared-submodule-names declared-submodule-names)]
       [else body])))
