@@ -137,7 +137,7 @@
     [(eq? b 'ambiguous)
      (raise-ambiguous-error id ctx)]
     [else
-     (define-values (t insp-of-t) (lookup b ctx id))
+     (define-values (t insp-of-t) (if b (lookup b ctx id) (values #f #f)))
      (cond
       [(transformer? t)
        (dispatch-transformer t insp-of-t (make-explicit sym s disarmed-s) id ctx b)]
