@@ -261,7 +261,7 @@
     (do-local-lift-to-module 'syntax-local-lift-require
                              expand-context-require-lifts
                              add-lifted-require!
-                             s #:intro? #f
+                             (datum->syntax #f s) #:intro? #f
                              #:more-checks
                              (lambda ()
                                (check 'syntax-local-lift-require
