@@ -10,7 +10,6 @@ TODO:
  continuation prompt for module body
  set! on undefined
  enforced namespace constants
- lock on namespace & registry
 
 ----------------------------------------
 

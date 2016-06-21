@@ -5,7 +5,8 @@
          "../syntax/bulk-binding.rkt"
          "../common/module-path.rkt"
          "../expand/root-expand-context.rkt"
-         "../host/linklet.rkt")
+         "../host/linklet.rkt"
+         "registry.rkt")
 
 (provide make-namespace
          namespace?
@@ -66,9 +67,6 @@
             (fprintf port ":~s" phase))
           (write-string ">" port)))
 
-;; Wrapper to make the registry opqaue
-(struct module-registry (declarations))
-
 (struct definitions (variables      ; linklet instance
                      transformers)) ; sym -> val
 
@@ -87,7 +85,7 @@
                (make-hasheqv)    ; phase-level-to-definitions
                (if share-from-ns
                    (namespace-module-registry share-from-ns)
-                   (module-registry (make-hasheq)))
+                   (make-module-registry))
                (if share-from-ns
                    (namespace-bulk-binding-registry share-from-ns)
                    (make-bulk-binding-registry))
