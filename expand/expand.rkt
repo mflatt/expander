@@ -261,13 +261,15 @@
                                                                 use-scopes)]
                              [def-ctx-scopes def-ctx-scopes]))
   (log-expand ctx 'macro-pre-x use-s)
-  (define transformed-s (parameterize ([current-expand-context m-ctx]
-                                       [current-namespace (namespace->namespace-at-phase
-                                                           (expand-context-namespace ctx)
-                                                           (add1 (expand-context-phase ctx)))]
-                                       [current-module-code-inspector (or insp (current-module-code-inspector))])
-          
-                          ((transformer->procedure t) use-s)))
+  (define transformed-s
+    (parameterize ([current-expand-context m-ctx]
+                   [current-namespace (namespace->namespace-at-phase
+                                       (expand-context-namespace ctx)
+                                       (add1 (expand-context-phase ctx)))]
+                   [current-module-code-inspector (or insp (current-module-code-inspector))])
+      (call-with-continuation-barrier
+       (lambda ()
+         ((transformer->procedure t) use-s)))))
   (log-expand ctx 'macro-post-x transformed-s)
   (unless (syntax? transformed-s)
     (raise-argument-error (syntax-e id)

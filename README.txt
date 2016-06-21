@@ -5,7 +5,6 @@ See "demo.rkt" for examples.
 TODO:
  bug fix for local definition contexts (MB's example)
  load handler's direct loading of submodules
- continuation barrier on macro invocation
  continuation prompt for module body
  set! on undefined
  enforced namespace constants
