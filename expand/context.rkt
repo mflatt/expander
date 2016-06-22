@@ -106,7 +106,7 @@
   (or (force (current-expand-context))
       (if fail-ok?
           #f
-          (error who "not currently expanding"))))
+          (raise-arguments-error who "not currently expanding"))))
 
 ;; ----------------------------------------
 
