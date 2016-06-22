@@ -36,7 +36,7 @@
       (define core-sym (core-form-sym s phase))
       (case core-sym
         [(#f)
-         (error "not a core form:" s)]
+         (error "internal error; not a core form:" s "at phase:" phase)]
         [(module module*)
          (error "not a core expression form:" s)]
         [(lambda)

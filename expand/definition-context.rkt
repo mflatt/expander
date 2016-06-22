@@ -8,7 +8,9 @@
          "context.rkt"
          "expand.rkt"
          "syntax-local.rkt"
-         "log.rkt")
+         "log.rkt"
+         "free-id-set.rkt"
+         "stop-ids.rkt")
 
 (provide add-intdef-scopes
          add-intdef-bindings
@@ -20,7 +22,9 @@
          internal-definition-context-binding-identifiers
          internal-definition-context-introduce
          internal-definition-context-seal
-         identifier-remove-from-definition-context)
+         identifier-remove-from-definition-context
+         
+         make-local-expand-context)
 
 (struct internal-definition-context (frame-id      ; identifies the frame for use-site scopes
                                      scope         ; scope that represents the context
@@ -70,8 +74,11 @@
                                                 ctx))
       (define tmp-env (for/fold ([env intdef-env]) ([sym (in-list syms)])
                         (hash-set env sym variable)))
-      (eval-for-syntaxes-binding input-s ids (struct-copy expand-context ctx
-                                                          [env tmp-env]))]
+      (eval-for-syntaxes-binding input-s ids
+                                 (make-local-expand-context (struct-copy expand-context ctx
+                                                                         [env tmp-env])
+                                                            #:context 'expression
+                                                            #:intdefs intdef))]
      [else
       (for/list ([id (in-list ids)]) variable)]))
   (define env-mixins (internal-definition-context-env-mixins intdef))
@@ -154,3 +161,58 @@
                      #:when (or always?
                                 (internal-definition-context-add-scope? intdef)))
     (action s (internal-definition-context-scope intdef))))
+
+;; ----------------------------------------
+
+(define (make-local-expand-context ctx
+                                   #:context context
+                                   #:phase [phase (expand-context-phase ctx)]
+                                   #:intdefs intdefs
+                                   #:stop-ids [stop-ids #f])
+  (define same-kind? (or (eq? context
+                              (expand-context-context ctx))
+                         (and (list? context)
+                              (list? (expand-context-context ctx)))))
+  (define all-stop-ids (and stop-ids (stop-ids->all-stop-ids stop-ids phase)))
+  (struct-copy expand-context ctx
+               [context context]
+               [env (add-intdef-bindings (expand-context-env ctx)
+                                         intdefs)]
+               [use-site-scopes
+                #:parent root-expand-context
+                (and (or (eq? context 'module)
+                         (list? context))
+                     (or (root-expand-context-use-site-scopes ctx)
+                         (box null)))]
+               [frame-id #:parent root-expand-context
+                         (cond
+                          [same-kind? (root-expand-context-frame-id ctx)]
+                          [(pair? intdefs)
+                           (internal-definition-context-frame-id (car intdefs))]
+                          [else #f])]
+               [post-expansion-scope
+                #:parent root-expand-context
+                (if intdefs
+                    (new-scope 'macro) ; placeholder; action uses `indefs`
+                    (and same-kind?
+                         (memq context '(module module-begin top-level))
+                         (root-expand-context-post-expansion-scope ctx)))]
+               [post-expansion-scope-action
+                (if intdefs
+                    (lambda (s placeholder-sc)
+                      (add-intdef-scopes s intdefs))
+                    (expand-context-post-expansion-scope-action ctx))]
+               [scopes
+                (append (if (expand-context-def-ctx-scopes ctx)
+                            (unbox (expand-context-def-ctx-scopes ctx))
+                            null)
+                        (expand-context-scopes ctx))]
+               [only-immediate? (not stop-ids)]
+               [just-once? #f]
+               [preserve-#%expression-and-do-not-add-#%top? #t]
+               [stops (free-id-set phase (or all-stop-ids null))]
+               [current-introduction-scopes null]
+               [all-scopes-stx #:parent root-expand-context
+                               (add-intdef-scopes
+                                (root-expand-context-all-scopes-stx ctx)
+                                intdefs)]))
