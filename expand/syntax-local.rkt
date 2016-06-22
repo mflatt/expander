@@ -12,6 +12,7 @@
          "use-site.rkt"
          "rename-trans.rkt"
          "lift-context.rkt"
+         "require.rkt"
          "require+provide.rkt"
          "protect.rkt"
          "log.rkt"
@@ -239,38 +240,49 @@
 
 ;; ----------------------------------------
 
-(define (do-local-lift-to-module who get add! s filter
+(define (do-local-lift-to-module who s
                                  #:intro? [intro? #t]
-                                 #:more-checks [more-checks void])
+                                 #:more-checks [more-checks void]
+                                 #:get-lift-ctx get-lift-ctx
+                                 #:add-lifted! add-lifted!
+                                 #:get-wrt-phase get-wrt-phase
+                                 #:pre-wrap [pre-wrap (lambda (s phase lift-ctx) s)]
+                                 #:shift-wrap [shift-wrap (lambda (s phase lift-ctx) s)]
+                                 #:post-wrap [post-wrap (lambda (s phase lift-ctx) s)])
   (check who syntax? s)
   (more-checks)
   (define ctx (get-current-expand-context who))
-  (define phase (expand-context-phase ctx))
-  (define lift-ctx (get ctx))
-  (define added-s (filter (if intro?
-                              (flip-introduction-scopes s ctx)
-                              s)
-                          phase
-                          lift-ctx))
-  (add! lift-ctx added-s phase)
+  (define lift-ctx (get-lift-ctx ctx))
+  (define phase (expand-context-phase ctx))   ; we're currently at this phase
+  (define wrt-phase (get-wrt-phase lift-ctx)) ; lift context is at this phase
+  (define added-s (if intro? (flip-introduction-scopes s ctx) s))
+  (define pre-s (pre-wrap added-s phase lift-ctx)) ; add pre-wrap at current phase
+  (define shift-s (for/fold ([s pre-s]) ([phase (in-range phase wrt-phase -1)]) ; shift from lift-context phase
+                    (shift-wrap s (sub1 phase) lift-ctx)))
+  (define post-s (post-wrap shift-s wrt-phase lift-ctx)) ; post-wrap at lift-context phase
+  (add-lifted! lift-ctx post-s wrt-phase) ; record lift for the target phase
   (values ctx added-s))
 
 (define (syntax-local-lift-require s use-s)
   (define sc (new-scope 'macro))
   (define-values (ctx added-s)
     (do-local-lift-to-module 'syntax-local-lift-require
-                             expand-context-require-lifts
-                             add-lifted-require!
-                             (datum->syntax #f s) #:intro? #f
+                             (datum->syntax #f s) 
+                             #:intro? #f
                              #:more-checks
                              (lambda ()
                                (check 'syntax-local-lift-require
                                       syntax?
                                       use-s))
+                             #:get-lift-ctx expand-context-require-lifts
+                             #:get-wrt-phase require-lift-context-wrt-phase
+                             #:add-lifted! add-lifted-require!
+                             #:shift-wrap
                              (lambda (s phase require-lift-ctx)
-                               (wrap-form '#%require
-                                          (add-scope s sc)
-                                          phase))))
+                               (require-spec-shift-for-syntax s))
+                             #:post-wrap
+                             (lambda (s phase require-lift-ctx)
+                               (wrap-form '#%require (add-scope s sc) phase))))
   (define result-s (add-scope use-s sc))
   (log-expand ctx 'lift-require added-s use-s result-s)
   result-s)
@@ -278,9 +290,14 @@
 (define (syntax-local-lift-provide s)
   (define-values (ctx result-s)
     (do-local-lift-to-module 'syntax-local-lift-module-end-declaration
-                             expand-context-to-module-lifts
-                             add-lifted-to-module-provide!
                              s
+                             #:get-lift-ctx expand-context-to-module-lifts
+                             #:get-wrt-phase to-module-lift-context-wrt-phase
+                             #:add-lifted! add-lifted-to-module-provide!
+                             #:shift-wrap
+                             (lambda (s phase to-module-lift-ctx)
+                               (wrap-form 'for-syntax s #f))
+                             #:post-wrap
                              (lambda (s phase to-module-lift-ctx)
                                (wrap-form '#%provide s phase))))
   (log-expand ctx 'lift-provide result-s))
@@ -288,24 +305,27 @@
 (define (syntax-local-lift-module-end-declaration s)
   (define-values (ctx also-s)
     (do-local-lift-to-module 'syntax-local-lift-module-end-declaration
-                             expand-context-to-module-lifts
-                             add-lifted-to-module-end!
                              s
+                             #:get-lift-ctx expand-context-to-module-lifts
+                             #:get-wrt-phase (lambda (lift-ctx) 0) ; always relative to 0
+                             #:add-lifted! add-lifted-to-module-end!
+                             #:pre-wrap
                              (lambda (orig-s phase to-module-lift-ctx)
-                               (define s (if (to-module-lift-context-end-as-expressions? to-module-lift-ctx)
-                                             (wrap-form '#%expression orig-s phase)
-                                             orig-s))
-                               (for/fold ([s s]) ([phase (in-range phase 0 -1)])
-                                 (wrap-form 'begin-for-syntax
-                                            s
-                                            (sub1 phase))))))
+                               (if (to-module-lift-context-end-as-expressions? to-module-lift-ctx)
+                                   (wrap-form '#%expression orig-s phase)
+                                   orig-s))
+                             #:shift-wrap
+                             (lambda (s phase to-module-lift-ctx)
+                               (wrap-form 'begin-for-syntax s phase))))
   (log-expand ctx 'lift-statement s))
 
 (define (wrap-form sym s phase)
   (datum->syntax
    #f
    (list (datum->syntax
-          (syntax-shift-phase-level core-stx phase)
+          (if phase
+              (syntax-shift-phase-level core-stx phase)
+              #f)
           sym)
          s)))
 

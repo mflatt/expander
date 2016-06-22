@@ -16,7 +16,8 @@
 
 (provide parse-and-perform-requires!
          perform-initial-require!
-         perform-require!)
+         perform-require!
+         require-spec-shift-for-syntax)
 
 (struct adjust-only (syms))
 (struct adjust-prefix (sym))
@@ -319,3 +320,41 @@
                                        (namespace-bulk-binding-registry ns))
                          phase
                          #:in orig-s))))
+
+;; ----------------------------------------
+
+;; In certain lifting cases, we'd like to just throw a `for-syntax`
+;; around a `require` specification, but that's not supported by our
+;; `#%require` grammar. Instead, we have to adjust whatever phase
+;; shift is present.
+(define (require-spec-shift-for-syntax req)
+  (define (rebuild-req req new-req)
+    (datum->syntax req new-req req req))
+  (define ((loop shifted?) req)
+    (define fm (and (pair? (syntax-e req))
+                    (identifier? (car (syntax-e req)))
+                    (syntax-e (car (syntax-e req)))))
+    (case fm
+      [(for-meta)
+       (define m (match-syntax req '(for-meta phase-level spec ...)))
+       (define p (syntax-e (m 'phase-level)))
+       (unless (phase? p)
+         (raise-syntax-error #f "bad phase" req))
+       (rebuild-req req `(,(m 'for-meta) ,(phase+ p 1) ,@(map (loop #t) (m 'spec))))]
+      [(for-syntax)
+       (define m (match-syntax req '(for-syntax spec ...)))
+       (rebuild-req req `(for-meta 2 ,@(map (loop #t) (m 'spec))))]
+      [(for-template)
+       (define m (match-syntax req '(for-template spec ...)))
+       (rebuild-req req `(for-meta 0 ,@(map (loop #t) (m 'spec))))]
+      [(for-label)
+       (define m (match-syntax req '(for-label spec ...)))
+       (rebuild-req req `(,(m 'for-label) ,@(map (loop #t) (m 'spec))))]
+      [(just-meta)
+       (define m (match-syntax req '(just-meta phase-level spec ...)))
+       (rebuild-req req `(,(m 'just-meta) ,(m 'phase-level) ,@(map (loop #f) (m 'spec))))]
+      [else
+       (if shifted?
+           req
+           (datum->syntax #f `(for-syntax ,req)))]))
+  ((loop #f) req))

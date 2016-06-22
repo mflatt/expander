@@ -25,10 +25,12 @@
          make-module-lift-context
          get-and-clear-module-lifts!
          add-lifted-module!
+         module-lift-context-wrt-phase
          
          make-require-lift-context
          add-lifted-require!
          get-and-clear-require-lifts!
+         require-lift-context-wrt-phase
          
          make-to-module-lift-context
          make-shared-module-ends
@@ -36,7 +38,8 @@
          get-and-clear-end-lifts!
          get-and-clear-provide-lifts!
          add-lifted-to-module-provide!
-         add-lifted-to-module-end!)
+         add-lifted-to-module-end!
+         to-module-lift-context-wrt-phase)
 
 ;; ----------------------------------------
 
@@ -124,11 +127,12 @@
 
 ;; ----------------------------------------
 
-(struct module-lift-context (lifts         ; box of list of lifted
+(struct module-lift-context (wrt-phase   ; phase of target for lifts
+                             lifts         ; box of list of lifted
                              module*-ok?)) ; whether `module*` is allowed
 
-(define (make-module-lift-context module*-ok?)
-  (module-lift-context (box null) module*-ok?))
+(define (make-module-lift-context phase module*-ok?)
+  (module-lift-context phase (box null) module*-ok?))
 
 (define (get-and-clear-module-lifts! module-lifts)
   (box-clear! (module-lift-context-lifts module-lifts)))
@@ -161,10 +165,11 @@
 ;; ----------------------------------------
 
 (struct require-lift-context (do-require  ; callback to process a lifted require
+                              wrt-phase   ; phase of target for lifts
                               requires))  ; records lifted requires
 
-(define (make-require-lift-context do-require)
-  (require-lift-context do-require (box null)))
+(define (make-require-lift-context wrt-phase do-require)
+  (require-lift-context do-require wrt-phase (box null)))
 
 (define (get-and-clear-require-lifts! require-lifts)
   (box-clear! (require-lift-context-requires require-lifts)))
@@ -176,13 +181,16 @@
 
 ;; ----------------------------------------
 
-(struct to-module-lift-context (provides
+(struct to-module-lift-context (wrt-phase   ; phase of target for lifts
+                                provides
                                 end-as-expressions?
                                 ends))
 
-(define (make-to-module-lift-context #:shared-module-ends ends
+(define (make-to-module-lift-context phase
+                                     #:shared-module-ends ends
                                      #:end-as-expressions? end-as-expressions?)
-  (to-module-lift-context (box null) 
+  (to-module-lift-context phase
+                          (box null) 
                           end-as-expressions?
                           ends))
 

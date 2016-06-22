@@ -222,6 +222,7 @@
   
   (define lift-ctx (make-lift-context (make-top-level-lift ctx)))
   (define require-lift-ctx (make-require-lift-context
+                            (namespace-phase ns)
                             (make-parse-top-lifted-require ns)))
   (define exp-s
     (expand-in-context s (struct-copy expand-context ctx

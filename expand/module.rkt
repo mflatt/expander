@@ -236,11 +236,13 @@
                                                        (make-wrap-as-definition self frame-id
                                                                                 inside-scope initial-require-s
                                                                                 defined-syms requires+provides))]
-                                               [module-lifts (make-module-lift-context #t)]
+                                               [module-lifts (make-module-lift-context phase #t)]
                                                [require-lifts (make-require-lift-context
+                                                               phase
                                                                (make-parse-lifted-require m-ns self requires+provides
                                                                                           #:declared-submodule-names declared-submodule-names))]
                                                [to-module-lifts (make-to-module-lift-context
+                                                                 phase
                                                                  #:shared-module-ends module-ends
                                                                  #:end-as-expressions? #f)]))
 
@@ -271,7 +273,8 @@
                                        [only-immediate? #f]
                                        [frame-id #:parent root-expand-context #f]
                                        [post-expansion-scope #:parent root-expand-context #f]
-                                       [to-module-lifts (make-to-module-lift-context #:shared-module-ends module-ends
+                                       [to-module-lifts (make-to-module-lift-context phase
+                                                                                     #:shared-module-ends module-ends
                                                                                      #:end-as-expressions? #t)]))
          
          (finish-expanding-body-expressons partially-expanded-bodys
