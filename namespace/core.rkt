@@ -63,7 +63,6 @@
                                               (in-hash-keys core-primitives)
                                               (in-hash-keys core-forms))])
                              (values sym (make-module-binding core-mpi 0 sym))))
-                #:max-phase-level 1
                 #:instantiate-phase-callback
                 (lambda (data-box ns phase phase-level self bulk-binding-registry insp)
                   (case phase-level

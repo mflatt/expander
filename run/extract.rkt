@@ -306,7 +306,7 @@
           (unless complained-this?
             (log-status " - ~a at ~s" (link-name lnk) (link-phase lnk))
             (set! complained-this? #t))
-          (log-status "   needs ~s: ~a" p (apply ~a #:separator " " in-vars))))
+          (log-status "~a" (lines (format "   needs ~s:" p) in-vars))))
       (when complained-this?
         (log-status "   needed by ~s" needed-reason))))
 
