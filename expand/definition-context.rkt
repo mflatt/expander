@@ -7,7 +7,6 @@
          "use-site.rkt"
          "context.rkt"
          "main.rkt"
-         "syntax-local.rkt"
          "log.rkt"
          "free-id-set.rkt"
          "stop-ids.rkt")
@@ -24,7 +23,8 @@
          internal-definition-context-seal
          identifier-remove-from-definition-context
          
-         make-local-expand-context)
+         make-local-expand-context
+         flip-introduction-scopes)
 
 (struct internal-definition-context (frame-id      ; identifies the frame for use-site scopes
                                      scope         ; scope that represents the context
@@ -216,3 +216,8 @@
                                (add-intdef-scopes
                                 (root-expand-context-all-scopes-stx ctx)
                                 intdefs)]))
+
+;; ----------------------------------------
+
+(define (flip-introduction-scopes s ctx)
+  (flip-scopes s (expand-context-current-introduction-scopes ctx)))

@@ -16,15 +16,14 @@
          "require+provide.rkt"
          "protect.rkt"
          "log.rkt"
+         "definition-context.rkt"
          "../common/module-path.rkt"
          "../namespace/namespace.rkt"
          "../namespace/module.rkt"
          "../common/contract.rkt"
          "../syntax/debug.rkt")
 
-(provide flip-introduction-scopes
-         
-         syntax-transforming?
+(provide syntax-transforming?
          syntax-transforming-with-lifts?
          syntax-transforming-module-expression?
          syntax-local-transforming-module-provides?
@@ -57,11 +56,6 @@
          syntax-local-submodules
          
          syntax-local-get-shadower)
-
-;; ----------------------------------------
-
-(define (flip-introduction-scopes s ctx)
-  (flip-scopes s (expand-context-current-introduction-scopes ctx)))
 
 ;; ----------------------------------------
 
@@ -147,8 +141,8 @@
   
 ;; ----------------------------------------
 
-(define (do-syntax-local-value who id [failure-thunk #f]
-                               #:immediate? [immediate? #f])
+(define (do-syntax-local-value who id intdef failure-thunk
+                               #:immediate? immediate?)
   (check who identifier? id)
   (unless (or (not failure-thunk)
               (and (procedure? failure-thunk)
@@ -156,10 +150,20 @@
     (raise-argument-error who
                           "(or #f (procedure-arity-includes/c 0))" 
                           failure-thunk))
-  (define ctx (get-current-expand-context who))
+  (unless (or (not intdef)
+              (internal-definition-context? intdef))
+    (raise-argument-error who
+                          "(or #f internal-definition-context?)" 
+                          failure-thunk))
+  (define current-ctx (get-current-expand-context who))
+  (define ctx (if intdef
+                  (struct-copy expand-context current-ctx
+                               [env (add-intdef-bindings (expand-context-env current-ctx)
+                                                         intdef)])
+                  current-ctx))
   (log-expand ctx 'local-value id)
   (define phase (expand-context-phase ctx))
-  (let loop ([id id])
+  (let loop ([id (flip-introduction-scopes id ctx)])
     (define b (if immediate?
                   (resolve+shift id phase #:immediate? #t)
                   (resolve+shift/extra-inspector id phase (expand-context-namespace ctx))))
@@ -188,11 +192,11 @@
          [immediate? (values v #f)]
          [else v])])])))
 
-(define (syntax-local-value id [failure-thunk #f])
-  (do-syntax-local-value 'syntax-local-value #:immediate? #f id failure-thunk))
+(define (syntax-local-value id [failure-thunk #f] [intdef #f])
+  (do-syntax-local-value 'syntax-local-value #:immediate? #f id intdef failure-thunk))
 
-(define (syntax-local-value/immediate id [failure-thunk #f])
-  (do-syntax-local-value 'syntax-local-value/immediate #:immediate? #t id failure-thunk))
+(define (syntax-local-value/immediate id [failure-thunk #f] [intdef #f])
+  (do-syntax-local-value 'syntax-local-value/immediate #:immediate? #t id intdef failure-thunk))
 
 ;; ----------------------------------------
 
