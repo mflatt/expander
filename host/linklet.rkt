@@ -46,7 +46,7 @@
          instance-set-variable-value!
          instance-unset-variable!
 
-         lookup-primitive-instance
+         get-primitive-instance
 
          linklet-directory?       ; maps symbol lists to linklet bundles
          hash->linklet-directory  ; converts a hash table to a ld
@@ -109,7 +109,7 @@
 
 ;; ----------------------------------------
 
-(define (lookup-primitive-instance name)
+(define (get-primitive-instance name)
   (define mod-name `(quote ,name))
   (define-values (vars trans) (module->exports mod-name))
   (instance name (for/hash ([sym (in-list (map car (cdr (assv 0 vars))))])
@@ -289,13 +289,13 @@
 (define (compiled-linklet-import-variables linklet)
   (if (vector? linklet)
       (vector-ref linklet 1)
-      ;; Assumed previous "compiled" to source
+      ;; Assumed previously "compiled" to source
       (extract-import-variables-from-expression linklet)))
 
 (define (compiled-linklet-export-variables linklet)
   (if (vector? linklet)
       (vector-ref linklet 2)
-      ;; Assumed previous "compiled" to source
+      ;; Assumed previously "compiled" to source
       (extract-export-variables-from-expression linklet)))
 
 ;; ----------------------------------------

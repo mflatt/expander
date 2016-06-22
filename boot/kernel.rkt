@@ -36,7 +36,7 @@
                              #:primitive? [primitive? #f]
                              #:protected? [protected? #f])
   (define mod-name `',name)
-  (define inst (lookup-primitive-instance name))
+  (define inst (get-primitive-instance name))
   (define ht (for/hash ([sym (in-list (instance-variable-names inst))]
                         #:unless (set-member? skip-syms sym))
                (values sym

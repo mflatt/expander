@@ -4,7 +4,7 @@
          "../syntax/original.rkt"
          "../syntax/datum-map.rkt"
          (prefix-in host:
-                    (only-in racket/base
+                    (only-in "syntax.rkt"
                              syntax? syntax-e syntax-property syntax-property-preserved?
                              syntax-property-symbol-keys
                              syntax-source syntax-line syntax-column

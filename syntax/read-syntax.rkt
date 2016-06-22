@@ -1,6 +1,6 @@
 #lang racket/base
 (require "../host/host-syntax-to-syntax.rkt"
-         (only-in racket/base
+         (only-in "../host/syntax.rkt"
                   [read-syntax host:read-syntax]
                   [read-syntax/recursive host:read-syntax/recursive]))
 

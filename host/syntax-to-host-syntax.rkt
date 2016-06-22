@@ -2,7 +2,7 @@
 (require "../syntax/syntax.rkt"
          "../syntax/property.rkt"
          "../syntax/scope.rkt"
-         (only-in racket/base
+         (only-in "syntax.rkt"
                   [datum->syntax host:datum->syntax]
                   [syntax-property host:syntax-property]))
 
