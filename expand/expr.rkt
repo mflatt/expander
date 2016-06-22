@@ -417,7 +417,8 @@
 
 (define (register-eventual-variable!? id ctx)
   (cond
-   [(expand-context-need-eventually-defined ctx)
+   [(and (expand-context-need-eventually-defined ctx)
+         ((expand-context-phase ctx) . >= . 1))
     ;; In top level or `begin-for-syntax`, encountered a reference to a
     ;; variable that might be defined later; record it for later checking
     (hash-update! (expand-context-need-eventually-defined ctx)

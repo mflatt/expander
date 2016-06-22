@@ -229,8 +229,7 @@
                                                [phase phase]
                                                [namespace (namespace->namespace-at-phase m-ns phase)]
                                                [only-immediate? #t]
-                                               [need-eventually-defined (and (phase . >= . 1)
-                                                                             need-eventually-defined)]
+                                               [need-eventually-defined need-eventually-defined] ; used only at phase 1 and up
                                                [declared-submodule-names declared-submodule-names]
                                                [lifts (make-lift-context
                                                        (make-wrap-as-definition self frame-id
