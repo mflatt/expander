@@ -224,7 +224,12 @@
            [else
             (raise-syntax-error #f
                                 (string-append "identifier already "
-                                               (if defined? "defined" "required"))
+                                               (if defined? "defined" "required")
+                                               (cond
+                                                [(zero-phase? phase) ""]
+                                                [(label-phase? phase) " for label"]
+                                                [(= 1 phase) " for syntax"]
+                                                [else (format " for phase ~a" phase)]))
                                 orig-s
                                 id)]))])])]))
 
