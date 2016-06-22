@@ -38,18 +38,17 @@
   
   (define todo (make-hasheq)) ; module name -> phase -> namespace-or-#f
   
-  (define initial-phase phase) ; phase to attach instances
-  
   (define missing (gensym 'missing))
 
   ;; Loop to check and decide what to transfer
   (let loop ([mpi (module-path-index-join mod-path #f)]
              [phase phase]
-             [attach-instances? attach-instances?])
+             [attach-instances? attach-instances?]
+             [attach-phase phase])
     (define mod-name (parameterize ([current-namespace src-namespace])
                        (module-path-index-resolve mpi)))
     
-    (define attach-this-instance? (and attach-instances? (eqv? phase initial-phase)))
+    (define attach-this-instance? (and attach-instances? (eqv? phase attach-phase)))
     (define m-ns (hash-ref (hash-ref todo mod-name #hasheqv()) phase missing))
 
     (when (or (eq? missing m-ns)
@@ -66,7 +65,7 @@
              (not (zero-phase? phase)))
         ;; Always handle a cross-phase persistent module at phase 0, which means
         ;; that all phases will get the same instance if any instance is attached
-        (loop mpi 0 attach-instances?)]
+        (loop mpi 0 attach-instances? 0)]
        [else
         (define already-m (namespace->module dest-namespace mod-name))
         (when (and already-m (not (eq? already-m m)))
@@ -111,7 +110,8 @@
                                            (module-self m)
                                            mpi)
                   (phase+ phase (car phase+reqs))
-                  attach-instances?))
+                  attach-instances?
+                  attach-phase))
           (for ([submod-name (in-list (module-submodule-names m))])
             (loop (module-path-index-join `(submod "." ,submod-name) mpi)
                   ;; Attach submodules at phase #f, which allows
@@ -119,10 +119,11 @@
                   ;; already, since the submodule has not necessarily
                   ;; been instantiated
                   #f
-                  #f))
+                  #f
+                  attach-phase))
           (when (module-supermodule-name m)
             ;; Associated supermodule is treated like an associated submodule
-            (loop (module-path-index-join `(submod "..") mpi) #f #f)))])))
+            (loop (module-path-index-join `(submod "..") mpi) #f #f attach-phase)))])))
 
   ;; Perform decided transfers
   (for* ([(mod-name phases) (in-hash todo)]
