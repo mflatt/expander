@@ -1,9 +1,7 @@
 #lang racket/base
 (require "../common/set.rkt"
          "../syntax/datum-map.rkt"
-         "../compile/built-in-symbol.rkt"
          "correlate.rkt"
-         (submod "correlate.rkt" host)
          racket/unsafe/undefined)
 
 ;; A "linklet" is intended as the primitive form of separate (not
@@ -262,7 +260,7 @@
                    [current-compile orig-compile])
       ;; Use a vector to list the exported variables
       ;; with the compiled bytecode
-      (vector (compile (correlated->host-syntax plain-c))
+      (vector (compile plain-c)
               (marshal (extract-import-variables-from-expression c))
               (marshal (extract-export-variables-from-expression c))))]))
 

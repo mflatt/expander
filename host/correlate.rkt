@@ -1,12 +1,12 @@
 #lang racket/base
-(require "../syntax/syntax.rkt"
-         "../syntax/property.rkt"
-         "../syntax/scope.rkt"
-         "../syntax/to-list.rkt"
-         "../syntax/match.rkt"
-         "../syntax/datum-map.rkt")
+(require "syntax.rkt"
+         "../syntax/datum-map.rkt"
+         "../common/make-match.rkt")
 
-;; Represent a compiled S-expression with source locations and properties
+;; A "correlated" is the host's notion of syntax objects. We use it to
+;; represent a compiled S-expression with source locations and
+;; properties
+
 (provide correlate
          correlated?
          datum->correlated
@@ -15,35 +15,28 @@
          correlated-length
          correlated->list
          correlated->datum
+         correlated-property
          match-correlated)
 
-(define (correlate stx s-exp)
+(define (correlate src-e s-exp)
   (define e
     (cond
-     [(or (pair? s-exp)
-          (vector? s-exp)
-          (prefab-struct-key s-exp)
-          (hash? s-exp)
-          (box? s-exp))
+     [(datum-has-elements? s-exp)
       ;; Avoid pushing source locations to nested objects
-      (datum->syntax #f
-                     (syntax-content (datum->syntax #f s-exp))
-                     stx
-                     #f)]
+      (datum->correlated (correlated-e (datum->correlated s-exp))
+                         src-e)]
      [else
-      (datum->syntax #f s-exp stx)]))
-  (define maybe-n (syntax-property stx 'inferred-name))
+      (datum->correlated s-exp src-e)]))
+  (define maybe-n (syntax-property src-e 'inferred-name))
   (if maybe-n
-      (syntax-property e 'inferred-name (if (syntax? maybe-n) 
-                                            (syntax->datum maybe-n)
-                                            maybe-n))
+      (syntax-property e 'inferred-name maybe-n)
       e))
 
 (define (correlated? e)
   (syntax? e))
 
-(define (datum->correlated d)
-  (datum->syntax #f d))
+(define (datum->correlated d [srcloc #f])
+  (datum->syntax #f d srcloc))
 
 (define (correlated-e e)
   (if (syntax? e)
@@ -70,18 +63,11 @@
                      (syntax->datum d)
                      d))))
 
-(define (match-correlated e pattern)
-  (match-syntax e pattern))
+(define correlated-property
+  (case-lambda
+    [(e k) (syntax-property e k)]
+    [(e k v) (syntax-property e k v)]))
 
-;; ----------------------------------------
+(define-values (match-correlated try-match-correlated)
+  (make-syntax-matchers syntax? syntax-e (lambda (false str e) (error str))))
 
-(module+ host
-  (require "syntax-to-host-syntax.rkt")
-    
-  (provide correlated->host-syntax)
-         
-  (define (correlated->host-syntax e)
-    (datum-map e (lambda (tail? d)
-                   (if (syntax? d)
-                       (syntax->host-syntax d)
-                       d)))))

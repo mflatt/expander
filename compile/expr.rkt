@@ -15,7 +15,8 @@
          "context.rkt"
          "header.rkt"
          "reserved-symbol.rkt"
-         "../host/correlate.rkt")
+         "../host/correlate.rkt"
+         "correlate.rkt")
 
 (provide compile
          compile-quote-syntax)
@@ -41,12 +42,12 @@
          (error "not a core expression form:" s)]
         [(lambda)
          (define m (match-syntax s '(lambda formals body)))
-         (correlate s `(lambda ,@(compile-lambda (m 'formals) (m 'body) cctx)))]
+         (correlate* s `(lambda ,@(compile-lambda (m 'formals) (m 'body) cctx)))]
         [(case-lambda)
          (define m (match-syntax s '(case-lambda [formals body] ...)))
-         (correlate s `(case-lambda ,@(for/list ([formals (in-list (m 'formals))]
-                                            [body (in-list (m 'body))])
-                                   (compile-lambda formals body cctx))))]
+         (correlate* s `(case-lambda ,@(for/list ([formals (in-list (m 'formals))]
+                                             [body (in-list (m 'body))])
+                                    (compile-lambda formals body cctx))))]
         [(#%app)
          (define m (match-syntax s '(#%app . rest)))
          (define es (let ([es (m 'rest)])
@@ -57,24 +58,24 @@
            (compile s))]
         [(if)
          (define m (match-syntax s '(if tst thn els)))
-         (correlate s `(if
-                        ,(compile (m 'tst))
-                        ,(compile (m 'thn))
-                        ,(compile (m 'els))))]
+         (correlate* s `(if
+                         ,(compile (m 'tst))
+                         ,(compile (m 'thn))
+                         ,(compile (m 'els))))]
         [(with-continuation-mark)
          (define m (match-syntax s '(if key val body)))
-         (correlate s `(with-continuation-mark
-                        ,(compile (m 'key))
-                        ,(compile (m 'val))
-                        ,(compile (m 'body))))]
+         (correlate* s `(with-continuation-mark
+                         ,(compile (m 'key))
+                         ,(compile (m 'val))
+                         ,(compile (m 'body))))]
         [(begin begin0)
          (define m (match-syntax s '(begin e ...+)))
-         (correlate s `(,core-sym ,@(for/list ([e (in-list (m 'e))])
-                                      (compile e))))]
+         (correlate* s `(,core-sym ,@(for/list ([e (in-list (m 'e))])
+                                       (compile e))))]
         [(set!)
          (define m (match-syntax s '(set! id rhs)))
-         (correlate s `(,@(compile-identifier (m 'id) cctx
-                                              #:set-to (compile (m 'rhs)))))]
+         (correlate* s `(,@(compile-identifier (m 'id) cctx
+                                               #:set-to (compile (m 'rhs)))))]
         [(let-values letrec-values)
          (compile-let core-sym s cctx)]
         [(#%expression)
@@ -82,7 +83,7 @@
          (compile (m 'e))]
         [(quote)
          (define m (match-syntax s '(quote datum)))
-         (correlate s `(quote ,(syntax->datum (m 'datum))))]
+         (correlate* s `(quote ,(syntax->datum (m 'datum))))]
         [(quote-syntax)
          (define m (match-syntax s '(quote-syntax datum . _)))
          (compile-quote-syntax (m 'datum) phase cctx)]
@@ -92,10 +93,10 @@
                             (try-match-syntax s '(#%variable-reference (#%top . id)))))
          (define id (or (and id-m (id-m 'id))
                         (and top-m (top-m 'id))))
-         (correlate s 
-                    (if id
-                        `(#%variable-reference ,(compile-identifier id cctx))
-                        `(#%variable-reference)))]
+         (correlate* s 
+                     (if id
+                         `(#%variable-reference ,(compile-identifier id cctx))
+                         `(#%variable-reference)))]
         [(#%top)
          (when (compile-context-module-self cctx)
            (error "found `#%top` in a module body:" s))
@@ -128,11 +129,11 @@
   (define symss (for/list ([ids (in-list idss)])
                   (for/list ([id (in-list ids)])
                     (local-id->symbol id phase))))
-  (correlate s
-             `(,core-sym ,(for/list ([syms (in-list symss)]
-                                     [rhs (in-list (m 'rhs))])
-                            `[,syms ,(compile rhs cctx)])
-               ,(compile (m 'body) cctx))))
+  (correlate* s
+              `(,core-sym ,(for/list ([syms (in-list symss)]
+                                      [rhs (in-list (m 'rhs))])
+                             `[,syms ,(compile rhs cctx)])
+                ,(compile (m 'body) cctx))))
 
 (define (compile-identifier s cctx #:set-to [rhs #f] #:top? [top? #f])
   (define phase (compile-context-phase cctx))
@@ -185,9 +186,9 @@
                                              (syntax-inspector s)))])]
      [else
       (error "not a reference to a module or local binding:" s)]))
-  (correlate s (if rhs
-                   `(set! ,sym ,rhs)
-                   sym)))
+  (correlate* s (if rhs
+                    `(set! ,sym ,rhs)
+                    sym)))
 
 ;; Pick a symbol to represent a local binding, given the identifier
 (define (local-id->symbol id phase)

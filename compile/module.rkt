@@ -18,8 +18,7 @@
          "id-to-symbol.rkt"
          "instance.rkt"
          "form.rkt"
-         "compiled-in-memory.rkt"
-         "../host/correlate.rkt")
+         "compiled-in-memory.rkt")
 
 (provide compile-module)
 

@@ -6,7 +6,8 @@
                   [datum->syntax host:datum->syntax]
                   [syntax-property host:syntax-property]))
 
-(provide syntax->host-syntax)
+(provide syntax->host-syntax
+         srcloc->vector)
 
 (define (syntax->host-syntax v)
   (syntax-map v
