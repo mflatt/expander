@@ -14,6 +14,8 @@ TODO:
 Running:
 
  % racket demo.rkt
+ or
+ % racket bootstrap-demo.rkt
 
    Runs the examples/tests in "demo.rkt". The tests are not remotely
    complete, but they're a quick and useful sanity check. The
@@ -21,7 +23,14 @@ Running:
    `main`, where the expansion, compilation, and evaluation aer less
    overloaded and more controlable.
 
+   Use the "bootstrap-demo.rkt" when running in an older version of
+   Racket that is not built with this expander (but that version of
+   Racket must be new enough to provide a primitive '#%linket module
+   as a bootstrapping hook.)
+
  % racket run.rkt -c <dir>
+ or
+ % racket bootstrap-run.rkt -c <dir>
 
    Runs the expander to load itself from source. Expanded and compiled
    modules are stored in <dir>, somewhat like bytecode files, but
@@ -82,6 +91,12 @@ Roadmap to a few key pieces:
  demo.rkt - exercises the expander and compiler (uses "main.rkt")
 
  run.rkt - starts a Racket replacement (uses "main.rkt")
+
+ bootstrap-run.rkt - like "run.rkt", but for a host Racket that
+                     does not include linklet support
+
+ bootstrap-demo.rkt - like "demo.rkt", but for a host Racket that
+                      does not include linklet support
 
 Beware that names are routinely shadowed when they are provided by
 `racket/base` but replaced by the expander's implementation. For

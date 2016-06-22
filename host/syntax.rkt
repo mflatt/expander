@@ -1,13 +1,9 @@
 #lang racket/base
+(require '#%linklet)
 
 ;; Bounce syntax operations that are implemented by the runtime system
 ;; through `get-primitive-instance`, so that the bootstrapping process
 ;; doesn't complain about using them.
-
-(define (get-primitive-instance name)
-  `(quote ,name))
-(define (instance-variable-value i sym)
-  (dynamic-require i sym))
 
 (define kernel-instance (get-primitive-instance '#%kernel))
 

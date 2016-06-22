@@ -297,6 +297,7 @@
         (define p (link-name in-lnk))
         (when (and (symbol? p)
                    (not (member p runtime-instances))
+                   (not (eq? p '#%linklet))
                    (hash-ref needed in-lnk #t))
           (unless complained?
             (log-status "~a\n~a"
