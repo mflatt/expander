@@ -72,21 +72,25 @@
   (define create-root-expand-context-from-module ; might be used to create root-expand-context
     (make-create-root-expand-context-from-module requires evaled-h))
   
-  (define m (make-module original-self
-                         requires
-                         provides
+  (define m (make-module #:self original-self
+                         #:requires requires
+                         #:provides provides
                          #:language-info (decl 'language-info)
-                         min-phase
-                         max-phase
+                         #:min-phase-level min-phase
+                         #:max-phase-level max-phase
                          #:cross-phase-persistent? (decl 'cross-phase-persistent?)
                          #:submodule-names (append pre-submodule-names post-submodule-names)
                          #:supermodule-name supermodule-name
-                         (lambda (data-box ns phase-shift phase-level self bulk-binding-registry insp)
-                           (define syntax-literals-instance
+                         #:prepare-instance-callback
+                         (lambda (data-box ns phase-shift self bulk-binding-registry insp)
+                           (unless (unbox data-box)
                              (init-syntax-literals! data-box ns
                                                     syntax-literals-linklet data-instance
                                                     phase-shift original-self self bulk-binding-registry insp
-                                                    create-root-expand-context-from-module))
+                                                    create-root-expand-context-from-module)))
+                         #:instantiate-phase-callback
+                         (lambda (data-box ns phase-shift phase-level self bulk-binding-registry insp)
+                           (define syntax-literals-instance (unbox data-box))
                            (define phase-linklet (hash-ref evaled-h phase-level #f))
                            
                            (when phase-linklet
@@ -155,42 +159,39 @@
                                syntax-literals-linklet data-instance
                                phase-shift original-self self bulk-binding-registry insp
                                create-root-expand-context-from-module)
-  (unless (unbox data-box)
-    (define inst
-      (make-instance-instance
-       #:namespace ns
-       #:phase-shift phase-shift
-       #:self self 
-       #:bulk-binding-registry bulk-binding-registry
-       #:inspector insp
-       #:set-transformer! (lambda (name val) (error "shouldn't get here for the root-ctx linklet"))))
-    
-    (define root-ctx-instance
-      (instantiate-linklet syntax-literals-linklet
-                           (list deserialize-instance
-                                 data-instance
-                                 inst)))
-    
-    (set-box! data-box root-ctx-instance)
+  (define inst
+    (make-instance-instance
+     #:namespace ns
+     #:phase-shift phase-shift
+     #:self self 
+     #:bulk-binding-registry bulk-binding-registry
+     #:inspector insp
+     #:set-transformer! (lambda (name val) (error "shouldn't get here for the root-ctx linklet"))))
+  
+  (define root-ctx-instance
+    (instantiate-linklet syntax-literals-linklet
+                         (list deserialize-instance
+                               data-instance
+                               inst)))
+  
+  (set-box! data-box root-ctx-instance)
 
-    (define get-encoded-root-expand-ctx
-      (instance-variable-value root-ctx-instance 'get-encoded-root-expand-ctx))
-    
-    (cond
-     [(eq? get-encoded-root-expand-ctx 'empty)
-      ;; A `#:empty-namespace` declaration requested a namespace with no initial bindings
-      (namespace-set-root-expand-ctx! ns (delay (make-root-expand-context)))]
-     [(procedure? get-encoded-root-expand-ctx)
-      ;; Root expand context has been preserved; deserialize it on demand
-      (namespace-set-root-expand-ctx! ns (delay (root-expand-context-decode-for-module
-                                                 (get-encoded-root-expand-ctx))))]
-     [else
-      ;; Root expand context has not been preserved, because it can be reconstructed
-      ;; from module metadata; do that on demand
-      (namespace-set-root-expand-ctx! ns (delay (create-root-expand-context-from-module
-                                                 ns phase-shift original-self self)))]))
-
-  (unbox data-box))
+  (define get-encoded-root-expand-ctx
+    (instance-variable-value root-ctx-instance 'get-encoded-root-expand-ctx))
+  
+  (cond
+   [(eq? get-encoded-root-expand-ctx 'empty)
+    ;; A `#:empty-namespace` declaration requested a namespace with no initial bindings
+    (namespace-set-root-expand-ctx! ns (delay (make-root-expand-context)))]
+   [(procedure? get-encoded-root-expand-ctx)
+    ;; Root expand context has been preserved; deserialize it on demand
+    (namespace-set-root-expand-ctx! ns (delay (root-expand-context-decode-for-module
+                                               (get-encoded-root-expand-ctx))))]
+   [else
+    ;; Root expand context has not been preserved, because it can be reconstructed
+    ;; from module metadata; do that on demand
+    (namespace-set-root-expand-ctx! ns (delay (create-root-expand-context-from-module
+                                               ns phase-shift original-self self)))]))
 
 ;; ----------------------------------------
 

@@ -57,8 +57,8 @@
                 language-info   ; #f or vector
                 min-phase-level ; phase-level
                 max-phase-level ; phase-level
-                ;; expected to be consistent with provides and {min,max}-phase-level:
-                instantiate     ; namespace phase phase-level ->
+                prepare-instance  ; box namespace phase-shift bulk-binding-registry inspector -> any
+                instantiate-phase ; box namespace phase-shift phase-level bulk-binding-registry inspector -> any
                 primitive?      ; inline variable values in compiled code?
                 cross-phase-persistent?
                 no-protected?   ; short cut for checking protected access
@@ -66,9 +66,13 @@
                 submodule-names ; associated submodules (i.e, when declared together)
                 supermodule-name)) ; associated supermodule (i.e, when declared together)
 
-(define (make-module self requires provides
-                     min-phase-level max-phase-level
-                     instantiate
+(define (make-module #:self self
+                     #:requires [requires null]
+                     #:provides provides
+                     #:min-phase-level [min-phase-level 0]
+                     #:max-phase-level [max-phase-level 0]
+                     #:instantiate-phase-callback instantiate-phase
+                     #:prepare-instance-callback [prepare-instance void]
                      #:language-info [language-info #f]
                      #:primitive? [primitive? #f]
                      #:cross-phase-persistent? [cross-phase-persistent? primitive?]
@@ -79,7 +83,8 @@
           #f ; access
           language-info
           min-phase-level max-phase-level
-          instantiate
+          prepare-instance
+          instantiate-phase
           primitive?
           cross-phase-persistent?
           no-protected?
@@ -208,7 +213,7 @@
 (define (namespace-create-module-instance! ns name 0-phase m mpi)
   (define m-ns (struct-copy namespace ns
                             [mpi mpi]
-                            [root-expand-ctx (box #f)] ; maybe set to non-#f by running phase 0
+                            [root-expand-ctx (box #f)] ; maybe set to non-#f by running
                             [phase 0-phase]
                             [0-phase 0-phase]
                             [phase-to-namespace (make-hasheqv)]
@@ -337,11 +342,14 @@
           ;; This is the phase to make sure that we've run
           (unless (eq? 'started (hash-ref (module-instance-phase-level-to-state mi) phase-level #f))
             (hash-set! (module-instance-phase-level-to-state mi) phase-level 'started)
-            (define defs (namespace->definitions m-ns phase-level))
+            (void (namespace->definitions m-ns phase-level))
             (define p-ns (namespace->namespace-at-phase m-ns phase))
             (define insp (module-inspector m))
-            (define go (module-instantiate m))
-            (go (module-instance-data-box mi) p-ns phase-shift phase-level mpi bulk-binding-registry insp))]
+            (define data-box (module-instance-data-box mi))
+            (define prep (module-prepare-instance m))
+            (define go (module-instantiate-phase m))
+            (prep data-box p-ns phase-shift mpi bulk-binding-registry insp)
+            (go data-box p-ns phase-shift phase-level mpi bulk-binding-registry insp))]
          [(and otherwise-available?
                (not (negative? run-phase))
                (not (hash-ref (module-instance-phase-level-to-state mi) phase-level #f)))
@@ -350,7 +358,10 @@
                         phase
                         (lambda (l) (cons mi l))
                         null)
-          (hash-set! (module-instance-phase-level-to-state mi) phase-level 'available)])))
+          (hash-set! (module-instance-phase-level-to-state mi) phase-level 'available)
+          (define insp (module-inspector m))
+          (define prep (module-prepare-instance m))
+          (prep (module-instance-data-box mi) m-ns phase-shift mpi bulk-binding-registry insp)])))
 
     (when otherwise-available?
       (set-module-instance-made-available?! mi #t))

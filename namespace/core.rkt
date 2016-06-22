@@ -57,13 +57,14 @@
    ns
    (make-module #:cross-phase-persistent? #t
                 #:no-protected? #t
-                core-mpi
-                null
+                #:self core-mpi
+                #:provides
                 (hasheqv 0 (for/hasheq ([sym (in-sequences
                                               (in-hash-keys core-primitives)
                                               (in-hash-keys core-forms))])
                              (values sym (make-module-binding core-mpi 0 sym))))
-                0 1
+                #:max-phase-level 1
+                #:instantiate-phase-callback
                 (lambda (data-box ns phase phase-level self bulk-binding-registry insp)
                   (case phase-level
                     [(0)

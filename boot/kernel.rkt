@@ -58,15 +58,15 @@
    (make-module #:cross-phase-persistent? #t
                 #:primitive? primitive?
                 #:no-protected? (not protected?)
-                mpi
-                null
+                #:self mpi
+                #:provides
                 (hasheqv 0 (for/hash ([sym (in-hash-keys ht)])
                              (define binding (make-module-binding mpi 0 sym))
                              (values sym
                                      (if protected?
                                          (protected binding)
                                          binding))))
-                0 0
+                #:instantiate-phase-callback
                 (lambda (data-box ns phase-shift phase-level self bulk-binding-registry insp)
                   (when (= 0 phase-level)
                     (for ([(sym val) (in-hash ht)])
@@ -82,8 +82,9 @@
   (declare-module!
    ns
    (make-module #:cross-phase-persistent? #t
-                mpi
-                (list (cons 0 require-mpis))
+                #:self mpi
+                #:requires (list (cons 0 require-mpis))
+                #:provides
                 (if reexport?
                     (hasheqv 0
                              (for*/hash ([require-mpi (in-list require-mpis)]
@@ -99,6 +100,5 @@
                                                           0))])
                                (values sym binding)))
                     #hasheqv())
-                0 0
-                void)
+                #:instantiate-phase-callback void)
    (module-path-index-resolve mpi)))
