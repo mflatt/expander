@@ -7,7 +7,7 @@
          "../syntax/taint.rkt"
          "env.rkt"
          "context.rkt"
-         "expand.rkt"
+         "main.rkt"
          "../namespace/core.rkt"
          "use-site.rkt"
          "rename-trans.rkt"

@@ -3,7 +3,7 @@
          (only-in "../syntax/binding.rkt" resolve+shift syntax-transfer-shifts)
          "../syntax/inspector.rkt"
          "../syntax/module-binding.rkt"
-         "../syntax/checked-syntax.rkt"
+         "../syntax/api.rkt"
          "../syntax/error.rkt"
          (only-in "../syntax/scope.rkt" add-scopes push-scope)
          "namespace.rkt"

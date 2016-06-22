@@ -1,12 +1,12 @@
 #lang racket/base
 (require "common/set.rkt"
          "namespace/namespace.rkt"
-         "eval/eval.rkt"
+         "eval/main.rkt"
          "eval/dynamic-require.rkt"
-         "namespace/eval.rkt"
-         (prefix-in wrapper: "eval/main.rkt")
+         "namespace/api.rkt"
+         (prefix-in wrapper: "eval/api.rkt")
          "namespace/attach.rkt"
-         "namespace/module-reflect.rkt"
+         "namespace/api-module.rkt"
          "namespace/core.rkt"
          "boot/kernel.rkt"
          "boot/main-primitive.rkt"
@@ -15,7 +15,7 @@
          "boot/place-primitive.rkt"
          "boot/runtime-primitive.rkt"
          "boot/handler.rkt"
-         "syntax/checked-syntax.rkt")
+         "syntax/api.rkt")
 
 (provide boot ; installs handlers: eval, module name resolver, etc.
 

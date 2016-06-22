@@ -67,8 +67,7 @@ Roadmap to a few key pieces:
  compile/ - from expanded to S-expression linket
 
  eval/ - evaluation
-   main.rkt - installs eval handler, compile handler, and resolver
-   eval.rkt - top-level evaluation
+   main.rkt - top-level evaluation
 
  boot/ - internal initialization
    handler.rkt - implements the default module name resolver
@@ -77,7 +76,8 @@ Roadmap to a few key pieces:
  run/ - helpers to drive the expander
    extract.rkt - extracts subset of compilation units (via "run.rkt")
 
- main.rkt - expander/compiler/evaluator entry point
+ main.rkt - installs eval handler, etc.; entry point for the
+            expander/compiler/evaluator 
 
  demo.rkt - exercises the expander and compiler (uses "main.rkt")
 

@@ -20,7 +20,7 @@
          "../namespace/core.rkt"
          "context.rkt"
          "use-site.rkt"
-         "expand.rkt"
+         "main.rkt"
          "require.rkt"
          "provide.rkt"
          "def-id.rkt"

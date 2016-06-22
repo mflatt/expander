@@ -7,7 +7,7 @@
          "../syntax/module-binding.rkt"
          "../namespace/namespace.rkt"
          "require+provide.rkt"
-         "expand.rkt"
+         "main.rkt"
          "context.rkt"
          "require.rkt"
          "def-id.rkt"

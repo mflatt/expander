@@ -1,13 +1,13 @@
 #lang racket/base
 (require '#%paramz
          racket/private/collect
-         "../syntax/checked-syntax.rkt"
+         "../syntax/api.rkt"
          "../syntax/error.rkt"
          "../syntax/srcloc.rkt"
          "../namespace/namespace.rkt"
-         "../eval/eval.rkt"
+         "../eval/main.rkt"
          "../eval/dynamic-require.rkt"
-         "../namespace/eval.rkt"
+         "../namespace/api.rkt"
          "../common/module-path.rkt"
          "../eval/module-read.rkt")
 

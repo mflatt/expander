@@ -29,7 +29,7 @@
          "../expand/log.rkt")
 
 ;; Provides public versions of syntax functions (with contract checks,
-;; for example); see also "checked-taint.rkt"
+;; for example); see also "taint-api.rkt"
 
 (provide syntax?
          syntax-e

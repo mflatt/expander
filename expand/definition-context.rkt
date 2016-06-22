@@ -6,7 +6,7 @@
          "env.rkt"
          "use-site.rkt"
          "context.rkt"
-         "expand.rkt"
+         "main.rkt"
          "syntax-local.rkt"
          "log.rkt"
          "free-id-set.rkt"

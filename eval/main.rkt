@@ -1,68 +1,244 @@
 #lang racket/base
-(require (prefix-in direct: "eval.rkt")
-         (prefix-in direct: "../namespace/eval.rkt")
-         "../syntax/checked-syntax.rkt"
+(require "../syntax/module-binding.rkt"
+         "../syntax/api.rkt"
+         (only-in "../syntax/taint.rkt"
+                  [syntax-disarm raw:syntax-disarm]
+                  [syntax-rearm raw:syntax-rearm])
          "../namespace/namespace.rkt"
-         "../common/contract.rkt")
-
-;; These wrappers implement the protocol for whether to use
-;; `namespace-synatx-introduce` on the argument to `eval`, etc.
+         "../namespace/module.rkt"
+         "../namespace/core.rkt"
+         "../common/phase.rkt"
+         "../syntax/match.rkt"
+         "../expand/context.rkt"
+         (rename-in "../expand/main.rkt" [expand expand-in-context])
+         "../compile/main.rkt"
+         "../compile/compiled-in-memory.rkt"
+         "top.rkt"
+         "module.rkt"
+         "../common/module-path.rkt"
+         "../host/linklet.rkt"
+         "../syntax/bulk-binding.rkt"
+         "../common/contract.rkt"
+         "../namespace/api.rkt"
+         "../expand/lift-context.rkt"
+         "../expand/require.rkt"
+         "../expand/require+provide.rkt"
+         "reflect.rkt"
+         "../expand/log.rkt")
 
 (provide eval
-         eval-syntax
-         
          compile
-         compile-syntax
-         
          expand
-         expand-syntax
-         
-         expand-to-top-form
-         expand-syntax-to-top-form
-         
          expand-once
-         expand-syntax-once)
+         expand-to-top-form)
 
-(define (eval s [ns (current-namespace)])
-  (check 'eval namespace? ns)
-  (parameterize ([current-namespace ns])
-    ((current-eval) (intro s ns))))
+;; This `eval` is suitable as an eval handler that will be called by
+;; the `eval` and `eval-syntax` of '#%kernel
+(define (eval s [ns (current-namespace)] [compile (lambda (s ns)
+                                                    (compile s ns  #:serializable? #f))])
+  (cond
+   [(or (compiled-in-memory? s)
+        (linklet-directory? s))
+    (eval-compiled s ns)]
+   [(and (syntax? s)
+         (or (compiled-in-memory? (syntax-e s))
+             (linklet-directory? (syntax-e s))))
+    (eval-compiled (syntax->datum s) ns)]
+   [else
+    (per-top-level s ns 
+                   #:single (lambda (s ns)
+                              (eval-compiled (compile s ns) ns)))]))
 
-(define (eval-syntax s [ns (current-namespace)])
-  (check 'eval-syntax syntax? s)
-  (check 'eval-syntax namespace? ns)
-  (parameterize ([current-namespace ns])
-    ((current-eval) s)))
+(define (eval-compiled c ns)
+  (cond
+   [(compiled-module-expression? c)
+    (eval-module c #:namespace ns)]
+   [else
+    (eval-top c ns eval-compiled)]))
 
-(define (compile s)
-  ((current-compile) (intro s) #f))
+;; This `compile` is suitable as a compile handler that will be called
+;; by the `compile` and `compile-syntax` of '#%kernel
+(define (compile s [ns (current-namespace)] [expand expand]
+                 #:serializable? [serializable? #t])
+  (define cs
+    (per-top-level s ns
+                   #:single (lambda (s ns) (list (compile-single s ns expand
+                                                            serializable?)))
+                   #:combine append))
+  (if (= 1 (length cs))
+      (car cs)
+      (compiled-tops->compiled-top cs)))
 
-(define (compile-syntax s)
-  (check 'compile-syntax syntax? s)
-  ((current-compile) s #f))
+(define (compile-single s ns expand serializable?)
+  (define exp-s (expand s ns))
+  (let loop ([exp-s exp-s])
+    (define disarmed-exp-s (raw:syntax-disarm exp-s))
+    (case (core-form-sym disarmed-exp-s (namespace-phase ns))
+      [(module)
+       (compile-module exp-s (make-compile-context #:namespace ns)
+                       #:serializable? serializable?)]
+      [(begin)
+       ;; expansion must have captured lifts
+       (define m (match-syntax disarmed-exp-s '(begin e ...)))
+       (compiled-tops->compiled-top
+        (for/list ([e (in-list (m 'e))])
+          (loop e)))]
+      [else
+       (compile-top exp-s (make-compile-context #:namespace ns)
+                    #:serializable? serializable?)])))
 
-(define (expand s)
-  (direct:expand (intro s) #:log-expand? #t))
+;; This `expand` is suitable as an expand handler (if such a thing
+;; existed) to be called by `expand` and `expand-syntax`.
+(define (expand s [ns (current-namespace)]
+                #:log-expand? [log-expand? #f])
+  (when log-expand? (log-expand-start))
+  (per-top-level s ns
+                 #:single expand-single
+                 #:combine cons
+                 #:wrap re-pair))
 
-(define (expand-syntax s)
-  (check 'expand-syntax syntax? s)
-  (direct:expand s #:log-expand? #t))
+(define (expand-single s ns)
+  (define-values (require-lifts lifts exp-s)
+    (expand-capturing-lifts s (make-expand-context ns)))
+  (cond
+   [(and (null? require-lifts) (null? lifts)) exp-s]
+   [else
+    (wrap-lifts-as-begin (append require-lifts lifts)
+                         #:adjust-form (lambda (form) (expand-single form ns))
+                         exp-s
+                         s (namespace-phase ns))]))
 
-(define (expand-once s)
-  (direct:expand-once (intro s)))
+(define (expand-once s [ns (current-namespace)])
+  (per-top-level s ns
+                 #:single expand-single-once
+                 #:combine cons
+                 #:wrap re-pair
+                 #:just-once? #t))
 
-(define (expand-syntax-once s)
-  (check 'expand-syntax-once syntax? s)
-  (direct:expand-once s))
+(define (expand-single-once s ns)
+  (define-values (require-lifts lifts exp-s)
+    (expand-capturing-lifts s (struct-copy expand-context (make-expand-context ns)
+                                           [just-once? #t])))
+  (cond
+   [(and (null? require-lifts) (null? lifts)) exp-s]
+   [else
+    (wrap-lifts-as-begin (append require-lifts lifts)
+                         exp-s
+                         s (namespace-phase ns))]))
 
-(define (expand-to-top-form s)
-  (direct:expand-to-top-form (intro s)))
+(define (expand-to-top-form s [ns (current-namespace)])
+  ;; Use `per-top-level` for immediate expansion and lift handling,
+  ;; but `#:single #f` makes it return immediately
+  (per-top-level s ns #:single #f))
 
-(define (expand-syntax-to-top-form s)
-  (check 'expand-syntax-to-top-form syntax? s)
-  (direct:expand-to-top-form s))
+;; ----------------------------------------
 
+;; Top-level compilation and evaluation, which involves partial
+;; expansion to detect `begin` and `begin-for-syntax` to interleave
+;; expansions
+(define (per-top-level given-s ns
+                       #:single single        ; handle discovered form; #f => stop after immediate
+                       #:combine [combine #f] ; how to cons a recur result, or not
+                       #:wrap [wrap #f]       ; how to wrap a list of recur results, or not
+                       #:just-once? [just-once? #f]) ; single expansion step
+  (define s (maybe-intro given-s ns))
+  (define ctx (make-expand-context ns))
+  (define phase (namespace-phase ns))
+  (let loop ([s s] [phase phase] [ns ns])
+    (define tl-ctx (struct-copy expand-context ctx
+                                [phase phase]
+                                [namespace ns]
+                                [just-once? just-once?]))
+    (define-values (require-lifts lifts exp-s)
+      (expand-capturing-lifts s (struct-copy expand-context tl-ctx
+                                             [only-immediate? #t]
+                                             [phase phase]
+                                             [namespace ns])))
+    (define disarmed-exp-s (raw:syntax-disarm exp-s))
+    (cond
+     [(or (pair? require-lifts) (pair? lifts))
+      ;; Fold in lifted definitions and try again
+      (define new-s (wrap-lifts-as-begin (append require-lifts lifts)
+                                         exp-s
+                                         s phase))
+      (if just-once?
+          new-s
+          (loop new-s phase ns))]
+     [(not single) exp-s]
+     [(and just-once? (not (eq? exp-s s))) exp-s]
+     [else
+      (case (core-form-sym disarmed-exp-s phase)
+        [(begin)
+         (define m (match-syntax disarmed-exp-s '(begin e ...)))
+         ;; Map `loop` over the `e`s, but in the case of `eval`,
+         ;; tail-call for last one:
+         (define (begin-loop es)
+           (cond
+            [(null? es) (if combine null (void))]
+            [(and (not combine) (null? (cdr es)))
+             (loop (car es) phase ns)]
+            [else
+             (define a (loop (car es) phase ns))
+             (if combine
+                 (combine a (begin-loop (cdr es)))
+                 (begin-loop (cdr es)))]))
+         (if wrap
+             (wrap (m 'begin) exp-s (begin-loop (m 'e)))
+             (begin-loop (m 'e)))]
+        [(begin-for-syntax)
+         (define m (match-syntax disarmed-exp-s '(begin-for-syntax e ...)))
+         (define next-phase (add1 phase))
+         (define next-ns (namespace->namespace-at-phase ns next-phase))
+         (namespace-visit-available-modules! next-ns) ; to match old behavior for empty body
+         (define l
+           (for/list ([s (in-list (m 'e))])
+             (loop s next-phase next-ns)))
+         (cond
+          [wrap (wrap (m 'begin-for-syntax) exp-s l)]
+          [combine l]
+          [else (void)])]
+        [else
+         (single exp-s ns)])])))
 
-(define (intro given-s [ns (current-namespace)])
-  (define s (if (syntax? given-s) given-s (datum->syntax #f given-s)))
-  (direct:namespace-syntax-introduce s ns))
+;; Add scopes to `s` if it's not syntax:
+(define (maybe-intro s ns)
+  (if (syntax? s)
+      s
+      (namespace-syntax-introduce (datum->syntax #f s) ns)))
+
+(define (re-pair form-id s r)
+  (raw:syntax-rearm
+   (datum->syntax (raw:syntax-disarm s)
+                  (cons form-id r)
+                  s
+                  s)
+   s))
+
+;; ----------------------------------------
+
+(define (expand-capturing-lifts s ctx)
+  (define ns (expand-context-namespace ctx))
+  (namespace-visit-available-modules! ns)
+  
+  (define lift-ctx (make-lift-context (make-top-level-lift ctx)))
+  (define require-lift-ctx (make-require-lift-context
+                            (namespace-phase ns)
+                            (make-parse-top-lifted-require ns)))
+  (define exp-s
+    (expand-in-context s (struct-copy expand-context ctx
+                                      [lifts lift-ctx]
+                                      [module-lifts lift-ctx]
+                                      [require-lifts require-lift-ctx])))
+  (values (get-and-clear-require-lifts! require-lift-ctx)
+          (get-and-clear-lifts! lift-ctx)
+          exp-s))
+
+(define (make-parse-top-lifted-require ns)
+  (lambda (s phase)
+    ;; We don't "hide" this require in the same way as
+    ;; a top-level `#%require`, because it's already
+    ;; hidden in the sense of having an extra scope
+    (define m (match-syntax (raw:syntax-disarm s) '(#%require req)))
+    (parse-and-perform-requires! (list (m 'req)) s
+                                 ns phase #:run-phase phase
+                                 (make-requires+provides #f))))

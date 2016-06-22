@@ -1,12 +1,12 @@
 #lang racket/base
-(require "../eval/eval.rkt"
+(require "../eval/main.rkt"
          "../eval/dynamic-require.rkt"
          "../eval/reflect.rkt"
-         (prefix-in wrapper: "../eval/main.rkt")
+         (prefix-in wrapper: "../eval/api.rkt")
          "../namespace/namespace.rkt"
-         "../namespace/eval.rkt"
+         "../namespace/api.rkt"
          "../namespace/attach.rkt"
-         "../namespace/module-reflect.rkt")
+         "../namespace/api-module.rkt")
 
 (provide main-primitives)
 

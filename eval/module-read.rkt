@@ -1,8 +1,8 @@
 #lang racket/base
-(require "../syntax/checked-syntax.rkt"
-         "eval.rkt"
+(require "../syntax/api.rkt"
+         "main.rkt"
          "reflect.rkt"
-         "../namespace/eval.rkt")
+         "../namespace/api.rkt")
 
 (provide with-module-reading-parameterization
          raise-wrong-module-name

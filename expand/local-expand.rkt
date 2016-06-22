@@ -5,7 +5,7 @@
          "../syntax/binding.rkt"
          "../namespace/core.rkt"
          "context.rkt"
-         "expand.rkt"
+         "main.rkt"
          "syntax-local.rkt"
          "definition-context.rkt"
          "already-expanded.rkt"

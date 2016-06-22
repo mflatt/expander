@@ -17,7 +17,7 @@
          "../namespace/core.rkt"
          "context.rkt"
          "allowed-context.rkt"
-         "expand.rkt"
+         "main.rkt"
          "set-bang-trans.rkt"
          "rename-trans.rkt"
          "reference-record.rkt"

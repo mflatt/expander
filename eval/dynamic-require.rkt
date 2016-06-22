@@ -1,13 +1,13 @@
 #lang racket/base
 (require "../common/phase.rkt"
          "../syntax/module-binding.rkt"
-         "../syntax/checked-syntax.rkt"
+         "../syntax/api.rkt"
          "../namespace/namespace.rkt"
          "../namespace/module.rkt"
          "../namespace/protect.rkt"
          "../common/module-path.rkt"
-         "../namespace/eval.rkt"
-         "eval.rkt")
+         "../namespace/api.rkt"
+         "main.rkt")
 
 (provide dynamic-require)
 
