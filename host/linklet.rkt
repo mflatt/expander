@@ -131,7 +131,7 @@
 
 ;; ----------------------------------------
 
-(define cu-namespace (make-base-empty-namespace))
+(define cu-namespace (make-empty-namespace))
 (parameterize ([current-namespace cu-namespace])
   (namespace-require ''#%kernel)
   (namespace-set-variable-value! 'check-not-undefined check-not-undefined)

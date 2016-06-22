@@ -11,31 +11,67 @@
 (provide any-side-effects?)
 
 (define (any-side-effects? e ; compiled expression
-                           expected-results) ; number of expected reuslts, or #f if any number is ok
+                           expected-results ; number of expected reuslts, or #f if any number is ok
+                           #:locals [locals #hasheq()]) ; allowed local variabes
   (define actual-results
-    (let loop ([e e])
+    (let loop ([e e] [locals locals])
       (case (and (pair? (correlated-e e))
                  (correlated-e (car (correlated-e e))))
-        [(quote lambda case-lambda) 1]
-        [(letrec-values)
+        [(quote lambda case-lambda #%variable-reference) 1]
+        [(letrec-values let-values)
          (define m (match-correlated e '(_ ([ids rhs] ...) body)))
          (and (not (for/or ([ids (in-list (m 'ids))]
                             [rhs (in-list (m 'rhs))])
-                     (any-side-effects? rhs (correlated-length ids))))
-              (loop (m 'body)))]
+                     (any-side-effects? rhs (correlated-length ids) #:locals locals)))
+              (loop (m 'body) (add-binding-info locals (m 'ids) (m 'rhs))))]
+        [(values)
+         (define m (match-correlated e '(_ e ...)))
+         (and (for/and ([e (in-list (m 'e))])
+                (not (any-side-effects? e 1 #:locals locals)))
+              (length (m 'e)))]
         [(make-struct-type)
          (and (ok-make-struct-type? e)
               5)]
+        [(make-struct-field-accessor)
+         (and (ok-make-struct-field-accessor/mutator? e locals 'accessor)
+              1)]
+        [(make-struct-field-mutator)
+         (and (ok-make-struct-field-accessor/mutator? e locals 'mutator)
+              1)]
         [else
          (define v (correlated-e e))
          (and (symbol? v)
-              (or (built-in-symbol? v)
+              (or (hash-ref locals v #f)
+                  (built-in-symbol? v)
                   ;; FIXME: needed for "kernstruct.rkt"
                   (eq? v 'exn:fail:syntax))
               1)])))
   (not (and actual-results
             (or (not expected-results)
                 (= actual-results expected-results)))))
+
+;; ----------------------------------------
+
+(define-struct struct-op (type field-count) #:prefab)
+
+(define (add-binding-info locals idss rhss)
+  (for/fold ([locals locals]) ([ids (in-list idss)]
+                               [rhs (in-list rhss)])
+     (case (and (pair? (correlated-e rhs))
+                (correlated-e (car (correlated-e rhs))))
+       [(make-struct-type)
+        ;; Record result "types"
+        (define field-count (extract-struct-field-count-lower-bound rhs))
+        (for/fold ([locals locals]) ([id (in-list (correlated->list ids))]
+                                     [type (in-list '(struct-type
+                                                      constructor
+                                                      predicate
+                                                      accessor
+                                                      mutator))])
+          (hash-set locals (correlated-e id) (struct-op type field-count)))]
+       [else
+        (for/fold ([locals locals]) ([id (in-list (correlated->list ids))])
+          (hash-set locals id #t))])))
 
 ;; ----------------------------------------
 
@@ -61,6 +97,12 @@
                         (lambda (v) (immutables-ok? v init-field-count-expr)))])
          (pred arg))))
 
+(define (extract-struct-field-count-lower-bound e)
+  ;; e is already checked by `ok-make-struct-type?`
+  (define l (correlated->list e))
+  (+ (field-count-expr-to-field-count (list-ref l 3))
+     (field-count-expr-to-field-count (list-ref l 4))))
+
 (define (quoted? val? v)
   (and (pair? (correlated-e v))
        (eq? (correlated-e (car (correlated-e v))) 'quote)
@@ -80,6 +122,7 @@
 
 (define (known-good-struct-properties? v immutables-expr)
   (or (quoted? null? v)
+      (eq? 'null (correlated-e v))
       (and (pair? (correlated-e v))
            (eq? (correlated-e (car (correlated-e v))) 'list)
            (for/and ([prop+val (in-list (cdr (correlated->list v)))])
@@ -130,6 +173,17 @@
   (and l
        (for/and ([n (in-list l)])
          (n . < . c))))
+
+;; ----------------------------------------
+
+(define (ok-make-struct-field-accessor/mutator? e locals type)
+  (define l (correlated->list e))
+  (define a (and (= (length l) 4)
+                 (hash-ref locals (correlated-e (list-ref l 1)) #f)))
+  (and (struct-op? a)
+       (eq? (struct-op-type a) type)
+       ((field-count-expr-to-field-count (list-ref l 2)) . < . (struct-op-field-count a))
+       (quoted? symbol? (list-ref l 3))))
 
 ;; ----------------------------------------
 
