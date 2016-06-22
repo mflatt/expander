@@ -51,7 +51,7 @@
 
 (define (format-resolved-module-path-name p)
   (cond
-   [(path? p) (path->string p)]
+   [(path? p) (string-append "\"" (path->string p) "\"")]
    [(symbol? p) (format "'~s" p)]
    [else (format "(submod ~a~a)"
                  (format-resolved-module-path-name (car p))
