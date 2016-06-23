@@ -1,5 +1,6 @@
 #lang racket/base
-(require "../host/linklet.rkt"
+(require "linklet-info.rkt"
+         "../host/linklet.rkt"
          (prefix-in bootstrap: "../run/linklet.rkt"))
 
 (provide skip-abi-imports
@@ -16,4 +17,5 @@
   (and bootstrap-mode?
        (not (zero? (hash-count linklets)))
        (bootstrap:compiled-linklet-as-source?
-        (hash-iterate-value linklets (hash-iterate-first linklets)))))
+        (linklet-info-linklet
+         (hash-iterate-value linklets (hash-iterate-first linklets))))))
