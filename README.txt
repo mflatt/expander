@@ -83,7 +83,8 @@ Roadmap to a few key pieces:
    ...-primitive.rkt - export built-in functions as modules
 
  run/ - helpers to drive the expander
-   extract.rkt - extracts subset of compilation units (via "run.rkt")
+
+ extract/ - extracts subset of compilation units (by "run.rkt")
 
  main.rkt - installs eval handler, etc.; entry point for the
             expander/compiler/evaluator 

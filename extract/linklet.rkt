@@ -1,0 +1,19 @@
+#lang racket/base
+(require "../host/linklet.rkt"
+         (prefix-in bootstrap: "../run/linklet.rkt"))
+
+(provide skip-abi-imports
+         linklets-are-source-mode?)
+
+;; Skip over data, syntax literals, and instance:
+(define (skip-abi-imports l)
+  (list-tail l 3))
+
+;; Detect source mode, which enables final assembly
+(define (linklets-are-source-mode? linklets)
+  (define bootstrap-mode?
+    (eq? bootstrap:compile-linklet compile-linklet))
+  (and bootstrap-mode?
+       (not (zero? (hash-count linklets)))
+       (bootstrap:compiled-linklet-as-source?
+        (hash-iterate-value linklets (hash-iterate-first linklets)))))

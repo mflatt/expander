@@ -14,7 +14,7 @@
          "host/reader-bridge.rkt"
          "run/status.rkt"
          "run/submodule.rkt"
-         "run/extract.rkt"
+         "extract/main.rkt"
          (only-in "run/linklet.rkt" linklet-compile-to-s-expr))
 
 (define extract? #f)
