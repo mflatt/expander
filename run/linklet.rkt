@@ -61,7 +61,13 @@
          variable-reference->instance
          variable-reference-constant?
          
-         linklet-compile-to-s-expr) ; a parameter; whether to "compile" to a source form
+         linklet-compile-to-s-expr  ; a parameter; whether to "compile" to a source form
+         compiled-linklet-as-source?
+         
+         ;; Helpers for "extract.rkt"
+         compiled-as-source-linklet->importss+localss
+         compiled-as-source-linklet->exports+locals
+         compiled-as-source-linklet-body)
 
 (struct linklet (proc                ; takes self instance plus instance arguments to run the linklet body
                  import-variables    ; list [length is 1 less than proc arity] of list of symbols
@@ -233,22 +239,32 @@
             (desugar body))
         (void)))))
 
-;; -> list of list of symbols
-(define (extract-import-variables-from-expression c)
+;; #:pairs? #f -> list of list of symbols
+;; #:pairs? #t -> list of list of (cons ext-symbol int-symbol)
+(define (extract-import-variables-from-expression c #:pairs? pairs?)
   ;; position 2 is after `#:import`
-  (for/list ([is (in-list (list-ref c 2))])
+  (for/list ([is (in-list (unmarshal (list-ref c 2)))])
     (for/list ([i (in-list (cdr is))])
-      (if (symbol? i)
-          i
-          (car i)))))
+      (cond 
+       [pairs? (if (symbol? i)
+                   (cons i i)
+                   (cons (car i) (cadr i)))]
+       [else (if (symbol? i)
+                 i
+                 (car i))]))))
 
-;; -> list of symbols
-(define (extract-export-variables-from-expression c)
+;; #:pairs? #f -> list of symbols
+;; #:pairs? #t -> list of (cons ext-symbol int-symbol)
+(define (extract-export-variables-from-expression c #:pairs? pairs?)
   ;; position 4 is after `#:export`
-  (for/list ([e (in-list (list-ref c 4))])
-    (if (symbol? e)
-        e
-        (cadr e))))
+  (for/list ([e (in-list (unmarshal (list-ref c 4)))])
+    (cond
+     [pairs? (if (symbol? e)
+                 (cons e e)
+                 (cons (cadr e) (car e)))]
+     [else (if (symbol? e)
+               e
+               (cadr e))])))
 
 ;; ----------------------------------------
 
@@ -270,21 +286,25 @@
       ;; Use a vector to list the exported variables
       ;; with the compiled bytecode
       (vector (compile plain-c)
-              (marshal (extract-import-variables-from-expression c))
-              (marshal (extract-export-variables-from-expression c))))]))
+              (marshal (extract-import-variables-from-expression c #:pairs? #f))
+              (marshal (extract-export-variables-from-expression c #:pairs? #f))))]))
 
 ;; Convert serializable form to instantitable form
 (define (eval-linklet cl)
   (parameterize ([current-namespace cu-namespace]
                  [current-eval orig-eval]
                  [current-compile orig-compile])
-    (linklet (eval (if (vector? cl)
-                       ;; Normal mode: compiled to bytecode
+    (linklet (eval (if (not (compiled-linklet-as-source? cl))
+                       ;; Normal mode: compiled to bytecode plus metadata in a vector
                        (vector-ref cl 0)
                        ;; Assume previously "compiled" to source:
                        (desugar-linklet (unmarshal cl))))
              (unmarshal (compiled-linklet-import-variables cl))
              (unmarshal (compiled-linklet-export-variables cl)))))
+
+;; Check whether we previously compiled a linket to source
+(define (compiled-linklet-as-source? cl)
+  (not (vector? cl)))
 
 ;; Instantiate
 (define (instantiate-linklet linklet import-instances [target-instance (make-instance 'anonymous)])
@@ -294,16 +314,27 @@
 ;; ----------------------------------------
 
 (define (compiled-linklet-import-variables linklet)
-  (if (vector? linklet)
+  (if (not (compiled-linklet-as-source? linklet))
+      ;; Compiled to a vector that includes metadata
       (vector-ref linklet 1)
-      ;; Assumed previously "compiled" to source
-      (extract-import-variables-from-expression linklet)))
+      ;; Previously "compiled" to source
+      (extract-import-variables-from-expression linklet #:pairs? #f)))
 
 (define (compiled-linklet-export-variables linklet)
-  (if (vector? linklet)
+  (if (not (compiled-linklet-as-source? linklet))
+      ;; Compiled to a vector that includes metadata
       (vector-ref linklet 2)
-      ;; Assumed previously "compiled" to source
-      (extract-export-variables-from-expression linklet)))
+      ;; Previously "compiled" to source
+      (extract-export-variables-from-expression linklet #:pairs? #f)))
+
+(define (compiled-as-source-linklet->importss+localss linklet)
+  (extract-import-variables-from-expression linklet #:pairs? #t))
+
+(define (compiled-as-source-linklet->exports+locals linklet)
+  (extract-export-variables-from-expression linklet #:pairs? #t))
+
+(define (compiled-as-source-linklet-body linklet)
+  (unmarshal (list-tail linklet 5)))
 
 ;; ----------------------------------------
 

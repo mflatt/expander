@@ -1,6 +1,7 @@
 #lang racket/base
 (require racket/cmdline
          racket/format
+         racket/pretty
          "../common/set.rkt"
          "../common/phase.rkt"
          "cache.rkt"
@@ -10,7 +11,9 @@
          "../syntax/binding.rkt"
          "../boot/runtime-primitive.rkt"
          "status.rkt"
-         (prefix-in new: "../common/module-path.rkt"))
+         "symbol.rkt"
+         (prefix-in new: "../common/module-path.rkt")
+         (prefix-in bootstrap: "linklet.rkt"))
 
 ;; The `extract` function collects all of the linklets need to run
 ;; phase 0 of the specified module while keeping the module's
@@ -32,13 +35,14 @@
 ;; linklet, but we group the linklet together with metadata from the
 ;; module's declaration linklet
 (struct linklet-info (linklet          ; the implementation, or #f if the implementation is empty
-                      imports          ; links for import "arguments"
-                      re-exports       ; links for variables re-exported
-                      variables        ; variables defined in the implementation; for detecting re-exports
-                      in-variables     ; for each import, variables used from the import
+                      imports          ; list of links: import "arguments"
+                      re-exports       ; list of links: links whose variables are re-exported
+                      variables        ; set of symbols: defined in the implementation, for detecting re-exports
+                      in-variables     ; list of list of symbols: for each import, variables used from the import
                       side-effects?))  ; whether the implementaiton has side effects other than variable definition
 
-(define (extract start-mod-path cache)
+(define (extract start-mod-path cache
+                 #:print-extracted-to print-extracted-to)
   ;; Located modules:
   (define compiled-modules (make-hash))
 
@@ -96,7 +100,20 @@
   (report! #:compiled-modules compiled-modules
            #:linklets linklets
            #:linklets-in-order linklets-in-order
-           #:needed needed))
+           #:needed needed)
+  
+  (when (linklets-are-source-mode? linklets)
+    (define flattened-linklet-expr
+      (flatten! start-link
+                #:linklets linklets
+                #:linklets-in-order linklets-in-order
+                #:needed needed))
+    (save-flattened-result! flattened-linklet-expr print-extracted-to)
+    
+    (define linklet
+      (parameterize ([bootstrap:linklet-compile-to-s-expr #f])
+        (compile-linklet flattened-linklet-expr)))
+    (report-flattened! linklet)))
 
 ;; ----------------------------------------
 
@@ -184,8 +201,7 @@
                        null))
       ;; Extract phase-specific info on imports (for reporting bootstrap issues):
       (define in-vars (if linklet
-                          ;; Skip over deserialize, declaration, and instance:
-                          (list-tail (compiled-linklet-import-variables linklet) 3)
+                          (skip-abi-imports (compiled-linklet-import-variables linklet))
                           null))
       ;; Extract phase-specific info on side effects:
       (define side-effects? (and
@@ -244,6 +260,21 @@
         (hash-set! linklets lnk li)
         (set-box! linklets-in-order (cons lnk (unbox linklets-in-order)))))))
 
+(define (skip-abi-imports l)
+  ;; Skip over data, syntax literals, and instance:
+  (list-tail l 3))
+
+;; ----------------------------------------
+;; Detect source mode, which enables final assembly
+
+(define (linklets-are-source-mode? linklets)
+  (define bootstrap-mode?
+    (eq? bootstrap:compile-linklet compile-linklet))
+  (and bootstrap-mode?
+       (not (zero? (hash-count linklets)))
+       (bootstrap:compiled-linklet-as-source?
+        (hash-iterate-value linklets (hash-iterate-first linklets)))))
+
 ;; ----------------------------------------
 ;; Compute which linklets are actually used as imports
 
@@ -275,16 +306,21 @@
       (for ([li (in-list (unbox linklets-in-order))])
         (write (linklet-info-linklet (hash-ref linklets li)) o))
       (get-output-bytes o)))
+  
+  (define source-mode? (linklets-are-source-mode? linklets))
 
-  (log-status "Code is ~s bytes" (bytes-length code-bytes))
-  (log-status "Reading all code...")
-  (time (let ([i (open-input-bytes code-bytes)])
-          (parameterize ([read-accept-compiled #t])
-            (let loop ()
-              (unless (eof-object? (read i))
-                (loop))))))
+  (log-status "Code is ~s bytes~a"
+              (bytes-length code-bytes)
+              (if source-mode? " as source" ""))
+  (unless source-mode?
+    (log-status "Reading all code...")
+    (time (let ([i (open-input-bytes code-bytes)])
+            (parameterize ([read-accept-compiled #t])
+              (let loop ()
+                (unless (eof-object? (read i))
+                  (loop)))))))
 
-  ;; Check whether any nneded linklet needs a an instance of a
+  ;; Check whether any needed linklet needs a an instance of a
   ;; pre-defined instance that is not part of the runtime system:
   (define complained? #f)
   (for ([lnk (in-list (unbox linklets-in-order))])
@@ -313,3 +349,152 @@
 
   (when complained?
     (exit 1)))
+
+;; ----------------------------------------
+;; Source flattening
+
+;; Represents a variable that is exported by a used linklet:
+(struct variable (link name) #:prefab)
+
+(define (flatten! start-link
+                  #:linklets linklets
+                  #:linklets-in-order linklets-in-order
+                  #:needed needed)
+  (define needed-linklets-in-order
+    (for/list ([lnk (in-list (unbox linklets-in-order))]
+               #:when (hash-ref needed lnk #f))
+      lnk))
+  
+  (define variable-names (pick-variable-names
+                          #:linklets linklets
+                          #:needed-linklets-in-order needed-linklets-in-order))
+  
+  (define runtime-imports
+    (for*/fold ([ht #hash()]) ([var (in-hash-keys variable-names)]
+                               #:when (symbol? (link-name (variable-link var))))
+      (hash-update ht (variable-link var) (lambda (l) (cons (variable-name var) l)) null)))
+  
+  `(linklet
+    #:import ,(for/list ([(i-lnk names) (in-hash runtime-imports)])
+                `[,(link-name i-lnk)
+                  ,@(for/list ([name (in-list names)])
+                      `(,name ,(hash-ref variable-names (variable i-lnk name))))])
+    #:export ()
+    ,@(apply
+       append
+       (for/list ([lnk (in-list (reverse needed-linklets-in-order))])
+         (body-with-substituted-variable-names lnk
+                                               (hash-ref linklets lnk)
+                                               variable-names)))))
+
+(define (pick-variable-names #:linklets linklets
+                             #:needed-linklets-in-order needed-linklets-in-order)
+  ;; We need to pick a name for each needed linklet's definitions plus
+  ;; each primitive import. Start by checking which names are
+  ;; currently used.
+  (define variable-locals (make-hash)) ; variable -> set-of-symbol
+  (define otherwise-used-symbols (seteq))
+  
+  (for ([lnk (in-list needed-linklets-in-order)])
+    (define li (hash-ref linklets lnk))
+    (define linklet (linklet-info-linklet li))
+    (define importss+localss
+      (skip-abi-imports (bootstrap:compiled-as-source-linklet->importss+localss linklet)))
+    (define exports+locals
+      (bootstrap:compiled-as-source-linklet->exports+locals linklet))
+    (define all-mentioned-symbols
+      (all-used-symbols (bootstrap:compiled-as-source-linklet-body linklet)))
+    
+    (define (record! lnk external+local)
+      (hash-update! variable-locals
+                    (variable lnk (car external+local))
+                    (lambda (s) (set-add s (cdr external+local)))
+                    (seteq)))
+    
+    (for ([imports+locals (in-list importss+localss)]
+          [i-lnk (in-list (linklet-info-imports li))])
+      (for ([import+local (in-list imports+locals)])
+        (record! i-lnk import+local)))
+    
+    (for ([export+local (in-list exports+locals)])
+      (record! lnk export+local))
+                   
+    (define all-import-export-locals
+      (list->set
+       (apply append
+              (map cdr exports+locals)
+              (for/list ([imports+locals (in-list importss+localss)])
+                (map cdr imports+locals)))))
+    (set! otherwise-used-symbols
+          (set-union otherwise-used-symbols
+                     (set-subtract all-mentioned-symbols
+                                   all-import-export-locals))))
+  
+  ;; For each variable name, use the obvious symbol if it won't
+  ;; collide, otherwise pick a symbol that's not mentioned anywhere.
+  ;; (If a variable was given an alternative name for all imports or
+  ;; exports, probably using the obvious symbol would cause a
+  ;; collision.)
+  (for/hash ([(var current-syms) (in-hash variable-locals)])
+    (define sym
+      (cond
+       [(and (= 1 (set-count current-syms))
+             (not (set-member? otherwise-used-symbols (set-first current-syms))))
+        (set-first current-syms)]
+       [(and (set-member? current-syms (variable-name var))
+             (not (set-member? otherwise-used-symbols (variable-name var))))
+        (variable-name var)]
+       [else (distinct-symbol (variable-name var) otherwise-used-symbols)]))
+    (set! otherwise-used-symbols (set-add otherwise-used-symbols sym))
+    (values var sym)))
+
+(define (body-with-substituted-variable-names lnk li variable-names)
+  (define linklet (linklet-info-linklet li))
+  (define importss+localss
+    (skip-abi-imports (bootstrap:compiled-as-source-linklet->importss+localss linklet)))
+  (define exports+locals
+    (bootstrap:compiled-as-source-linklet->exports+locals linklet))
+
+  (define substs (make-hasheq))
+  
+  (define (add-subst! lnk external+local)
+    (hash-set! substs
+               (cdr external+local)
+               (hash-ref variable-names (variable lnk (car external+local)))))
+  
+  (for ([imports+locals (in-list importss+localss)]
+        [i-lnk (in-list (linklet-info-imports li))])
+    (for ([import+local (in-list imports+locals)])
+      (add-subst! i-lnk import+local)))
+  
+  (for ([export+local (in-list exports+locals)])
+    (add-subst! lnk export+local))
+  
+  (define orig-s (bootstrap:compiled-as-source-linklet-body (linklet-info-linklet li)))
+  
+  (substitute-symbols orig-s substs))
+
+;; ----------------------------------------
+
+(define (save-flattened-result! flattened-linklet-expr print-extracted-to)
+  (when print-extracted-to
+    (log-status "Writing combined linklet to ~a" print-extracted-to)
+    (call-with-output-file
+     print-extracted-to
+     #:exists 'truncate
+     (lambda (o)
+       (pretty-print flattened-linklet-expr o)))))
+
+;; ----------------------------------------
+
+(define (report-flattened! linklet)
+  (define code-bytes 
+    (let ([o (open-output-bytes)])
+      (write linklet o)
+      (get-output-bytes o)))
+
+  (log-status "Flattened code is ~s bytes" (bytes-length code-bytes))
+  (log-status "Reading compiled code...")
+  (time (let ([i (open-input-bytes code-bytes)])
+          (parameterize ([read-accept-compiled #t])
+            (void (read i))))))

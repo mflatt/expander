@@ -24,6 +24,7 @@
 (define cache-save-only #f)
 (define cache-skip-first? #f)
 (define time-expand? #f)
+(define print-extracted-to #f)
 (define quiet-load? #f)
 (define boot-module (path->complete-path "main.rkt"))
 (define submod-name #f)
@@ -31,7 +32,7 @@
 (define args
   (command-line
    #:once-any
-   [("-x" "--extract") "Extract bootstrap linklets"
+   [("-x" "--extract") "Extract bootstrap linklet"
     (set! extract? #t)]
    [("-e" "--expand") "Expand instead of running"
     (set! expand? #t)]
@@ -50,6 +51,8 @@
     (set! quiet-load? #t)]
    [("--time") "Time re-expansion"
     (set! time-expand? #t)]
+   [("-o" "--output") file "Print extracted bootstrap linklet to <file>"
+    (set! print-extracted-to file)]
    #:once-any
    [("-t") file "Load specified file"
     (set! boot-module (path->complete-path file))]
@@ -164,7 +167,7 @@
 
 (when extract?
   ;; Extract a bootstrapping slice of the requested module
-  (extract boot-module cache))
+  (extract boot-module cache #:print-extracted-to print-extracted-to))
 
 (when load-file
   (load load-file))
