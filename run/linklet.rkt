@@ -232,12 +232,20 @@
              `(variable-reference self-inst ,e))]
         [else (map desugar (correlated->list e))])]
      [else e]))
+  (define (last-is-definition? bodys)
+    (define p (car (reverse bodys)))
+    (and (pair? p) (eq? (correlated-e (car p)) 'define-values)))
   `(lambda (self-inst ,@(map car imports))
     (let-values ,box-bindings
-      (begin
-        ,@(for/list ([body (in-list bodys)])
-            (desugar body))
-        (void)))))
+      ,(cond
+        [(null? bodys) '(void)]
+        [else
+         `(begin
+           ,@(for/list ([body (in-list bodys)])
+               (desugar body))
+           ,@(if (last-is-definition? bodys)
+                 '((void))
+                 null))]))))
 
 ;; #:pairs? #f -> list of list of symbols
 ;; #:pairs? #t -> list of list of (cons ext-symbol int-symbol)
@@ -307,9 +315,16 @@
   (not (vector? cl)))
 
 ;; Instantiate
-(define (instantiate-linklet linklet import-instances [target-instance (make-instance 'anonymous)])
-  (apply (linklet-proc linklet) target-instance import-instances)
-  target-instance)
+(define instantiate-linklet
+  (case-lambda
+    [(linklet import-instances)
+     ;; 2-argument case: return instance
+     (define target-instance (make-instance 'anonymous))
+     (instantiate-linklet linklet import-instances target-instance)
+     target-instance]
+    [(linklet import-instances target-instance)
+     ;; 3-argument case: return results via tail call
+     (apply (linklet-proc linklet) target-instance import-instances)]))
 
 ;; ----------------------------------------
 

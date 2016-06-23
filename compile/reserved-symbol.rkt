@@ -14,8 +14,7 @@
          deserialized-syntax-id
          set-transformer!-id
          top-level-bind!-id
-         top-level-require!-id
-         body-thunk-id)
+         top-level-require!-id)
 
 (define phase-shift-id (make-built-in-symbol! 'phase))
 (define dest-phase-id (make-built-in-symbol! 'dest-phase))
@@ -29,4 +28,4 @@
 (define set-transformer!-id (make-built-in-symbol! 'set-transformer!))
 (define top-level-bind!-id (make-built-in-symbol! 'top-level-bind!))
 (define top-level-require!-id (make-built-in-symbol! 'top-level-require!))
-(define body-thunk-id (make-built-in-symbol! 'body-thunk))
+

@@ -113,10 +113,12 @@
                              module-uses import-module-instances (current-code-inspector)
                              extra-inspector
                              (hash-ref phase-to-link-extra-inspectorsss phase #f))
-       (define i
+       (define (instantiate)
          (parameterize ([current-namespace (if (zero-phase? phase)
                                                (current-namespace)
                                                phase-ns)])
+           ;; Providing a target instance to `instantiate-linklet` means that we get
+           ;; the body's results instead of the instance as a result
            (instantiate-linklet linklet
                                 (list* top-level-instance
                                        link-instance
@@ -124,14 +126,14 @@
                                        import-instances)
                                 ;; Instantiation merges with the namespace's current instance:
                                 (namespace->instance ns (phase+ phase phase-shift)))))
+       ;; Return `instantiate` as the next thunk
        (cond
         [(eqv? phase orig-phase)
-         (let ([body-thunk (instance-variable-value i 'body-thunk)])
-           (if (zero-phase? phase)
-               body-thunk
-               (lambda () (parameterize ([current-namespace phase-ns])
-                       (body-thunk)))))]
-        [else void])]
+         (if (zero-phase? phase)
+             instantiate
+             (lambda () (parameterize ([current-namespace phase-ns])
+                     (instantiate))))]
+        [else instantiate])]
       [else void]))))
 
 (define (link-instance-from-compiled-in-memory cim)

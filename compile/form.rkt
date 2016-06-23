@@ -27,7 +27,6 @@
 ;; Compiles a module body or sequence of top-level forms, returning a
 ;; linklet directory to cover all phases covered by the forms
 (define (compile-forms bodys cctx mpis
-                       #:phase-in-body-thunk [phase-in-body-thunk #f] ; phase, if any, to export `body-thunk`
                        #:encoded-root-expand-ctx-box [encoded-root-expand-ctx-box #f] ; encoded root context, if any
                        #:root-ctx-only-if-syntax? [root-ctx-only-if-syntax? #f]
                        #:compiled-expression-callback [compiled-expression-callback void]
@@ -234,14 +233,8 @@
                     ,@(for/list ([binding-sym (in-list (header-binding-syms-in-order
                                                         (hash-ref phase-to-header phase)))])
                         (define def-sym (hash-ref binding-sym-to-define-sym binding-sym))
-                        `[,def-sym ,binding-sym])
-                    ,@(if (eqv? phase phase-in-body-thunk)
-                          `([,body-thunk-id body-thunk])
-                          null))
-          ,@(if (eqv? phase phase-in-body-thunk)
-                `[(define-values (,body-thunk-id)
-                    (lambda () (begin (void) ,@(reverse bodys))))]
-                (reverse bodys)))))))
+                        `[,def-sym ,binding-sym]))
+          ,@(reverse bodys))))))
   
   (define phase-to-link-module-uses
     (for/hash ([(phase li) (in-hash phase-to-link-info)])
