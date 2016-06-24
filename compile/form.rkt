@@ -75,8 +75,10 @@
            (loop! (m 'e) (add1 phase) (find-or-create-header! (add1 phase)))]))))
 
   ;; Compile each form in `bodys`, recording results in `phase-to-body`
+  (define last-i (sub1 (length bodys)))
   (let loop! ([bodys bodys] [phase phase] [header (find-or-create-header! phase)])
-    (for ([in-body (in-list bodys)])
+    (for ([in-body (in-list bodys)]
+          [i (in-naturals)])
       (define body (syntax-disarm in-body))
       (case (core-form-sym body phase)
         [(define-values)
@@ -173,7 +175,8 @@
          (define e (compile body
                             (struct-copy compile-context cctx
                                          [phase phase]
-                                         [header header])))
+                                         [header header])
+                            (= i last-i)))
          (compiled-expression-callback e #f phase)
          (add-body! phase e)])))
 
