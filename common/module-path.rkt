@@ -1,8 +1,11 @@
 #lang racket/base
 (require "../compile/serialize-property.rkt"
-         "contract.rkt")
+         "contract.rkt"
+         "parse-module-path.rkt")
 
-(provide resolved-module-path?
+(provide module-path?
+         
+         resolved-module-path?
          make-resolved-module-path
          resolved-module-path-name
          resolved-module-path-root-name

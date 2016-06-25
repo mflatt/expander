@@ -146,6 +146,8 @@
                       liberal-define-context?
                       
                       prop:expansion-contexts
+                      
+                      module-path?
 
                       resolved-module-path?
                       make-resolved-module-path
