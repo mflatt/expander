@@ -56,8 +56,8 @@
   (define evaled-h (for*/hash ([phase-level (in-range min-phase (add1 max-phase))]
                                [v (in-value (hash-ref h phase-level #f))]
                                #:when v)
-                     (values phase-level (eval-linklet v))))
-  (define syntax-literals-linklet (eval-linklet (hash-ref h 'stx)))
+                     (values phase-level v)))
+  (define syntax-literals-linklet (hash-ref h 'stx))
   
   (define requires (decl 'requires))
   (define provides (decl 'provides))
@@ -225,11 +225,11 @@
   (define data-instance
     (if (compiled-in-memory? c)
         (make-data-instance-from-compiled-in-memory c)
-        (instantiate-linklet (eval-linklet (hash-ref h 'data))
+        (instantiate-linklet (hash-ref h 'data)
                              (list deserialize-instance))))
 
   (define declaration-instance
-    (instantiate-linklet (eval-linklet (hash-ref h 'decl))
+    (instantiate-linklet (hash-ref h 'decl)
                          (list deserialize-instance
                                data-instance)))
   

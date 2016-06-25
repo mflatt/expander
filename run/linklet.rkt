@@ -6,13 +6,12 @@
          racket/unsafe/undefined)
 
 ;; A "linklet" is the primitive form of separate (not necessarily
-;; independent) compilation and linking. A `linklet` form compiles to
-;; a serializable linklet, a serializable linklet can be converted to
-;; an instantiable linklet (by `eval`), and instantiation of a linklet
-;; produces an "instance" given other instances to satisfy its
-;; imports. An instance, which essentially just maps symbols to
-;; values, can also be created directly, so it serves as the bridge
-;; between the worlds of values and compiled objects.
+;; independent) compilation and linking. A `linklet` is serializable
+;; linklet, and instantiation of a linklet produces an "instance"
+;; given other instances to satisfy its imports. An instance, which
+;; essentially just maps symbols to values, can also be created
+;; directly, so it serves as the bridge between the worlds of values
+;; and compiled objects.
 
 ;; A "linklet bundle" is similarly a primitive construct that is
 ;; essentially a mapping of symbols and fixnums to linklets, symbols,
@@ -31,15 +30,14 @@
 ;; this is not necessary, except to the degree that `compile-linklet`
 ;; needs to be replaced with a variant that "compiles" to source.
 
-(provide compile-linklet             ; result is serializable
-         eval-linklet                ; serializable to instantiable
+(provide linklet?
+         compile-linklet             ; result is serializable
          instantiate-linklet         ; fills in an instance given argument instances
          
          linklet-import-variables
          linklet-export-variables
-         compiled-linklet-import-variables
-         compiled-linklet-export-variables
 
+         instance?
          make-instance
          instance-name               ; a "name" can be any data
          instance-variable-names
@@ -62,16 +60,17 @@
          variable-reference-constant?
          
          linklet-compile-to-s-expr  ; a parameter; whether to "compile" to a source form
-         compiled-linklet-as-source?
+         linklet-as-s-expr?
          
          ;; Helpers for "extract.rkt"
-         compiled-as-source-linklet->importss+localss
-         compiled-as-source-linklet->exports+locals
-         compiled-as-source-linklet-body)
+         s-expr-linklet-importss+localss
+         s-expr-linklet-exports+locals
+         s-expr-linklet-body)
 
-(struct linklet (proc                ; takes self instance plus instance arguments to run the linklet body
-                 import-variables    ; list [length is 1 less than proc arity] of list of symbols
-                 export-variables))  ; list of symbols
+(struct linklet (compiled-proc  ; takes self instance plus instance arguments to run the linklet body
+                 importss       ; list [length is 1 less than proc arity] of list of symbols
+                 exports)       ; list of symbols
+        #:prefab)
 
 (struct instance (name        ; any value (e.g., a namespace)
                   variables)) ; symbol -> value
@@ -293,26 +292,28 @@
                    [current-compile orig-compile])
       ;; Use a vector to list the exported variables
       ;; with the compiled bytecode
-      (vector (compile plain-c)
-              (marshal (extract-import-variables-from-expression c #:pairs? #f))
-              (marshal (extract-export-variables-from-expression c #:pairs? #f))))]))
+      (linklet (compile plain-c)
+               (marshal (extract-import-variables-from-expression c #:pairs? #f))
+               (marshal (extract-export-variables-from-expression c #:pairs? #f))))]))
 
 ;; Convert serializable form to instantitable form
 (define (eval-linklet cl)
   (parameterize ([current-namespace cu-namespace]
                  [current-eval orig-eval]
                  [current-compile orig-compile])
-    (linklet (eval (if (not (compiled-linklet-as-source? cl))
-                       ;; Normal mode: compiled to bytecode plus metadata in a vector
-                       (vector-ref cl 0)
-                       ;; Assume previously "compiled" to source:
-                       (desugar-linklet (unmarshal cl))))
-             (unmarshal (compiled-linklet-import-variables cl))
-             (unmarshal (compiled-linklet-export-variables cl)))))
+    (if (linklet? cl)
+        ;; Normal mode: compiled to struct
+        (eval (linklet-compiled-proc cl))
+        ;; Assume previously "compiled" to source:
+        (or (hash-ref eval-cache cl #f)
+            (let ([proc (eval (desugar-linklet (unmarshal cl)))])
+              (hash-set! eval-cache cl proc)
+              proc)))))
+(define eval-cache (make-weak-hasheq))
 
 ;; Check whether we previously compiled a linket to source
-(define (compiled-linklet-as-source? cl)
-  (not (vector? cl)))
+(define (linklet-as-s-expr? cl)
+  (not (linklet? cl)))
 
 ;; Instantiate
 (define instantiate-linklet
@@ -324,31 +325,31 @@
      target-instance]
     [(linklet import-instances target-instance)
      ;; 3-argument case: return results via tail call
-     (apply (linklet-proc linklet) target-instance import-instances)]))
+     (apply (eval-linklet linklet) target-instance import-instances)]))
 
 ;; ----------------------------------------
 
-(define (compiled-linklet-import-variables linklet)
-  (if (not (compiled-linklet-as-source? linklet))
-      ;; Compiled to a vector that includes metadata
-      (vector-ref linklet 1)
+(define (linklet-import-variables linklet)
+  (if (linklet? linklet)
+      ;; Compiled to a prefab that includes metadata
+      (linklet-importss linklet)
       ;; Previously "compiled" to source
       (extract-import-variables-from-expression linklet #:pairs? #f)))
 
-(define (compiled-linklet-export-variables linklet)
-  (if (not (compiled-linklet-as-source? linklet))
-      ;; Compiled to a vector that includes metadata
-      (vector-ref linklet 2)
+(define (linklet-export-variables linklet)
+  (if (linklet? linklet)
+      ;; Compiled to a prefab that includes metadata
+      (linklet-exports linklet)
       ;; Previously "compiled" to source
       (extract-export-variables-from-expression linklet #:pairs? #f)))
 
-(define (compiled-as-source-linklet->importss+localss linklet)
+(define (s-expr-linklet-importss+localss linklet)
   (extract-import-variables-from-expression linklet #:pairs? #t))
 
-(define (compiled-as-source-linklet->exports+locals linklet)
+(define (s-expr-linklet-exports+locals linklet)
   (extract-export-variables-from-expression linklet #:pairs? #t))
 
-(define (compiled-as-source-linklet-body linklet)
+(define (s-expr-linklet-body linklet)
   (unmarshal (list-tail linklet 5)))
 
 ;; ----------------------------------------
@@ -399,15 +400,14 @@
 ;; ----------------------------------------
 
 (define (make-self-hash)
-  (reflect-hash compile-linklet
-                eval-linklet
+  (reflect-hash linklet?
+                compile-linklet
                 instantiate-linklet
                 
                 linklet-import-variables
                 linklet-export-variables
-                compiled-linklet-import-variables
-                compiled-linklet-export-variables
-
+                
+                instance?
                 make-instance
                 instance-name
                 instance-variable-names
@@ -422,8 +422,8 @@
                 linklet-directory->hash
 
                 linklet-bundle?
-                hash->linklet-bundle hash->linklet-bundle
-                linklet-bundle->hash linklet-bundle->hash
+                hash->linklet-bundle
+                linklet-bundle->hash
                 
                 variable-reference?
                 variable-reference->instance

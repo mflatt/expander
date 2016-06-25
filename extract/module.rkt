@@ -35,9 +35,9 @@
                         (loop (hash-ref h (cadr name))
                               (cdr name)))))
         ;; Instantiate the declaration linklet
-        (define data-instance (instantiate-linklet (eval-linklet (hash-ref h 'data))
+        (define data-instance (instantiate-linklet (hash-ref h 'data)
                                                    (list deserialize-instance)))
-        (define decl (instantiate-linklet (eval-linklet (hash-ref h 'decl))
+        (define decl (instantiate-linklet (hash-ref h 'decl)
                                           (list deserialize-instance
                                                 data-instance)))
         ;; Make a `compiled-module` structure to represent the compilaed module

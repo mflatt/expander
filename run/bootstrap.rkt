@@ -13,15 +13,14 @@
     (host:instance-set-variable-value! bootstrap-linklet-instance 'id id)
     ...))
 
-(bounce compile-linklet
-        eval-linklet
+(bounce linklet?
+        compile-linklet
         instantiate-linklet
         
         linklet-import-variables
         linklet-export-variables
-        compiled-linklet-import-variables
-        compiled-linklet-export-variables
 
+        instance?
         make-instance
         instance-name
         instance-variable-names

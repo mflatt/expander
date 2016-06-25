@@ -56,7 +56,7 @@
   (define link-instance
     (if (compiled-in-memory? c)
         (link-instance-from-compiled-in-memory c)
-        (instantiate-linklet (eval-linklet (hash-ref h 'link))
+        (instantiate-linklet (hash-ref h 'link)
                              (list deserialize-instance
                                    (make-eager-instance-instance
                                     #:namespace ns
@@ -103,9 +103,7 @@
                                                                     name
                                                                     val))))
 
-     (define linklet
-       (let ([l (hash-ref h phase #f)])
-         (and l (eval-linklet l))))
+     (define linklet (hash-ref h phase #f))
 
      (cond
       [linklet

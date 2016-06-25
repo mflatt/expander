@@ -5,15 +5,14 @@
 (provide linklet-primitives)
 
 (define linklet-primitives
-  (reflect-hash compile-linklet
-                eval-linklet
+  (reflect-hash linklet?
+                compile-linklet
                 instantiate-linklet
                 
                 linklet-import-variables
                 linklet-export-variables
-                compiled-linklet-import-variables
-                compiled-linklet-export-variables
-
+                
+                instance?
                 make-instance
                 instance-name
                 instance-variable-names
@@ -28,8 +27,8 @@
                 linklet-directory->hash
 
                 linklet-bundle?
-                hash->linklet-bundle hash->linklet-bundle
-                linklet-bundle->hash linklet-bundle->hash
+                hash->linklet-bundle
+                linklet-bundle->hash
                 
                 variable-reference?
                 variable-reference->instance

@@ -58,11 +58,11 @@
     (define li (hash-ref linklets lnk))
     (define linklet (linklet-info-linklet li))
     (define importss+localss
-      (skip-abi-imports (bootstrap:compiled-as-source-linklet->importss+localss linklet)))
+      (skip-abi-imports (bootstrap:s-expr-linklet-importss+localss linklet)))
     (define exports+locals
-      (bootstrap:compiled-as-source-linklet->exports+locals linklet))
+      (bootstrap:s-expr-linklet-exports+locals linklet))
     (define all-mentioned-symbols
-      (all-used-symbols (bootstrap:compiled-as-source-linklet-body linklet)))
+      (all-used-symbols (bootstrap:s-expr-linklet-body linklet)))
     
     (define (record! lnk external+local)
       (hash-update! variable-locals
@@ -110,9 +110,9 @@
 (define (body-with-substituted-variable-names lnk li variable-names)
   (define linklet (linklet-info-linklet li))
   (define importss+localss
-    (skip-abi-imports (bootstrap:compiled-as-source-linklet->importss+localss linklet)))
+    (skip-abi-imports (bootstrap:s-expr-linklet-importss+localss linklet)))
   (define exports+locals
-    (bootstrap:compiled-as-source-linklet->exports+locals linklet))
+    (bootstrap:s-expr-linklet-exports+locals linklet))
 
   (define substs (make-hasheq))
   
@@ -129,6 +129,6 @@
   (for ([export+local (in-list exports+locals)])
     (add-subst! lnk export+local))
   
-  (define orig-s (bootstrap:compiled-as-source-linklet-body (linklet-info-linklet li)))
+  (define orig-s (bootstrap:s-expr-linklet-body (linklet-info-linklet li)))
   
   (substitute-symbols orig-s substs))

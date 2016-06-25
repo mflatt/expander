@@ -41,11 +41,11 @@
 
       ;; Extract phase-specific (i.e., linklet-specific) info on variables:
       (define vars (if linklet
-                       (list->set (compiled-linklet-export-variables linklet))
+                       (list->set (linklet-export-variables linklet))
                        null))
       ;; Extract phase-specific info on imports (for reporting bootstrap issues):
       (define in-vars (if linklet
-                          (skip-abi-imports (compiled-linklet-import-variables linklet))
+                          (skip-abi-imports (linklet-import-variables linklet))
                           null))
       ;; Extract phase-specific info on side effects:
       (define side-effects? (and

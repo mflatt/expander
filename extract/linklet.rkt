@@ -16,6 +16,6 @@
     (eq? bootstrap:compile-linklet compile-linklet))
   (and bootstrap-mode?
        (not (zero? (hash-count linklets)))
-       (bootstrap:compiled-linklet-as-source?
+       (bootstrap:linklet-as-s-expr?
         (linklet-info-linklet
          (hash-iterate-value linklets (hash-iterate-first linklets))))))
