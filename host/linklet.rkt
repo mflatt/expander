@@ -1,5 +1,6 @@
 #lang racket/base
-(require (prefix-in host: '#%linklet))
+(require (prefix-in host: '#%linklet)
+         "../run/linklet-operation.rkt")
 
 ;; We use only `get-primitive-instance` and `instance-variable-value`
 ;; directly, so that those are the only functions needed for
@@ -19,34 +20,7 @@
     (define id (host:instance-variable-value linklet-instance 'id))
     ...))
 
-(bounce linklet?
-        compile-linklet
-        instantiate-linklet
-        
-        linklet-import-variables
-        linklet-export-variables
-        
-        instance?
-        make-instance
-        instance-name
-        instance-variable-names
-        instance-variable-value
-        instance-set-variable-value!
-        instance-unset-variable!
-
-        get-primitive-instance
-
-        linklet-directory?
-        hash->linklet-directory
-        linklet-directory->hash
-
-        linklet-bundle?
-        hash->linklet-bundle
-        linklet-bundle->hash
-        
-        variable-reference?
-        variable-reference->instance
-        variable-reference-constant?)
+(linklet-operations=> bounce)
 
 (unless variable-reference-constant?
   (error "broken primitive '#%linklet instance; maybe you need to use \"bootstrap-run.rkt\""))

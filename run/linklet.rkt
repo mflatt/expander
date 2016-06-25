@@ -1,9 +1,10 @@
 #lang racket/base
-(require "../common/set.rkt"
+(require racket/unsafe/undefined
+         "../common/set.rkt"
          "../syntax/datum-map.rkt"
          "../host/correlate.rkt"
          "../common/reflect-hash.rkt"
-         racket/unsafe/undefined)
+         "linklet-operation.rkt")
 
 ;; A "linklet" is the primitive form of separate (not necessarily
 ;; independent) compilation and linking. A `linklet` is serializable
@@ -30,39 +31,13 @@
 ;; this is not necessary, except to the degree that `compile-linklet`
 ;; needs to be replaced with a variant that "compiles" to source.
 
-(provide linklet?
-         compile-linklet             ; result is serializable
-         instantiate-linklet         ; fills in an instance given argument instances
-         
-         linklet-import-variables
-         linklet-export-variables
+;; See "linklet-operation.rkt":
+(linklet-operations=> provide)
 
-         instance?
-         make-instance
-         instance-name               ; a "name" can be any data
-         instance-variable-names
-         instance-variable-value
-         instance-set-variable-value!
-         instance-unset-variable!
-
-         get-primitive-instance
-
-         linklet-directory?       ; maps symbol lists to linklet bundles
-         hash->linklet-directory  ; converts a hash table to a ld
-         linklet-directory->hash  ; the other way
-
-         linklet-bundle?          ; maps symbols and fixnums to values
-         hash->linklet-bundle
-         linklet-bundle->hash
-         
-         variable-reference?
-         variable-reference->instance
-         variable-reference-constant?
-         
-         linklet-compile-to-s-expr  ; a parameter; whether to "compile" to a source form
+;; Helpers for "extract.rkt"
+(provide linklet-compile-to-s-expr  ; a parameter; whether to "compile" to a source form
          linklet-as-s-expr?
-         
-         ;; Helpers for "extract.rkt"
+
          s-expr-linklet-importss+localss
          s-expr-linklet-exports+locals
          s-expr-linklet-body)
@@ -72,11 +47,12 @@
                  exports)       ; list of symbols
         #:prefab)
 
-(struct instance (name        ; any value (e.g., a namespace)
+(struct instance (name        ; for debugging, typically a module name + phase
+                  data        ; any value (e.g., a namespace)
                   variables)) ; symbol -> value
 
-(define (make-instance name)
-  (instance name (make-hasheq)))
+(define (make-instance name [data #f])
+  (instance name data (make-hasheq)))
 
 (define (instance-variable-names i)
   (hash-keys (instance-variables i)))
@@ -119,14 +95,16 @@
   (cond
    [(eq? name '#%bootstrap-linklet) #f]
    [(eq? name '#%linklet)
-    (instance name (for/hasheq ([(k v) (make-self-hash)])
-                     (values k (box v))))]
+    (instance name #f
+              (for/hasheq ([(k v) (linklet-operations=> reflect-hash)])
+                (values k (box v))))]
    [else
     (define mod-name `(quote ,name))
     (define-values (vars trans) (module->exports mod-name))
-    (instance name (for/hasheq ([sym (in-list (map car (cdr (assv 0 vars))))])
-                     (values sym
-                             (box (dynamic-require mod-name sym)))))]))
+    (instance name #f
+              (for/hasheq ([sym (in-list (map car (cdr (assv 0 vars))))])
+                (values sym
+                        (box (dynamic-require mod-name sym)))))]))
 
 ;; ----------------------------------------
 
@@ -156,15 +134,17 @@
 ;; ----------------------------------------
 
 (define (desugar-linklet c)
-  (unless (eq? '#:import (list-ref c 1)) (error "bad linklet syntax" c))
-  (define imports (list-ref c 2))
-  (unless (eq? '#:export (list-ref c 3)) (error "bad linklet syntax" c))
-  (define exports (list-ref c 4))
-  (define bodys (list-tail c 5))
+  (define imports (list-ref c 1))
+  (define exports (list-ref c 2))
+  (define bodys (list-tail c 3))
+  (define inst-names (for/list ([import (in-list imports)]
+                                [i (in-naturals)])
+                       (string->symbol (format "in_~a" i))))
   (define import-box-bindings
-    (for*/list ([inst-imports (in-list imports)]
-                [inst (in-value (car inst-imports))]
-                [name (in-list (cdr inst-imports))])
+    (for/list ([inst-imports (in-list imports)]
+               [inst (in-list inst-names)]
+               #:when #t
+               [name (in-list inst-imports)])
       (define ext (if (symbol? name) name (car name)))
       (define int (if (symbol? name) name (cadr name)))
       `[(,int) (instance-variable-box ,inst ',ext #f)]))
@@ -234,7 +214,7 @@
   (define (last-is-definition? bodys)
     (define p (car (reverse bodys)))
     (and (pair? p) (eq? (correlated-e (car p)) 'define-values)))
-  `(lambda (self-inst ,@(map car imports))
+  `(lambda (self-inst ,@inst-names)
     (let-values ,box-bindings
       ,(cond
         [(null? bodys) '(void)]
@@ -249,9 +229,8 @@
 ;; #:pairs? #f -> list of list of symbols
 ;; #:pairs? #t -> list of list of (cons ext-symbol int-symbol)
 (define (extract-import-variables-from-expression c #:pairs? pairs?)
-  ;; position 2 is after `#:import`
-  (for/list ([is (in-list (unmarshal (list-ref c 2)))])
-    (for/list ([i (in-list (cdr is))])
+  (for/list ([is (in-list (unmarshal (list-ref c 1)))])
+    (for/list ([i (in-list is)])
       (cond 
        [pairs? (if (symbol? i)
                    (cons i i)
@@ -263,8 +242,7 @@
 ;; #:pairs? #f -> list of symbols
 ;; #:pairs? #t -> list of (cons ext-symbol int-symbol)
 (define (extract-export-variables-from-expression c #:pairs? pairs?)
-  ;; position 4 is after `#:export`
-  (for/list ([e (in-list (unmarshal (list-ref c 4)))])
+  (for/list ([e (in-list (unmarshal (list-ref c 2)))])
     (cond
      [pairs? (if (symbol? e)
                  (cons e e)
@@ -350,7 +328,7 @@
   (extract-export-variables-from-expression linklet #:pairs? #t))
 
 (define (s-expr-linklet-body linklet)
-  (unmarshal (list-tail linklet 5)))
+  (unmarshal (list-tail linklet 3)))
 
 ;; ----------------------------------------
 
@@ -396,35 +374,3 @@
                 [(unreadable? c) (string->unreadable-symbol (unreadable-str c))]
                 [(void-value? c) (void)]
                 [else c]))))
-
-;; ----------------------------------------
-
-(define (make-self-hash)
-  (reflect-hash linklet?
-                compile-linklet
-                instantiate-linklet
-                
-                linklet-import-variables
-                linklet-export-variables
-                
-                instance?
-                make-instance
-                instance-name
-                instance-variable-names
-                instance-variable-value
-                instance-set-variable-value!
-                instance-unset-variable!
-
-                get-primitive-instance
-
-                linklet-directory?
-                hash->linklet-directory
-                linklet-directory->hash
-
-                linklet-bundle?
-                hash->linklet-bundle
-                linklet-bundle->hash
-                
-                variable-reference?
-                variable-reference->instance
-                variable-reference-constant?))

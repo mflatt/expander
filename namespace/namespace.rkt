@@ -124,13 +124,16 @@
         (hash-set! (namespace-phase-to-namespace ns) phase p-ns)
         p-ns)))
 
+(define (namespace->name p-ns)
+  (format "~a" (module-path-index-resolve (namespace-mpi p-ns))))
+  
 (define (namespace->definitions ns phase-level)
   (define d (hash-ref (namespace-phase-level-to-definitions ns) phase-level #f))
   (or d
       (let ()
         (define p-ns (namespace->namespace-at-phase ns (phase+ (namespace-0-phase ns)
                                                                phase-level)))
-        (define d (definitions (make-instance p-ns) (make-hasheq)))
+        (define d (definitions (make-instance (namespace->name p-ns) p-ns) (make-hasheq)))
         (hash-set! (namespace-phase-level-to-definitions ns) phase-level d)
         d)))
 

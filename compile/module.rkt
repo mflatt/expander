@@ -139,18 +139,21 @@
   (define declaration-linklet
     (compile-linklet
      `(linklet
-       #:import ([deserialize ,@deserialize-imports]
-                 [data (mpi-vector ,mpi-vector-id)])
-       #:export (self-mpi
-                 requires
-                 provides
-                 variables
-                 side-effects
-                 cross-phase-persistent?
-                 min-phase
-                 max-phase
-                 phase-to-link-modules
-                 language-info)
+       ;; imports
+       (,deserialize-imports
+        [(mpi-vector ,mpi-vector-id)])
+       ;; exports
+       (self-mpi
+        requires
+        provides
+        variables
+        side-effects
+        cross-phase-persistent?
+        min-phase
+        max-phase
+        phase-to-link-modules
+        language-info)
+       ;; body
        (define-values (,inspector-id) (current-code-inspector))
        ,@declaration-body)))
   
@@ -161,13 +164,16 @@
   (define syntax-literals-linklet
     (compile-linklet
      `(linklet
-       #:import ([deserialize ,@deserialize-imports]
-                 [data (mpi-vector ,mpi-vector-id)
-                       (deserialized-syntax ,deserialized-syntax-id)]
-                 [instance ,@instance-imports])
-       #:export ([,syntax-literalss-id syntax-literalss]
-                 [,get-syntax-literal!-id get-syntax-literal!]
-                 get-encoded-root-expand-ctx)
+       ;; imports
+       (,deserialize-imports
+        [(mpi-vector ,mpi-vector-id)
+         (deserialized-syntax ,deserialized-syntax-id)]
+        ,instance-imports)
+       ;; exports
+       ([,syntax-literalss-id syntax-literalss]
+        [,get-syntax-literal!-id get-syntax-literal!]
+        get-encoded-root-expand-ctx)
+       ;; body
        ,@(generate-lazy-syntax-literals! all-syntax-literalss mpis self
                                          #:skip-deserialize? (not serializable?))
        (define-values (get-encoded-root-expand-ctx)
@@ -188,9 +194,12 @@
     (and serializable?
          (compile-linklet
           `(linklet
-            #:import ([deserialize ,@deserialize-imports])
-            #:export ([,mpi-vector-id mpi-vector]
-                      deserialized-syntax)
+            ;; imports
+            (,deserialize-imports)
+            ;; exports
+            ([,mpi-vector-id mpi-vector]
+             deserialized-syntax)
+            ;; body
             (define-values (,inspector-id) (current-code-inspector))
             (define-values (,mpi-vector-id)
               ,(generate-module-path-index-deserialize mpis))

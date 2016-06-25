@@ -222,21 +222,24 @@
        phase
        (compile-linklet
         `(linklet
-          #:import (,@(if (compile-context-module-self cctx)
-                          `([data (mpi-vector ,mpi-vector-id)]
-                            [syntax-literals (syntax-literalss ,syntax-literalss-id)
-                                             (get-syntax-literal! ,get-syntax-literal!-id)])
-                          `([top-level (top-level-bind! ,top-level-bind!-id)
-                                       (top-level-require! ,top-level-require!-id)]
-                            [link (mpi-vector ,mpi-vector-id)
-                                  (syntax-literalss ,syntax-literalss-id)]))
-                    [instance ,@instance-imports]
-                    ,@(link-info-imports li))
-          #:export (,@(link-info-def-decls li)
-                    ,@(for/list ([binding-sym (in-list (header-binding-syms-in-order
-                                                        (hash-ref phase-to-header phase)))])
-                        (define def-sym (hash-ref binding-sym-to-define-sym binding-sym))
-                        `[,def-sym ,binding-sym]))
+          ;; imports
+          (,@(if (compile-context-module-self cctx)
+                 `([(mpi-vector ,mpi-vector-id)]
+                   [(syntax-literalss ,syntax-literalss-id)
+                    (get-syntax-literal! ,get-syntax-literal!-id)])
+                 `([(top-level-bind! ,top-level-bind!-id)
+                    (top-level-require! ,top-level-require!-id)]
+                   [(mpi-vector ,mpi-vector-id)
+                    (syntax-literalss ,syntax-literalss-id)]))
+           ,instance-imports
+           ,@(link-info-imports li))
+          ;; exports
+          (,@(link-info-def-decls li)
+           ,@(for/list ([binding-sym (in-list (header-binding-syms-in-order
+                                               (hash-ref phase-to-header phase)))])
+               (define def-sym (hash-ref binding-sym-to-define-sym binding-sym))
+               `[,def-sym ,binding-sym]))
+          ;; body
           ,@(reverse bodys))))))
   
   (define phase-to-link-module-uses

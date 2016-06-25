@@ -63,14 +63,16 @@
        (define link-linklet
          (compile-linklet
           `(linklet
-            #:import ([deserialize ,@deserialize-imports]
-                      [eager-instance ,@eager-instance-imports])
-            #:export ([,mpi-vector-id mpi-vector]
-                      deserialized-syntax
-                      original-phase
-                      max-phase
-                      phase-to-link-modules
-                      syntax-literalss)
+            ;; imports
+            (,deserialize-imports
+             ,eager-instance-imports)
+            ;; exports
+            ([,mpi-vector-id mpi-vector]
+             deserialized-syntax
+             original-phase
+             max-phase
+             phase-to-link-modules
+             syntax-literalss)
             (define-values (,mpi-vector-id)
               ,(generate-module-path-index-deserialize mpis))
             (define-values (deserialized-syntax) 

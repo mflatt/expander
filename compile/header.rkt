@@ -238,11 +238,10 @@
    link-mod-uses
    ;; Imports, using the same order as module-uses list:
    (for/list ([mu (in-list link-mod-uses)])
-     (cons (hash-ref mod-use-to-link-sym mu)
-           (for/list ([vu (in-list (header-require-vars-in-order header))]
-                      #:when (equal? mu (variable-use-module-use vu)))
-             (define var-sym (hash-ref (header-require-var-to-import-sym header) vu))
-             `[,(variable-use-sym vu) ,var-sym])))
+     (for/list ([vu (in-list (header-require-vars-in-order header))]
+                #:when (equal? mu (variable-use-module-use vu)))
+       (define var-sym (hash-ref (header-require-var-to-import-sym header) vu))
+       `[,(variable-use-sym vu) ,var-sym]))
    ;; Extra inspectors, in parallel to imports
    (for/list ([mu (in-list link-mod-uses)])
      (define extra-inspectorss

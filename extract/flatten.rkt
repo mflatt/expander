@@ -34,11 +34,13 @@
       (hash-update ht (variable-link var) (lambda (l) (cons (variable-name var) l)) null)))
   
   `(linklet
-    #:import ,(for/list ([(i-lnk names) (in-hash runtime-imports)])
-                `[,(link-name i-lnk)
-                  ,@(for/list ([name (in-list names)])
-                      `(,name ,(hash-ref variable-names (variable i-lnk name))))])
-    #:export ()
+    ;; imports
+    ,(for/list ([(i-lnk names) (in-hash runtime-imports)])
+       `[,@(for/list ([name (in-list names)])
+             `(,name ,(hash-ref variable-names (variable i-lnk name))))])
+    ;; exports
+    ()
+    ;; body
     ,@(apply
        append
        (for/list ([lnk (in-list (reverse needed-linklets-in-order))])

@@ -22,7 +22,7 @@
 
 (define (variable-reference->namespace vr)
   (check 'variable-reference->namespace variable-reference? vr)
-  (instance-name (variable-reference->instance vr)))
+  (instance-data (variable-reference->instance vr)))
 
 (define (variable-reference->module-path-index vr)
   (check 'variable-reference->module-path-index variable-reference? vr)
