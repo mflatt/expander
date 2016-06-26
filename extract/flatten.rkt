@@ -28,16 +28,15 @@
                           #:linklets linklets
                           #:needed-linklets-in-order needed-linklets-in-order))
   
-  (define runtime-imports
-    (for*/fold ([ht #hash()]) ([var (in-hash-keys variable-names)]
-                               #:when (symbol? (link-name (variable-link var))))
-      (hash-update ht (variable-link var) (lambda (l) (cons (variable-name var) l)) null)))
+  (for ([var (in-hash-keys variable-names)]
+        #:when (symbol? (link-name (variable-link var))))
+    (error 'flatten "found a dependency on a non-primitive: ~s from ~s"
+           (variable-name var)
+           (link-name (variable-link var))))
   
   `(linklet
     ;; imports
-    ,(for/list ([(i-lnk names) (in-hash runtime-imports)])
-       `[,@(for/list ([name (in-list names)])
-             `(,name ,(hash-ref variable-names (variable i-lnk name))))])
+    ()
     ;; exports
     ()
     ;; body

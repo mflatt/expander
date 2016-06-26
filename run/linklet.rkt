@@ -4,6 +4,7 @@
          "../syntax/datum-map.rkt"
          "../host/correlate.rkt"
          "../common/reflect-hash.rkt"
+         "../boot/runtime-primitive.rkt"
          "linklet-operation.rkt")
 
 ;; A "linklet" is the primitive form of separate (not necessarily
@@ -91,20 +92,16 @@
 
 ;; ----------------------------------------
 
-(define (get-primitive-instance name)
+(define (primitive-table name)
   (cond
    [(eq? name '#%bootstrap-linklet) #f]
-   [(eq? name '#%linklet)
-    (instance name #f
-              (for/hasheq ([(k v) (linklet-operations=> reflect-hash)])
-                (values k (box v))))]
+   [(eq? name '#%linklet) (linklet-operations=> reflect-hash)]
    [else
     (define mod-name `(quote ,name))
     (define-values (vars trans) (module->exports mod-name))
-    (instance name #f
-              (for/hasheq ([sym (in-list (map car (cdr (assv 0 vars))))])
-                (values sym
-                        (box (dynamic-require mod-name sym)))))]))
+    (for/hasheq ([sym (in-list (map car (cdr (assv 0 vars))))])
+      (values sym
+              (dynamic-require mod-name sym)))]))
 
 ;; ----------------------------------------
 
@@ -122,8 +119,11 @@
 ;; ----------------------------------------
 
 (define cu-namespace (make-empty-namespace))
+(namespace-attach-module (current-namespace) ''#%builtin cu-namespace)
 (parameterize ([current-namespace cu-namespace])
-  (namespace-require ''#%kernel)
+  (for ([name (in-list runtime-instances)])
+    (namespace-require `',name))
+  (namespace-require ''#%linklet)
   (namespace-set-variable-value! 'check-not-undefined check-not-undefined)
   (namespace-set-variable-value! 'instance-variable-box instance-variable-box)
   (namespace-set-variable-value! 'variable-reference variable-reference)

@@ -68,7 +68,8 @@
   (declare-hash-based-module! '#%utils utils-primitives #:namespace ns)
   (declare-hash-based-module! '#%place-struct place-struct-primitives #:namespace ns)
   (declare-hash-based-module! '#%boot boot-primitives #:namespace ns)
-  (declare-hash-based-module! '#%linklet linklet-primitives #:namespace ns)
+  (declare-hash-based-module! '#%linklet linklet-primitives #:namespace ns
+                              #:primitive? #t)
   (declare-hash-based-module! '#%expobs expobs-primitives #:namespace ns
                               #:protected? #t)
   (declare-kernel-module! ns

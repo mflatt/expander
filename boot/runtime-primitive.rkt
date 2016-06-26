@@ -36,7 +36,8 @@
 (add-runtime-primitive! 'gensym)
 (add-runtime-primitive! 'string->uninterned-symbol)
 
-;; Instances that are built into the runtime system:
+;; Instances that are built into the runtime system, but
+;; not including '#%linklet
 (define runtime-instances
   '(#%kernel
     #%paramz

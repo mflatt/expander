@@ -2,25 +2,25 @@
 (require (prefix-in host: '#%linklet)
          "../run/linklet-operation.rkt")
 
-;; We use only `get-primitive-instance` and `instance-variable-value`
-;; directly, so that those are the only functions needed for
-;; bootstrapping --- and generally so we can replace the linklet
-;; implementation for bootstrapping. See also "../run/linklet.rkt".
+;; We use only `primitive-table` directly, so that's the only function
+;; needed for bootstrapping --- and generally so we can replace the
+;; linklet implementation for bootstrapping. See also
+;; "../run/linklet.rkt".
 
-(define linklet-instance (or
-                          ;; As a hook for bootstrapping, check for a
-                          ;; replacement of the primitive '#%linklet
-                          ;; module:
-                          (host:get-primitive-instance '#%bootstrap-linklet)
-                          (host:get-primitive-instance '#%linklet)))
+(define linklet-primitive-table (or
+                                 ;; As a hook for bootstrapping, check for a
+                                 ;; replacement of the primitive '#%linklet
+                                 ;; module:
+                                 (host:primitive-table '#%bootstrap-linklet)
+                                 (host:primitive-table '#%linklet)))
 
 (define-syntax-rule (bounce id ...)
   (begin
     (provide id ...)
-    (define id (host:instance-variable-value linklet-instance 'id))
+    (define id (hash-ref linklet-primitive-table 'id #f))
     ...))
 
 (linklet-operations=> bounce)
 
 (unless variable-reference-constant?
-  (error "broken primitive '#%linklet instance; maybe you need to use \"bootstrap-run.rkt\""))
+  (error "broken '#%linklet primitive table; maybe you need to use \"bootstrap-run.rkt\""))

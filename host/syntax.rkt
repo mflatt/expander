@@ -2,15 +2,15 @@
 (require '#%linklet)
 
 ;; Bounce syntax operations that are implemented by the runtime system
-;; through `get-primitive-instance`, so that the bootstrapping process
+;; through `primitive-table`, so that the bootstrapping process
 ;; doesn't complain about using them.
 
-(define kernel-instance (get-primitive-instance '#%kernel))
+(define kernel-primitive-table (primitive-table '#%kernel))
 
 (define-syntax-rule (bounce id ...)
   (begin
     (provide id ...)
-    (define id (instance-variable-value kernel-instance 'id))
+    (define id (hash-ref kernel-primitive-table 'id))
     ...))
 
 (bounce read-syntax read-syntax/recursive

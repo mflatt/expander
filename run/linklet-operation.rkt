@@ -9,7 +9,9 @@
      (datum->syntax
       #'form
       (cons #'form
-            '(linklet?
+            '(primitive-table
+              
+              linklet?
               compile-linklet             ; result is serializable
               instantiate-linklet         ; fills in an instance given argument instances
               
@@ -24,8 +26,6 @@
               instance-variable-value
               instance-set-variable-value!
               instance-unset-variable!
-
-              get-primitive-instance
 
               linklet-directory?       ; maps symbol lists to linklet bundles
               hash->linklet-directory  ; converts a hash table to a ld

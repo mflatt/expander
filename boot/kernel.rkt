@@ -23,8 +23,7 @@
                        #:to '#%runtime
                        #:skip (set-union primitive-ids
                                          main-ids)
-                       #:namespace ns
-                       #:primitive? #t)
+                       #:namespace ns)
   (declare-reexporting-module! '#%kernel '(#%core #%runtime #%main)
                                #:namespace ns))
  
@@ -33,15 +32,14 @@
                              #:namespace ns
                              #:skip [skip-syms (seteq)]
                              #:alts [alts #hasheq()]
-                             #:primitive? [primitive? #f]
+                             #:primitive? [primitive? #t]
                              #:protected? [protected? #f])
   (define mod-name `',name)
-  (define inst (get-primitive-instance name))
-  (define ht (for/hash ([sym (in-list (instance-variable-names inst))]
+  (define prims (primitive-table name))
+  (define ht (for/hash ([(sym val) (in-hash prims)]
                         #:unless (set-member? skip-syms sym))
                (values sym
-                       (or (hash-ref alts sym #f)
-                           (instance-variable-value inst sym)))))
+                       (or (hash-ref alts sym #f) val))))
   (declare-hash-based-module! to-name ht
                               #:namespace ns
                               #:primitive? primitive?
