@@ -112,18 +112,15 @@
                              extra-inspector
                              (hash-ref phase-to-link-extra-inspectorsss phase #f))
        (define (instantiate)
-         (parameterize ([current-namespace (if (zero-phase? phase)
-                                               (current-namespace)
-                                               phase-ns)])
-           ;; Providing a target instance to `instantiate-linklet` means that we get
-           ;; the body's results instead of the instance as a result
-           (instantiate-linklet linklet
-                                (list* top-level-instance
-                                       link-instance
-                                       inst
-                                       import-instances)
-                                ;; Instantiation merges with the namespace's current instance:
-                                (namespace->instance ns (phase+ phase phase-shift)))))
+         ;; Providing a target instance to `instantiate-linklet` means that we get
+         ;; the body's results instead of the instance as a result
+         (instantiate-linklet linklet
+                              (list* top-level-instance
+                                     link-instance
+                                     inst
+                                     import-instances)
+                              ;; Instantiation merges with the namespace's current instance:
+                              (namespace->instance ns (phase+ phase phase-shift))))
        ;; Return `instantiate` as the next thunk
        (cond
         [(eqv? phase orig-phase)

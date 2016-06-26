@@ -23,16 +23,24 @@
          expand-once
          expand-syntax-once)
 
-(define (eval s [ns (current-namespace)])
-  (check 'eval namespace? ns)
-  (parameterize ([current-namespace ns])
-    ((current-eval) (intro s ns))))
+(define eval
+  (case-lambda
+    [(s) ((current-eval) (intro s))]
+    [(s ns)
+     (check 'eval namespace? ns)
+     (parameterize ([current-namespace ns])
+       ((current-eval) (intro s ns)))]))
 
-(define (eval-syntax s [ns (current-namespace)])
-  (check 'eval-syntax syntax? s)
-  (check 'eval-syntax namespace? ns)
-  (parameterize ([current-namespace ns])
-    ((current-eval) s)))
+(define eval-syntax
+  (case-lambda
+    [(s)
+     (check 'eval-syntax syntax? s)
+     ((current-eval) s)]
+    [(s ns)
+     (check 'eval-syntax syntax? s)
+     (check 'eval-syntax namespace? ns)
+     (parameterize ([current-namespace ns])
+       ((current-eval) s))]))
 
 (define (compile s)
   ((current-compile) (intro s) #f))
