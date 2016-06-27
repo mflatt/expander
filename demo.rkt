@@ -18,12 +18,12 @@
 
 (define (compile+eval-expression e #:namespace [ns demo-ns])
   (define exp-e (expand-expression e #:namespace ns))
-  (define c (compile exp-e ns (lambda (exp-e ns)
-                                (if check-reexpand?
-                                    (parameterize ([current-output-port (open-output-bytes)])
-                                      (expand exp-e ns))
-                                    exp-e))
-                     #:serializable? check-serialize?))
+  (define c (compile exp-e ns  check-serialize?
+                     (lambda (exp-e ns)
+                       (if check-reexpand?
+                           (parameterize ([current-output-port (open-output-bytes)])
+                             (expand exp-e ns))
+                           exp-e))))
   (define ready-c (if check-serialize?
                       (let ([o (open-output-bytes)])
                         (display c o)

@@ -4,20 +4,17 @@
          "link.rkt"
          "linklet-info.rkt"
          "linklet.rkt"
+         "variable.rkt"
          "symbol.rkt"
          (prefix-in bootstrap: "../run/linklet.rkt"))
 
 (provide flatten!)
 
-;; Represents a variable that is exported by a used linklet:
-(struct variable (link   ; link
-                  name)  ; symbol
-        #:prefab)
-
 (define (flatten! start-link
                   #:linklets linklets
                   #:linklets-in-order linklets-in-order
-                  #:needed needed)
+                  #:needed needed
+                  #:exports exports)
   (log-status "Flattening to a single linklet...")
   (define needed-linklets-in-order
     (for/list ([lnk (in-list (unbox linklets-in-order))]
@@ -38,7 +35,11 @@
     ;; imports
     ()
     ;; exports
-    ()
+    ,(for/list ([(ex-sym var) (in-hash exports)])
+       (define int-sym (hash-ref variable-names var #f))
+       (unless int-sym
+         (error 'flatten "export does not map to an instance variable: ~s" ex-sym))
+       `[,int-sym ,ex-sym])
     ;; body
     ,@(apply
        append

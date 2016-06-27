@@ -3,6 +3,7 @@ This is a work-in-progress reimplementation of Racket's macro expander.
 See "demo.rkt" for examples.
 
 TODO:
+ exn:fail:missing-module
  bug fix for local definition contexts (MB's example)
  load handler's direct loading of submodules
  continuation prompt for module body
@@ -86,8 +87,8 @@ Roadmap to a few key pieces:
 
  extract/ - extracts subset of compilation units (by "run.rkt")
 
- main.rkt - installs eval handler, etc.; entry point for the
-            expander/compiler/evaluator 
+ main.rkt - installs eval handler, etc.; entry point for diretcly
+            running the expander/compiler/evaluator
 
  demo.rkt - exercises the expander and compiler (uses "main.rkt")
 

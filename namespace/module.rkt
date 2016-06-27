@@ -118,9 +118,9 @@
   (define name (module-path-index-resolve name-mpi))
   (define m-ns
     ;; Keeps all module declarations, but makes a fresh space of instances
-    (struct-copy namespace (make-namespace ns
-                                           #:root-expand-ctx root-expand-ctx
-                                           #:register? #f)
+    (struct-copy namespace (new-namespace ns
+                                          #:root-expand-ctx root-expand-ctx
+                                          #:register? #f)
                  [mpi name-mpi]
                  [phase phase]
                  [0-phase phase]

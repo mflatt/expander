@@ -29,11 +29,11 @@
                                         (reference->resolved-module-path mod #:load? load?)))
   (module-language-info m))
 
-(define (module->namespace mod)
+(define (module->namespace mod [ns (current-namespace)])
   (unless (module-reference? mod)
     (raise-argument-error 'module->namespace module-reference-str mod))
+  (check 'module->namespace namespace? ns)
   (define name (reference->resolved-module-path mod #:load? #t))
-  (define ns (current-namespace))
   (define phase (namespace-phase ns))
   (define m-ns (namespace->module-namespace ns name phase))
   (unless m-ns

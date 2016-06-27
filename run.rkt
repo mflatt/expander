@@ -26,7 +26,7 @@
 (define time-expand? #f)
 (define print-extracted-to #f)
 (define quiet-load? #f)
-(define boot-module (path->complete-path "main.rkt"))
+(define startup-module (path->complete-path "main.rkt"))
 (define submod-name #f)
 (define load-file #f)
 (define args
@@ -55,11 +55,11 @@
     (set! print-extracted-to file)]
    #:once-any
    [("-t") file "Load specified file"
-    (set! boot-module (path->complete-path file))]
+    (set! startup-module (path->complete-path file))]
    [("-l") lib "Load specified library"
-    (set! boot-module `(lib ,lib))]
+    (set! startup-module `(lib ,lib))]
    [("-f") file "Load non-module file in `racket/base` namespace"
-    (set! boot-module 'racket/base)
+    (set! startup-module 'racket/base)
     (set! load-file file)]
    #:once-each
    [("--submod") name "Load specified submodule"
@@ -144,7 +144,7 @@
 (cond
  [expand?
   (define path (resolved-module-path-name
-                (resolve-module-path boot-module #f)))
+                (resolve-module-path startup-module #f)))
   (define-values (dir file dir?) (split-path path))
   (define e
     (parameterize ([current-load-relative-directory dir])
@@ -162,12 +162,12 @@
   ;; Load and run the requested module
   (parameterize ([current-command-line-arguments (list->vector args)])
     (namespace-require (if submod-name
-                           `(submod ,boot-module ,submod-name)
-                           boot-module)))])
+                           `(submod ,startup-module ,submod-name)
+                           startup-module)))])
 
 (when extract?
   ;; Extract a bootstrapping slice of the requested module
-  (extract boot-module cache #:print-extracted-to print-extracted-to))
+  (extract startup-module cache #:print-extracted-to print-extracted-to))
 
 (when load-file
   (load load-file))

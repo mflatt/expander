@@ -1,5 +1,7 @@
 #lang racket/base
-(require "common/set.rkt"
+(require racket/private/load
+         "common/set.rkt"
+         "common/module-path.rkt"
          "namespace/namespace.rkt"
          "eval/main.rkt"
          "eval/dynamic-require.rkt"
@@ -18,36 +20,54 @@
          "boot/handler.rkt"
          "syntax/api.rkt")
 
-(provide boot ; installs handlers: eval, module name resolver, etc.
+;; All bindings provided by this module must correspond to variables
+;; (as opposed to syntax). Provided functions must not accept keyword
+;; arguments, both because keyword support involves syntax bindings
+;; and because an embedding context won't be able to supply keyword
+;; arguments.
 
-         ;; This functions are provided for basic testing
-         ;; (such as "demo.rkt")
-         syntax? syntax-e
-         identifier?
-         datum->syntax syntax->datum
-         syntax-property
-         identifier-binding
-         syntax-debug-info
+(provide boot ; installs handlers: eval, module name resolver, etc.
+         seal
+
+         ;; These are direct functions, not ones that use handlers:
+         expand
+         compile
+         eval
          
-         syntax-shift-phase-level
-         bound-identifier=?
+         read-syntax
+         datum->syntax syntax->datum
+         identifier-binding
+         datum->kernel-syntax
          
          make-namespace
          make-empty-kernel-namespace
          current-namespace
+         namespace->instance
          
          namespace-syntax-introduce
          namespace-require
-         dynamic-require
+         dynamic-require         
+         module-declared?
+         
          namespace-module-identifier
          namespace-attach-module
          namespace-attach-module-declaration
-         module-declared?
          
-         ;; These are direct functions, not ones that use handlers:
-         expand
-         compile
-         eval)
+         module-path-index-join
+         module-path?
+         
+         embedded-load ; for -k
+         
+         ;; This functions are provided for basic testing
+         ;; (such as "demo.rkt")
+         syntax? syntax-e
+         identifier?
+         syntax-property
+         syntax-debug-info
+         
+         syntax-shift-phase-level
+         bound-identifier=?)
+
 
 ;; ----------------------------------------
 
@@ -95,3 +115,6 @@
 
 (current-namespace (make-empty-kernel-namespace))
 (dynamic-require ''#%kernel 0)
+
+(define (datum->kernel-syntax s)
+  (datum->syntax core-stx s))

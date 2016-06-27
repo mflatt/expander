@@ -9,6 +9,7 @@
          "registry.rkt")
 
 (provide make-namespace
+         new-namespace
          namespace?
          current-namespace
          namespace-module-registry
@@ -70,9 +71,12 @@
 (struct definitions (variables      ; linklet instance
                      transformers)) ; sym -> val
 
-(define (make-namespace [share-from-ns #f]
-                        #:root-expand-ctx [root-expand-ctx (make-root-expand-context)]
-                        #:register? [register? #t])
+(define (make-namespace)
+  (new-namespace))
+                        
+(define (new-namespace [share-from-ns #f]
+                       #:root-expand-ctx [root-expand-ctx (make-root-expand-context)]
+                       #:register? [register? #t])
   (define phase (if share-from-ns
                     (namespace-phase share-from-ns)
                     0))

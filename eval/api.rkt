@@ -50,11 +50,11 @@
   ((current-compile) s #f))
 
 (define (expand s)
-  (direct:expand (intro s) #:log-expand? #t))
+  (direct:expand (intro s) #t))
 
 (define (expand-syntax s)
   (check 'expand-syntax syntax? s)
-  (direct:expand s #:log-expand? #t))
+  (direct:expand s #t))
 
 (define (expand-once s)
   (direct:expand-once (intro s)))

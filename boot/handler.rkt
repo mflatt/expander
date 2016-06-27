@@ -643,13 +643,25 @@
 
 (define default-load-handler
   (lambda (path expected-mod)
+    (unless (path-string? path)
+      (raise-argument-error 'default-load-handler "path-string?" path))
+    (unless (or (not expected-mod)
+                (symbol? expected-mod)
+                (and (pair? expected-mod)
+                     (list? expected-mod)
+                     (or (not (car expected-mod)) (symbol? (car expected-mod)))
+                     (andmap symbol? (cdr expected-mod))))
+      (raise-argument-error 'default-load-handler
+                            "(or/c #f symbol? (cons/c (or/c #f symbol?) (non-empty-listof symbol?)))"
+                            expected-mod))
     (cond
      [expected-mod
       (define m-s
         (call-with-input-file*
          path
          (lambda (i)
-           (port-count-lines! i)
+           (unless (regexp-match? #rx"[.]zo$" path)
+             (port-count-lines! i))
            (with-module-reading-parameterization
                (lambda ()
                  (define s (read-syntax (object-name i) i))

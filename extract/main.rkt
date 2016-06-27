@@ -4,6 +4,7 @@
          "linklet.rkt"
          "get-linklet.rkt"
          "needed.rkt"
+         "export.rkt"
          "check-and-report.rkt"
          "flatten.rkt"
          "save-and-report.rkt")
@@ -79,10 +80,19 @@
   ;; If we're in source mode, we can generate a single linklet
   ;; that combines all the ones we found
   (when (linklets-are-source-mode? linklets)
+    ;; Get variables to be exported by a flattened linklet; all of the
+    ;; module provides must refer to instance variables
+    (define exports
+      (get-module-export-variables start-link
+                                   #:compiled-modules compiled-modules
+                                   #:cache cache))
+    
+    ;; Generate the flattened linklet
     (define flattened-linklet-expr
       (flatten! start-link
                 #:linklets linklets
                 #:linklets-in-order linklets-in-order
-                #:needed needed))
+                #:needed needed
+                #:exports exports))
     
     (save-and-report-flattened! flattened-linklet-expr print-extracted-to)))

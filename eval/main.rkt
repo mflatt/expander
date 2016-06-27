@@ -35,7 +35,7 @@
 ;; This `eval` is suitable as an eval handler that will be called by
 ;; the `eval` and `eval-syntax` of '#%kernel
 (define (eval s [ns (current-namespace)] [compile (lambda (s ns)
-                                                    (compile s ns  #:serializable? #f))])
+                                                    (compile s ns #f))])
   (cond
    [(or (compiled-in-memory? s)
         (linklet-directory? s))
@@ -58,8 +58,7 @@
 
 ;; This `compile` is suitable as a compile handler that will be called
 ;; by the `compile` and `compile-syntax` of '#%kernel
-(define (compile s [ns (current-namespace)] [expand expand]
-                 #:serializable? [serializable? #t])
+(define (compile s [ns (current-namespace)] [serializable? #t] [expand expand])
   (define cs
     (per-top-level s ns
                    #:single (lambda (s ns) (list (compile-single s ns expand
@@ -89,8 +88,7 @@
 
 ;; This `expand` is suitable as an expand handler (if such a thing
 ;; existed) to be called by `expand` and `expand-syntax`.
-(define (expand s [ns (current-namespace)]
-                #:log-expand? [log-expand? #f])
+(define (expand s [ns (current-namespace)] [log-expand? #f])
   (when log-expand? (log-expand-start))
   (per-top-level s ns
                  #:single expand-single

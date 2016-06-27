@@ -14,7 +14,9 @@
      print-extracted-to
      #:exists 'truncate
      (lambda (o)
-       (pretty-print flattened-linklet-expr o))))
+       (displayln ";; This file is the result of applying the macro expander to itself" o)
+       (parameterize ([pretty-print-columns 120])
+         (pretty-write flattened-linklet-expr o)))))
 
   ;; Tentatively compile and report size and time
   (log-status "Compiling flattened...")
