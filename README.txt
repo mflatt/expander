@@ -4,6 +4,7 @@ See "demo.rkt" for examples.
 
 TODO:
  exn:fail:missing-module
+ root namespace for reader `dynamc-require`
  bug fix for local definition contexts (MB's example)
  load handler's direct loading of submodules
  continuation prompt for module body

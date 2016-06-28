@@ -49,7 +49,8 @@
 (define (declare-hash-based-module! name ht
                                     #:namespace ns
                                     #:primitive? [primitive? #f]
-                                    #:protected? [protected? #f])
+                                    #:protected? [protected? #f]
+                                    #:protected [protected-syms null])
   (define mpi (module-path-index-join (list 'quote name) #f))
   (declare-module!
    ns
@@ -61,7 +62,8 @@
                 (hasheqv 0 (for/hash ([sym (in-hash-keys ht)])
                              (define binding (make-module-binding mpi 0 sym))
                              (values sym
-                                     (if protected?
+                                     (if (or protected?
+                                             (member sym protected-syms))
                                          (protected binding)
                                          binding))))
                 #:instantiate-phase-callback

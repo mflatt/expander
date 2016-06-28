@@ -47,6 +47,7 @@
          namespace-syntax-introduce
          namespace-require
          dynamic-require         
+         dynamic-require-reader
          module-declared?
          
          namespace-module-identifier
@@ -86,7 +87,11 @@
   (declare-core-module! ns)
   (declare-hash-based-module! '#%main main-primitives #:namespace ns)
   (declare-hash-based-module! '#%utils utils-primitives #:namespace ns)
-  (declare-hash-based-module! '#%place-struct place-struct-primitives #:namespace ns)
+  (declare-hash-based-module! '#%place-struct place-struct-primitives #:namespace ns
+                              ;; Treat place creation as "unsafe", since the new place starts with
+                              ;; permissive guards that can access unsafe features that affect
+                              ;; existing places
+                              #:protected '(dynamic-place))
   (declare-hash-based-module! '#%boot boot-primitives #:namespace ns)
   (declare-hash-based-module! '#%linklet linklet-primitives #:namespace ns
                               #:primitive? #t)
@@ -100,7 +105,8 @@
         #:unless (eq? name '#%kernel))
     (copy-racket-module! name
                          #:namespace ns
-                         #:protected? (eq? name '#%foreign)))
+                         #:protected? (or (eq? name '#%foreign)
+                                          (eq? name '#%futures))))
   (declare-reexporting-module! '#%builtin (list* '#%place-struct
                                                  '#%utils
                                                  '#%boot
