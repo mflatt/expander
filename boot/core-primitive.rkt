@@ -85,6 +85,7 @@
                       make-exn:fail:syntax:unbound
                       exn:fail:syntax:unbound?
                       
+                      current-module-path-for-load
                       prop:missing-module
                       exn:missing-module?
                       exn:missing-module-accessor
@@ -175,6 +176,7 @@
 
                       current-module-name-resolver
                       current-module-declare-name
+                      current-module-declare-source
                       
                       current-namespace
                       namespace-module-registry

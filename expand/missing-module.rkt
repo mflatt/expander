@@ -1,8 +1,10 @@
 #lang racket/base
 (require "../syntax/syntax.rkt"
-         "../syntax/error.rkt")
+         "../syntax/error.rkt"
+         "../common/module-path.rkt")
 
-(provide maybe-raise-missing-module
+(provide current-module-path-for-load
+         maybe-raise-missing-module
          
          prop:missing-module
          exn:missing-module?
@@ -31,6 +33,21 @@
         #:extra-constructor-name make-exn:fail:syntax:missing-module
         #:transparent
         #:property prop:missing-module (lambda (e) (exn:fail:syntax:missing-module-path e)))
+
+(define current-module-path-for-load
+  (make-parameter #f
+                  (lambda (v)
+                    (unless (or (not v)
+                                (module-path? v)
+                                (and (syntax? v)
+                                     (module-path? (syntax->datum v))))
+                      (raise-argument-error
+                       'current-module-path-for-load
+                       (string-append "(or/c module-path?"
+                                      " (and/c syntax? (lambda (stx) (module-path? (syntax->datum stx))))"
+                                      " #f)")
+                       v))
+                    v)))
 
 (define (maybe-raise-missing-module name filename pre rel post errstr)
   (define path (current-module-path-for-load))

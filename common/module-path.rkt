@@ -30,6 +30,7 @@
          build-module-name
          
          current-module-declare-name
+         current-module-declare-source
          substitute-module-declare-name
          
          deserialize-module-path-index)
@@ -377,6 +378,17 @@
                                             "(or/c #f resolved-module-path?)"
                                             r))
                     r)))
+
+(define current-module-declare-source
+  (make-parameter #f
+                  (lambda (s)
+                    (unless (or (not s)
+                                (symbol? s)
+                                (and (path? s) (complete-path? s)))
+                      (raise-argument-error 'current-module-declare-source
+                                            "(or/c #f symbol? (and/c path? complete-path?))"
+                                            s))
+                    s)))
 
 (define (substitute-module-declare-name default-name)
   (define current-name (current-module-declare-name))
