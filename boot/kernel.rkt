@@ -9,33 +9,36 @@
          "core-primitive.rkt"
          "../common/module-path.rkt"
          "../expand/require+provide.rkt"
-         "../host/linklet.rkt")
+         "../host/linklet.rkt"
+         "../compile/built-in-symbol.rkt")
 
 ;; The '#%kernel module combines '#%core, '#%runtime, and '#%main
 
 (provide declare-kernel-module!
-         copy-racket-module!
+         copy-runtime-module!
          declare-hash-based-module!
          declare-reexporting-module!)
 
 (define (declare-kernel-module! ns #:eval eval #:main-ids main-ids)
-  (copy-racket-module! '#%kernel
-                       #:to '#%runtime
-                       #:skip (set-union primitive-ids
-                                         main-ids)
-                       #:namespace ns)
+  (copy-runtime-module! '#%kernel
+                        #:to '#%runtime
+                        #:skip (set-union primitive-ids
+                                          main-ids)
+                        #:namespace ns)
   (declare-reexporting-module! '#%kernel '(#%core #%runtime #%main)
                                #:namespace ns))
  
-(define (copy-racket-module! name
-                             #:to [to-name name]
-                             #:namespace ns
-                             #:skip [skip-syms (seteq)]
-                             #:alts [alts #hasheq()]
-                             #:primitive? [primitive? #t]
-                             #:protected? [protected? #f])
+(define (copy-runtime-module! name
+                              #:to [to-name name]
+                              #:namespace ns
+                              #:skip [skip-syms (seteq)]
+                              #:alts [alts #hasheq()]
+                              #:primitive? [primitive? #t]
+                              #:protected? [protected? #f])
   (define mod-name `',name)
   (define prims (primitive-table name))
+  (for ([sym (in-hash-keys prims)])
+    (register-built-in-symbol! sym))
   (define ht (for/hash ([(sym val) (in-hash prims)]
                         #:unless (set-member? skip-syms sym))
                (values sym
@@ -50,7 +53,8 @@
                                     #:namespace ns
                                     #:primitive? [primitive? #f]
                                     #:protected? [protected? #f]
-                                    #:protected [protected-syms null])
+                                    #:protected [protected-syms null]
+                                    #:register-builtin? [register-builtin? #f])
   (define mpi (module-path-index-join (list 'quote name) #f))
   (declare-module!
    ns
@@ -60,6 +64,8 @@
                 #:self mpi
                 #:provides
                 (hasheqv 0 (for/hash ([sym (in-hash-keys ht)])
+                             (when register-builtin?
+                               (register-built-in-symbol! sym))
                              (define binding (make-module-binding mpi 0 sym))
                              (values sym
                                      (if (or protected?

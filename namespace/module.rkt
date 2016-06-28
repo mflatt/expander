@@ -6,7 +6,6 @@
          "../compile/module-use.rkt"
          "../expand/root-expand-context.rkt"
          "../host/linklet.rkt"
-         "../compile/built-in-symbol.rkt"
          "namespace.rkt"
          "protect.rkt"
          "registry.rkt"
@@ -153,12 +152,7 @@
                             (module-self m)
                             (module-provides m)))
   ;; Tell resolver that the module is declared
-  ((current-module-name-resolver) mod-name #f)
-  ;; If it's a primitive module, add to the table of symbols
-  ;; to avoid for bindings
-  (when (module-primitive? m)
-    (for ([sym (in-hash-keys (hash-ref (module-provides m) 0))])
-      (register-built-in-symbol! sym))))
+  ((current-module-name-resolver) mod-name #f))
 
 (define (raise-unknown-module-error who mod-name)
   (raise-arguments-error who

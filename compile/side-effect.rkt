@@ -12,6 +12,7 @@
 
 (define (any-side-effects? e ; compiled expression
                            expected-results ; number of expected reuslts, or #f if any number is ok
+                           required-reference?
                            #:locals [locals #hasheq()]) ; allowed local variabes
   (define actual-results
     (let loop ([e e] [locals locals])
@@ -22,15 +23,16 @@
          (define m (match-correlated e '(_ ([ids rhs] ...) body)))
          (and (not (for/or ([ids (in-list (m 'ids))]
                             [rhs (in-list (m 'rhs))])
-                     (any-side-effects? rhs (correlated-length ids) #:locals locals)))
+                     (any-side-effects? rhs (correlated-length ids) required-reference?
+                                        #:locals locals)))
               (loop (m 'body) (add-binding-info locals (m 'ids) (m 'rhs))))]
         [(values)
          (define m (match-correlated e '(_ e ...)))
          (and (for/and ([e (in-list (m 'e))])
-                (not (any-side-effects? e 1 #:locals locals)))
+                (not (any-side-effects? e 1 required-reference? #:locals locals)))
               (length (m 'e)))]
         [(make-struct-type)
-         (and (ok-make-struct-type? e)
+         (and (ok-make-struct-type? e required-reference?)
               5)]
         [(make-struct-field-accessor)
          (and (ok-make-struct-field-accessor/mutator? e locals 'accessor)
@@ -43,11 +45,7 @@
          (and (symbol? v)
               (or (hash-ref locals v #f)
                   (built-in-symbol? v)
-                  ;; FIXME: needed for "kernstruct.rkt"
-                  (or (eq? v 'exn:fail:syntax)
-                      (eq? v 'exn:fail:syntax:unbound)
-                      (eq? v 'exn:fail:syntax:missing-module)
-                      (eq? v 'exn:fail:missing-module)))
+                  (required-reference? v))
               1)])))
   (not (and actual-results
             (or (not expected-results)
@@ -78,7 +76,7 @@
 
 ;; ----------------------------------------
 
-(define (ok-make-struct-type? e)
+(define (ok-make-struct-type? e required-reference?)
   (define l (correlated->list e))
   (define init-field-count-expr (and ((length l) . > . 3)
                                      (list-ref l 3)))
@@ -93,7 +91,7 @@
                         (lambda (v) (quoted? false? v))
                         (lambda (v) (field-count-expr-to-field-count v))
                         (lambda (v) (field-count-expr-to-field-count v))
-                        (lambda (v) (not (any-side-effects? v 1)))
+                        (lambda (v) (not (any-side-effects? v 1 required-reference?)))
                         (lambda (v) (known-good-struct-properties? v immutables-expr))
                         (lambda (v) (inspector-or-false? v))
                         (lambda (v) (procedure-spec? v immutables-expr))
@@ -196,8 +194,8 @@
       (error 'failed "~s" #'expr)))
   
   (define (any-side-effects?* e n)
-    (define v1 (any-side-effects? e n))
-    (define v2 (any-side-effects? (datum->correlated e) n))
+    (define v1 (any-side-effects? e n (lambda (s) #f)))
+    (define v2 (any-side-effects? (datum->correlated e) n (lambda (s) #f)))
     (unless (equal? v1 v2)
       (error "problem with correlated:" e))
     v1)

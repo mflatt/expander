@@ -4,7 +4,8 @@
 
 ;; ----------------------------------------
 
-(define demo-ns (make-empty-kernel-namespace))
+(define demo-ns (make-namespace))
+(namespace-attach-module (current-namespace) ''#%kernel demo-ns)
 
 (namespace-require ''#%kernel demo-ns)
 (namespace-require '(for-syntax '#%kernel) demo-ns)
@@ -1290,7 +1291,8 @@
  (namespace-attach-module demo-ns ''provides-random-r third-ns)
  #rx"different instance")
 
-(define has-already-ns (make-empty-kernel-namespace))
+(define has-already-ns (make-namespace))
+(namespace-attach-module (current-namespace) ''#%kernel has-already-ns)
 (namespace-require ''#%kernel has-already-ns)
 (eval-module-declaration '(module provides-random-r '#%kernel
                            (define-values (r) 5)

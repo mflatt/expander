@@ -70,9 +70,10 @@
   (define side-effects (make-hasheqv))
   (define (check-side-effects! e ; compiled expression
                                expected-results ; number of expected reuslts, or #f if any number is ok
-                               phase)
+                               phase
+                               required-reference?)
     (unless (hash-ref side-effects phase #f)
-      (when (any-side-effects? e expected-results)
+      (when (any-side-effects? e expected-results required-reference?)
         (hash-set! side-effects phase #t))))
 
   ;; Compile the sequence of body forms:

@@ -176,7 +176,7 @@
       (define mod (namespace->module ns mod-name))
       (cond
        [(and mod (module-primitive? mod))
-        ;; Inline a core binding:
+        ;; Direct reference to a runtime primitive:
         (unless (zero? (module-binding-phase b))
           (error "internal error: non-zero phase for a primitive"))
         (when rhs

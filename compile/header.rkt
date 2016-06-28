@@ -26,6 +26,8 @@
          select-fresh
 
          register-required-variable-use!
+         register-as-defined!
+         registered-as-required?
          generate-links+imports)
 
 ;; A compilation header accumulates information about syntax literals
@@ -43,7 +45,7 @@
                 require-var-to-import-sym  ; variable-use -> sym
                 import-sym-to-extra-inspectors ; sym -> set of inspectors
                 [require-vars-in-order #:mutable] ; list of variable-use
-                define-and-import-syms     ; hash of sym, to select distinct symbols
+                define-and-import-syms     ; hash of sym -> 'defined/'imported, to select distinct symbols
                 syntax-literals            ; box of list of syntax-literal
                 [num-syntax-literals #:mutable]))
 
@@ -193,7 +195,8 @@
 
 ;; ----------------------------------------
 
-(define (register-required-variable-use! header mpi phase sym extra-inspector)
+(define (register-required-variable-use! header mpi phase sym extra-inspector
+                                         #:defined? [defined? #f])
   (define key (variable-use (module-use mpi phase) sym))
   (define variable-uses (header-require-var-to-import-sym header))
   (define var-sym
@@ -203,12 +206,18 @@
           (set-header-require-vars-in-order! header
                                              (cons key
                                                    (header-require-vars-in-order header)))
-          (hash-set! (header-define-and-import-syms header) sym #t)
+          (hash-set! (header-define-and-import-syms header) sym (if defined? 'defined 'required))
           sym)))
   (when extra-inspector
     (define extra-inspectors (header-import-sym-to-extra-inspectors header))
     (hash-update! extra-inspectors var-sym (lambda (s) (set-add s extra-inspector)) #hasheq()))
   var-sym)
+
+(define (register-as-defined! header def-sym)
+  (hash-set! (header-define-and-import-syms header) def-sym 'defined))
+
+(define (registered-as-required? header var-sym)
+  (eq? 'required (hash-ref  (header-define-and-import-syms header) var-sym #f)))
 
 ;; Returns:
 ;;  link-names : a list of sym

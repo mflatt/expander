@@ -41,7 +41,6 @@
          datum->kernel-syntax
          
          make-namespace
-         make-empty-kernel-namespace
          current-namespace
          namespace->instance
          
@@ -83,45 +82,42 @@
 (require "boot/core-primitive.rkt")
 
 ;; ----------------------------------------
-
-(define (make-empty-kernel-namespace)
-  (define ns (make-namespace))
-  (declare-core-module! ns)
-  (declare-hash-based-module! '#%main main-primitives #:namespace ns)
-  (declare-hash-based-module! '#%utils utils-primitives #:namespace ns)
-  (declare-hash-based-module! '#%place-struct place-struct-primitives #:namespace ns
-                              ;; Treat place creation as "unsafe", since the new place starts with
-                              ;; permissive guards that can access unsafe features that affect
-                              ;; existing places
-                              #:protected '(dynamic-place))
-  (declare-hash-based-module! '#%boot boot-primitives #:namespace ns)
-  (declare-hash-based-module! '#%linklet linklet-primitives #:namespace ns
-                              #:primitive? #t)
-  (declare-hash-based-module! '#%expobs expobs-primitives #:namespace ns
-                              #:protected? #t)
-  (declare-kernel-module! ns
-                          #:eval eval
-                          #:main-ids (for/set ([name (in-hash-keys main-primitives)])
-                                       name))
-  (for ([name (in-list runtime-instances)]
-        #:unless (eq? name '#%kernel))
-    (copy-racket-module! name
-                         #:namespace ns
-                         #:protected? (or (eq? name '#%foreign)
-                                          (eq? name '#%futures))))
-  (declare-reexporting-module! '#%builtin (list* '#%place-struct
-                                                 '#%utils
-                                                 '#%boot
-                                                 '#%expobs
-                                                 runtime-instances)
-                               #:namespace ns
-                               #:reexport? #f)
-  ns)
-
-;; ----------------------------------------
 ;; Initial namespace
 
-(current-namespace (make-empty-kernel-namespace))
+(define ns (make-namespace))
+(declare-core-module! ns)
+(declare-hash-based-module! '#%main main-primitives #:namespace ns)
+(declare-hash-based-module! '#%utils utils-primitives #:namespace ns)
+(declare-hash-based-module! '#%place-struct place-struct-primitives #:namespace ns
+                            ;; Treat place creation as "unsafe", since the new place starts with
+                            ;; permissive guards that can access unsafe features that affect
+                            ;; existing places
+                            #:protected '(dynamic-place))
+(declare-hash-based-module! '#%boot boot-primitives #:namespace ns)
+(declare-hash-based-module! '#%linklet linklet-primitives #:namespace ns
+                            #:primitive? #t
+                            #:register-builtin? #t)
+(declare-hash-based-module! '#%expobs expobs-primitives #:namespace ns
+                            #:protected? #t)
+(declare-kernel-module! ns
+                        #:eval eval
+                        #:main-ids (for/set ([name (in-hash-keys main-primitives)])
+                                     name))
+(for ([name (in-list runtime-instances)]
+      #:unless (eq? name '#%kernel))
+  (copy-runtime-module! name
+                        #:namespace ns
+                        #:protected? (or (eq? name '#%foreign)
+                                         (eq? name '#%futures))))
+(declare-reexporting-module! '#%builtin (list* '#%place-struct
+                                               '#%utils
+                                               '#%boot
+                                               '#%expobs
+                                               runtime-instances)
+                             #:namespace ns
+                             #:reexport? #f)
+(current-namespace ns)
+
 (dynamic-require ''#%kernel 0)
 
 (define (datum->kernel-syntax s)

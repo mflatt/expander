@@ -69,10 +69,14 @@
              (set-header-binding-syms-in-order! header
                                                 (cons sym
                                                       (header-binding-syms-in-order header)))
-             (hash-set! (header-define-and-import-syms header) def-sym #t))]
+             (register-as-defined! header def-sym))]
           [(begin-for-syntax)
            (define m (match-syntax body `(begin-for-syntax e ...)))
            (loop! (m 'e) (add1 phase) (find-or-create-header! (add1 phase)))]))))
+  
+  ;; Provided for callbacks to detect reuiqred references:
+  (define ((as-required? header) sym)
+    (registered-as-required? header sym))
 
   ;; Compile each form in `bodys`, recording results in `phase-to-body`
   (define last-i (sub1 (length bodys)))
@@ -99,12 +103,13 @@
                                                 (compile-context-self cctx)
                                                 phase
                                                 binding-sym
-                                                #f))]))
+                                                #f
+                                                #:defined? #t))]))
          (define rhs (compile (m 'rhs)
                               (struct-copy compile-context cctx
                                            [phase phase]
                                            [header header])))
-         (compiled-expression-callback rhs (length def-syms) phase)
+         (compiled-expression-callback rhs (length def-syms) phase (as-required? header))
          (cond
           [(compile-context-module-self cctx)
            ;; In a module, generate a definition:
@@ -140,7 +145,7 @@
                               (struct-copy compile-context cctx
                                            [phase (add1 phase)]
                                            [header next-header])))
-         (compiled-expression-callback rhs (length gen-syms) (add1 phase))
+         (compiled-expression-callback rhs (length gen-syms) (add1 phase) (as-required? header))
          (define transformer-set!s (for/list ([binding-sym (in-list binding-syms)]
                                               [gen-sym (in-list gen-syms)])
                                      `(,set-transformer!-id ',binding-sym ,gen-sym)))
@@ -169,7 +174,7 @@
                                                           [phase phase]
                                                           [header header])))
          (when e
-           (compiled-expression-callback e #f phase)
+           (compiled-expression-callback e #f phase (as-required? header))
            (add-body! phase e))]
         [else
          (define e (compile body
@@ -177,7 +182,7 @@
                                          [phase phase]
                                          [header header])
                             (= i last-i)))
-         (compiled-expression-callback e #f phase)
+         (compiled-expression-callback e #f phase (as-required? header))
          (add-body! phase e)])))
 
   ;; Register root-expand-context, if any, encoded as a syntax object;
