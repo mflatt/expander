@@ -89,12 +89,14 @@
                       prop:missing-module
                       exn:missing-module?
                       exn:missing-module-accessor
-                      exn:fail:missing-module
-                      make-exn:fail:missing-module
-                      exn:fail:missing-module?
+                      exn:fail:filesystem:missing-module
+                      make-exn:fail:filesystem:missing-module
+                      exn:fail:filesystem:missing-module?
+                      exn:fail:filesystem:missing-module-path
                       exn:fail:syntax:missing-module
                       make-exn:fail:syntax:missing-module
                       exn:fail:syntax:missing-module?
+                      exn:fail:syntax:missing-module-path
                       
                       read-syntax
                       read-syntax/recursive
