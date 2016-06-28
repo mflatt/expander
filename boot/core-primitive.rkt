@@ -23,7 +23,8 @@
          "../syntax/error.rkt"
          "../common/module-path.rkt"
          "../namespace/variable-reference.rkt"
-         "../expand/allowed-context.rkt")
+         "../expand/allowed-context.rkt"
+         "../expand/missing-module.rkt")
 
 (provide primitive-ids)
 
@@ -80,6 +81,19 @@
                       make-exn:fail:syntax
                       exn:fail:syntax?
                       exn:fail:syntax-exprs
+                      exn:fail:syntax:unbound
+                      make-exn:fail:syntax:unbound
+                      exn:fail:syntax:unbound?
+                      
+                      prop:missing-module
+                      exn:missing-module?
+                      exn:missing-module-accessor
+                      exn:fail:missing-module
+                      make-exn:fail:missing-module
+                      exn:fail:missing-module?
+                      exn:fail:syntax:missing-module
+                      make-exn:fail:syntax:missing-module
+                      exn:fail:syntax:missing-module?
                       
                       read-syntax
                       read-syntax/recursive

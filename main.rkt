@@ -10,6 +10,7 @@
          "namespace/attach.rkt"
          "namespace/api-module.rkt"
          "namespace/core.rkt"
+         "expand/missing-module.rkt"
          "boot/kernel.rkt"
          "boot/main-primitive.rkt"
          "boot/utils-primitive.rkt"
@@ -49,6 +50,7 @@
          dynamic-require         
          dynamic-require-reader
          module-declared?
+         maybe-raise-missing-module
          
          namespace-module-identifier
          namespace-attach-module

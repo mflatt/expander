@@ -44,7 +44,10 @@
               (or (hash-ref locals v #f)
                   (built-in-symbol? v)
                   ;; FIXME: needed for "kernstruct.rkt"
-                  (eq? v 'exn:fail:syntax))
+                  (or (eq? v 'exn:fail:syntax)
+                      (eq? v 'exn:fail:syntax:unbound)
+                      (eq? v 'exn:fail:syntax:missing-module)
+                      (eq? v 'exn:fail:missing-module)))
               1)])))
   (not (and actual-results
             (or (not expected-results)

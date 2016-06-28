@@ -4,7 +4,6 @@
          "common/set.rkt"
          "main.rkt"
          "namespace/namespace.rkt"
-         "syntax/read-syntax.rkt"
          "common/module-path.rkt"
          "eval/module-read.rkt"
          "boot/kernel.rkt"

@@ -462,8 +462,8 @@
      (cond
       [(not (expand-context-allow-unbound? ctx))
        ;; In a module, unbound or out of context:
-       (raise-syntax-error #f "unbound identifier" id #f null
-                           (syntax-debug-info-string id ctx))]
+       (raise-unbound-syntax-error #f "unbound identifier" id #f null
+                                   (syntax-debug-info-string id ctx))]
       [else
        ;; At the top level:
        (define tl-id (add-scope id (root-expand-context-top-level-bind-scope ctx)))
@@ -504,8 +504,8 @@
               (substitute-variable id t #:no-stops? (free-id-set-empty? (expand-context-stops ctx)))
               (expand (m 'rhs) (as-expression-context ctx))))]
       [(not binding)
-       (raise-syntax-error #f "unbound identifier" s id null
-                           (syntax-debug-info-string id ctx))]
+       (raise-unbound-syntax-error #f "unbound identifier" s id null
+                                   (syntax-debug-info-string id ctx))]
       [(set!-transformer? t)
        (cond
         [(not-in-this-expand-context? t ctx)
@@ -554,8 +554,8 @@
      (when (eq? binding 'ambiguous)
        (raise-ambiguous-error id ctx))
      (unless binding
-       (raise-syntax-error #f "unbound identifier" s id null
-                           (syntax-debug-info-string id ctx))))
+       (raise-unbound-syntax-error #f "unbound identifier" s id null
+                                   (syntax-debug-info-string id ctx))))
    s))
 
 (add-core-form!

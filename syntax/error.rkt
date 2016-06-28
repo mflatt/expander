@@ -6,8 +6,11 @@
 
 (provide (struct-out exn:fail:syntax)
          make-exn:fail:syntax
+         (struct-out exn:fail:syntax:unbound)
+         make-exn:fail:syntax:unbound
          
-         raise-syntax-error)
+         raise-syntax-error
+         raise-unbound-syntax-error)
 
 (struct exn:fail:syntax exn:fail (exprs)
         #:extra-constructor-name make-exn:fail:syntax
@@ -18,11 +21,32 @@
                                (andmap syntax? exprs))
                     (raise-argument-error 'exn:fail:syntax "(listof syntax?)" exprs))
                   (values str cm exprs)))
+(struct exn:fail:syntax:unbound exn:fail:syntax ()
+        #:extra-constructor-name make-exn:fail:syntax:unbound
+        #:transparent)
 
 (define (raise-syntax-error given-name message
                             [expr #f] [sub-expr #f]
                             [extra-sources null]
                             [message-suffix ""])
+  (do-raise-syntax-error exn:fail:syntax given-name message
+                         expr sub-expr
+                         extra-sources
+                         message-suffix))
+
+(define (raise-unbound-syntax-error given-name message
+                                    [expr #f] [sub-expr #f]
+                                    [extra-sources null]
+                                    [message-suffix ""])
+  (do-raise-syntax-error exn:fail:syntax:unbound given-name message
+                         expr sub-expr
+                         extra-sources
+                         message-suffix))
+
+(define (do-raise-syntax-error exn:fail:syntax given-name message
+                               expr sub-expr
+                               extra-sources
+                               message-suffix)
   (unless (or (not given-name) (symbol? given-name))
     (raise-argument-error 'raise-syntax-error "(or/c symbol? #f)" given-name))
   (check 'raise-syntax-error string? message)

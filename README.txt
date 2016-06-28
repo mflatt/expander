@@ -3,8 +3,8 @@ This is a work-in-progress reimplementation of Racket's macro expander.
 See "demo.rkt" for examples.
 
 TODO:
- exn:fail:missing-module
  root namespace for reader `dynamc-require`
+ module sources and `current-module-path-for-load`
  bug fix for local definition contexts (MB's example)
  load handler's direct loading of submodules
  continuation prompt for module body

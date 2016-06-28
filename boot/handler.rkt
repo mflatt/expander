@@ -9,7 +9,8 @@
          "../eval/dynamic-require.rkt"
          "../namespace/api.rkt"
          "../common/module-path.rkt"
-         "../eval/module-read.rkt")
+         "../eval/module-read.rkt"
+         "../expand/missing-module.rkt")
 
 (provide boot
          seal
