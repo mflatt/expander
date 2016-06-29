@@ -123,10 +123,11 @@
                         ;; Top-level variables are treated as "this variable must exist"
                         ;; declarations at the linklet level, and (re-)defining the
                         ;; variable just mutates it.
-                        ,@(for/list ([def-sym (in-list def-syms)]
-                                     [gen-sym (in-list gen-syms)])
-                            `(set! ,def-sym ,gen-sym))
-                        (void)))
+                        (begin
+                          ,@(for/list ([def-sym (in-list def-syms)]
+                                       [gen-sym (in-list gen-syms)])
+                              `(set! ,def-sym ,gen-sym))
+                          (void))))
            (unless (null? ids)
              (add-body! phase (compile-top-level-bind
                                ids binding-syms
@@ -152,8 +153,9 @@
          (cond
           [(compile-context-module-self cctx)
            (add-body! (add1 phase) `(let-values ([,gen-syms ,rhs])
-                                     ,@transformer-set!s
-                                     (void)))]
+                                     (begin
+                                       ,@transformer-set!s
+                                       (void))))]
           [else
            (add-body! (add1 phase)
                       (generate-top-level-define-syntaxes
