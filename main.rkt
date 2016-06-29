@@ -58,6 +58,7 @@
          
          module-path-index?
          module-path-index-join
+         resolved-module-path?
          module-path?
          
          embedded-load ; for -k
