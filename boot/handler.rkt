@@ -640,7 +640,9 @@
 
 (define default-compile-handler
   ;; Constrained to a single argument:
-  (lambda (s immediate-eval?) (compile s #:serializable? (not immediate-eval?))))
+  (lambda (s immediate-eval?) (compile s
+                                  (current-namespace)
+                                  (not immediate-eval?))))
 
 (define default-load-handler
   (lambda (path expected-mod)
