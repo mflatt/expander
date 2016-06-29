@@ -1,5 +1,5 @@
 #lang racket/base
-(require (only-in "../syntax/syntax.rkt" syntax-mpi-shifts)
+(require (only-in "../syntax/syntax.rkt" syntax-mpi-shifts empty-syntax)
          (only-in "../syntax/binding.rkt" resolve+shift syntax-transfer-shifts)
          "../syntax/inspector.rkt"
          "../syntax/module-binding.rkt"
@@ -98,15 +98,25 @@
 
 (define (do-namespace-require #:run? run? #:visit? visit? who req ns)
   (check who namespace? ns)
-  (parse-and-perform-requires! #:run? run?
-                               #:visit? visit?
-                               (list (add-scopes (datum->syntax #f req)
-                                                 (root-expand-context-module-scopes
-                                                  (namespace-get-root-expand-ctx ns))))
-                               #f
-                               ns
-                               (namespace-phase ns)
-                               (make-requires+provides #f)))
+  (define ctx-stx (add-scopes empty-syntax
+                              (root-expand-context-module-scopes
+                               (namespace-get-root-expand-ctx ns))))
+  (cond
+   [(module-path-index? req)
+    (perform-require! req #f #f
+                      ctx-stx ns
+                      #:run? run?
+                      #:visit? visit?
+                      #:phase-shift 0
+                      #:run-phase (namespace-phase ns))]
+   [else
+    (parse-and-perform-requires! #:run? run?
+                                 #:visit? visit?
+                                 (list (datum->syntax ctx-stx req))
+                                 #f
+                                 ns
+                                 (namespace-phase ns)
+                                 (make-requires+provides #f))]))
 
 (define (namespace-require req [ns (current-namespace)])
   (do-namespace-require #:run? #t #:visit? #f 'namespace-require req ns))
