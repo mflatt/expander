@@ -78,12 +78,17 @@ Roadmap to the implementation:
  common/module-path.rkt - [resolved] module path [indexes]
 
  compile/ - from expanded to S-expression linket
+   main.rkt - compiler functions called from "eval/main.rkt"
 
  eval/ - evaluation
-   main.rkt - top-level evaluation
+   main.rkt - top-level evaluation, with top-level `module` forms as
+              an important special case
+   api.rkt - wrappers that implement `eval`, `compile`, and `expand`
+             for `racket/base`
 
  boot/ - internal initialization
-   handler.rkt - implements the default module name resolver
+   handler.rkt - implements the default module name resolver, eval
+                 handler, and compiler handler
    ...-primitive.rkt - export built-in functions as modules
 
  run/ - helpers to drive the expander
