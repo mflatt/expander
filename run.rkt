@@ -13,11 +13,13 @@
          "host/reader-bridge.rkt"
          "run/status.rkt"
          "run/submodule.rkt"
+         "host/correlate.rkt"
          "extract/main.rkt"
          (only-in "run/linklet.rkt" linklet-compile-to-s-expr))
 
 (define extract? #f)
 (define expand? #f)
+(define linklets? #f)
 (define cache-dir #f)
 (define cache-read-only? #f)
 (define cache-save-only #f)
@@ -35,6 +37,8 @@
     (set! extract? #t)]
    [("-e" "--expand") "Expand instead of running"
     (set! expand? #t)]
+   [("--linklets") "Compile to linklets instead of running"
+    (set! linklets? #t)]
    #:once-each
    [("-c" "--cache") dir "Save and load from <dir>"
     (set! cache-dir (path->complete-path dir))]
@@ -140,23 +144,28 @@
                           (synthesize-reader-bridge-module mod-path rs))
                         mod-path))
 
+(define (apply-to-module proc mod-path)
+  (define path (resolved-module-path-name
+                (resolve-module-path mod-path #f)))
+  (define-values (dir file dir?) (split-path path))
+  (parameterize ([current-load-relative-directory dir])
+    (proc (call-with-input-file*
+           path
+           (lambda (i)
+             (port-count-lines! i)
+             (with-module-reading-parameterization
+                 (lambda ()
+                   (check-module-form
+                    (read-syntax (object-name i) i)
+                    path))))))))
+
 (cond
  [expand?
-  (define path (resolved-module-path-name
-                (resolve-module-path startup-module #f)))
-  (define-values (dir file dir?) (split-path path))
-  (define e
-    (parameterize ([current-load-relative-directory dir])
-      (expand (call-with-input-file*
-               path
-               (lambda (i)
-                 (port-count-lines! i)
-                 (with-module-reading-parameterization
-                     (lambda ()
-                       (check-module-form
-                        (read-syntax (object-name i) i)
-                        path))))))))
-  (pretty-print (syntax->datum e))]
+  (pretty-write (syntax->datum (apply-to-module expand startup-module)))]
+ [linklets?
+  (pretty-write (correlated->datum
+                 (datum->correlated
+                  (apply-to-module compile-to-linklets startup-module) #f)))]
  [else
   ;; Load and run the requested module
   (parameterize ([current-command-line-arguments (list->vector args)])

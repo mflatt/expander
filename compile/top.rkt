@@ -27,9 +27,12 @@
 ;; `define-synatxes` form, or an expression (where `begin` is treated
 ;; as an expression form). If `serializable?` is false, don't bother
 ;; generating the linklet for serialized data, because it won't be
-;; used.
+;; used. If `to-source?` is true, the result is a hash table containing
+;; S-expression linkets, instead of a `compiled-in-memory` containing
+;; compiled linklets.
 (define (compile-top s cctx
-                     #:serializable? [serializable? #t])
+                     #:serializable? [serializable? #t]
+                     #:to-source? [to-source? #f])
   (define phase (compile-context-phase cctx))
 
   (define mpis (make-module-path-index-table))
@@ -44,10 +47,11 @@
                   syntax-literalss
                   no-root-context-syntax-literals)
     (compile-forms (list s) cctx mpis
+                   #:to-source? to-source?
                    #:other-form-callback compile-top-level-require))
 
   (define bundle
-    (hash->linklet-bundle
+    ((if to-source? values hash->linklet-bundle)
      (cond
       [serializable?
        ;; To support seialization, construct a linklet that will
@@ -61,7 +65,7 @@
           (compile-context-namespace cctx)))
 
        (define link-linklet
-         (compile-linklet
+         ((if to-source? values compile-linklet)
           `(linklet
             ;; imports
             (,deserialize-imports
@@ -87,18 +91,22 @@
        ;; Will combine the linking unit with non-serialized link info
        body-linklets])))
   
-  ;; If the compiled code is executed directly, it must be in its
-  ;; original phase, and we'll share the original values
-  (compiled-in-memory (hash->linklet-directory (hasheq #f bundle))
-                      phase
-                      max-phase
-                      phase-to-link-module-uses
-                      (current-code-inspector)
-                      phase-to-link-extra-inspectorsss
-                      (mpis-as-vector mpis)
-                      (syntax-literals-as-vectors syntax-literalss phase)
-                      null
-                      null))
+  (cond
+   [to-source?
+    (hasheq #f bundle)]
+   [else
+    ;; If the compiled code is executed directly, it must be in its
+    ;; original phase, and we'll share the original values
+    (compiled-in-memory (hash->linklet-directory (hasheq #f bundle))
+                        phase
+                        max-phase
+                        phase-to-link-module-uses
+                        (current-code-inspector)
+                        phase-to-link-extra-inspectorsss
+                        (mpis-as-vector mpis)
+                        (syntax-literals-as-vectors syntax-literalss phase)
+                        null
+                        null)]))
 
 ;; Callback for compiling a sequence of expressions: handle `require`
 ;; (which is handled separately for modules)

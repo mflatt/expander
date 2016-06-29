@@ -35,6 +35,8 @@
          compile
          eval
          
+         compile-to-linklets
+         
          read-syntax
          datum->syntax syntax->datum
          identifier-binding

@@ -23,11 +23,13 @@
 (provide compile-module)
 
 ;; Compiles module to a set of linklets that is returned as a
-;; `compiled-in-memory`
+;; `compiled-in-memory` --- or a hash table containing S-expression
+;; linklets if `to-source?` is true.
 (define (compile-module s cctx
                         #:self [given-self #f]
                         #:as-submodule? [as-submodule? #f]
-                        #:serializable? [serializable? (not as-submodule?)])
+                        #:serializable? [serializable? (not as-submodule?)]
+                        #:to-source? [to-source? #f])
   ;; Some information about a module is commuicated here through syntax
   ;; propertoes, such as 'module-requires
   (define m-m (match-syntax (syntax-disarm s) '(module name initial-require mb)))
@@ -100,7 +102,8 @@
                                                   (set! empty-result-for-module->namespace? #t)
                                                   (set-box! encoded-root-expand-ctx-box #t)))
                                               #f]
-                                             [else #f]))))
+                                             [else #f]))
+                   #:to-source? to-source?))
   
   (define all-syntax-literalss
     (if root-ctx-syntax-literals
@@ -112,15 +115,14 @@
                                              #:bodys bodys
                                              #:as-submodule? as-submodule?
                                              #:serializable? serializable?
+                                             #:to-source? to-source?
                                              #:cctx body-cctx))
   (define post-submodules (compile-submodules 'module*
                                               #:bodys bodys
                                               #:as-submodule? as-submodule?
                                               #:serializable? serializable?
+                                              #:to-source? to-source?
                                               #:cctx body-cctx))
-  
-  (define (get-submodule-linklet-directory p)
-    (compiled-in-memory-linklet-directory (cdr p)))
 
   ;; Generate module-declaration info, which includes linking
   ;; information for each phase
@@ -138,7 +140,7 @@
   ;; Assemble the declaration linking unit, which is instanted
   ;; once for a module declaration and shared among instances
   (define declaration-linklet
-    (compile-linklet
+    ((if to-source? values compile-linklet)
      `(linklet
        ;; imports
        (,deserialize-imports
@@ -163,7 +165,7 @@
   ;; `module->namespace` can have the same scopes as literal syntax
   ;; objects in the module.
   (define syntax-literals-linklet
-    (compile-linklet
+    ((if to-source? values compile-linklet)
      `(linklet
        ;; imports
        (,deserialize-imports
@@ -193,7 +195,7 @@
   ;; the unmarshaling of data is left to each body.
   (define data-linklet
     (and serializable?
-         (compile-linklet
+         ((if to-source? values compile-linklet)
           `(linklet
             ;; imports
             (,deserialize-imports)
@@ -220,23 +222,27 @@
 
   ;; Combine with submodules in a linklet directory
   (define ld
-    (hash->linklet-directory
+    ((if to-source? values hash->linklet-directory)
      (for/fold ([ht (hasheq #f bundle)]) ([sm (in-list (append pre-submodules post-submodules))])
        (hash-set ht
                  (car sm)
-                 (compiled-in-memory-linklet-directory (cdr sm))))))
+                 ((if to-source? values compiled-in-memory-linklet-directory)
+                  (cdr sm))))))
 
-  ;; Save mpis and syntax for direct evaluation, instead of unmarshaling:
-  (compiled-in-memory ld
-                      0
-                      max-phase
-                      phase-to-link-module-uses
-                      (current-code-inspector)
-                      phase-to-link-extra-inspectorsss
-                      (mpis-as-vector mpis)
-                      (syntax-literals-as-vectors all-syntax-literalss 0)
-                      (map cdr pre-submodules)
-                      (map cdr post-submodules)))
+  (cond
+   [to-source? ld]
+   [else
+    ;; Save mpis and syntax for direct evaluation, instead of unmarshaling:
+    (compiled-in-memory ld
+                        0
+                        max-phase
+                        phase-to-link-module-uses
+                        (current-code-inspector)
+                        phase-to-link-extra-inspectorsss
+                        (mpis-as-vector mpis)
+                        (syntax-literals-as-vectors all-syntax-literalss 0)
+                        (map cdr pre-submodules)
+                        (map cdr post-submodules))]))
 
 ;; ----------------------------------------
 
@@ -246,6 +252,7 @@
                             #:bodys bodys
                             #:as-submodule? as-submodule?
                             #:serializable? serializable?
+                            #:to-source? to-source?
                             #:cctx body-cctx)
   (cond
    [as-submodule?
@@ -268,7 +275,8 @@
              [else body]))
           (cons (cons (syntax-e (sm-m 'name))
                       (compile-module s-shifted body-cctx
-                                      #:serializable? serializable?))
+                                      #:serializable? serializable?
+                                      #:to-source? to-source?))
                 (loop (cdr bodys) phase))]
          [(eq? f 'begin-for-syntax)
           (define m (match-syntax body `(begin-for-syntax e ...)))

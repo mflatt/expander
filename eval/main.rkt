@@ -30,10 +30,14 @@
          compile
          expand
          expand-once
-         expand-to-top-form)
+         expand-to-top-form
+
+         compile-to-linklets)
 
 ;; This `eval` is suitable as an eval handler that will be called by
-;; the `eval` and `eval-syntax` of '#%kernel
+;; the `eval` and `eval-syntax` of '#%kernel.
+;; [Don't use keyword arguments here, because the function is
+;;  exported for use by an embedding runtime system.]
 (define (eval s [ns (current-namespace)] [compile (lambda (s ns)
                                                     (compile s ns #f))])
   (cond
@@ -58,36 +62,51 @@
 
 ;; This `compile` is suitable as a compile handler that will be called
 ;; by the `compile` and `compile-syntax` of '#%kernel
-(define (compile s [ns (current-namespace)] [serializable? #t] [expand expand])
+;; [Don't use keyword arguments here, because the function is
+;;  exported for use by an embedding runtime system.]
+(define (compile s [ns (current-namespace)] [serializable? #t] [expand expand] [to-source? #f])
   (define cs
     (per-top-level s ns
                    #:single (lambda (s ns) (list (compile-single s ns expand
-                                                            serializable?)))
+                                                            serializable?
+                                                            to-source?)))
                    #:combine append))
   (if (= 1 (length cs))
       (car cs)
-      (compiled-tops->compiled-top cs)))
+      (compiled-tops->compiled-top cs #:to-source? to-source?)))
 
-(define (compile-single s ns expand serializable?)
+;; Result is a hash table containing S-expressons that may have
+;; "correlated" parts in the sense of "host/correlate.rkt"; use
+;; `datum->correlated` plus `correlated->datum` to get a plain
+;; S-expression
+(define (compile-to-linklets s [ns (current-namespace)])
+  (compile s ns #t expand #t))
+
+(define (compile-single s ns expand serializable? to-source?)
   (define exp-s (expand s ns))
   (let loop ([exp-s exp-s])
     (define disarmed-exp-s (raw:syntax-disarm exp-s))
     (case (core-form-sym disarmed-exp-s (namespace-phase ns))
       [(module)
        (compile-module exp-s (make-compile-context #:namespace ns)
-                       #:serializable? serializable?)]
+                       #:serializable? serializable?
+                       #:to-source? to-source?)]
       [(begin)
        ;; expansion must have captured lifts
        (define m (match-syntax disarmed-exp-s '(begin e ...)))
        (compiled-tops->compiled-top
         (for/list ([e (in-list (m 'e))])
-          (loop e)))]
+          (loop e))
+        #:to-source? to-source?)]
       [else
        (compile-top exp-s (make-compile-context #:namespace ns)
-                    #:serializable? serializable?)])))
+                    #:serializable? serializable?
+                    #:to-source? to-source?)])))
 
 ;; This `expand` is suitable as an expand handler (if such a thing
 ;; existed) to be called by `expand` and `expand-syntax`.
+;; [Don't use keyword arguments here, because the function is
+;;  exported for use by an embedding runtime system.]
 (define (expand s [ns (current-namespace)] [log-expand? #f])
   (when log-expand? (log-expand-start))
   (per-top-level s ns

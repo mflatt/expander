@@ -30,7 +30,8 @@
                        #:encoded-root-expand-ctx-box [encoded-root-expand-ctx-box #f] ; encoded root context, if any
                        #:root-ctx-only-if-syntax? [root-ctx-only-if-syntax? #f]
                        #:compiled-expression-callback [compiled-expression-callback void]
-                       #:other-form-callback [other-form-callback void])
+                       #:other-form-callback [other-form-callback void]
+                       #:to-source? [to-source? #f])
   (define phase (compile-context-phase cctx))
   (define self (compile-context-self cctx))
 
@@ -227,7 +228,7 @@
         (header-binding-sym-to-define-sym (hash-ref phase-to-header phase)))
       (values
        phase
-       (compile-linklet
+       ((if to-source? values compile-linklet)
         `(linklet
           ;; imports
           (,@(if (compile-context-module-self cctx)

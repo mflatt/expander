@@ -9,10 +9,12 @@
 ;; accessed directly, and all linklet imports and local variables are
 ;; renamed to avoid collisions with the primitive names and to avoid
 ;; all shadowing (but the same variable might be used in
-;; non-overlapping local contexts).
+;; non-overlapping local contexts). A `compile-linklet` function
+;; (currently provided by the runtime system) then compiles the
+;; enriched S-expression to bytecode.
 
-;; Compilation uses one of two protocols, which differ in the shapes
-;; of linklets that they generate:
+;; Compilation to linklets uses one of two protocols, which differ in
+;; the shapes of linklets that they generate:
 ;;
 ;; * Top-level forms or stand-alone expressions (such as the
 ;;   right-hand side of a `define-syntaxes` form within a module,
@@ -21,8 +23,9 @@
 ;;
 ;;   In the case of top-level forms, a sequence of forms that affect
 ;;   binding or transformers must be compiled separately --- normally
-;;   via `per-top-level` in "eval.rkt". The separarately compiled
-;;   forms can them be combined into a single compilation record.
+;;   via `per-top-level` in "../eval/main.rkt". The separarately
+;;   compiled forms can them be combined into a single compilation
+;;   record.
 ;;
 ;;   The generated linklets for a single form include one linklet for
 ;;   potentially marshaled module path indices and syntax objects,
@@ -36,7 +39,7 @@
 ;;   marshaled data. An additional linklet reports metadata about the
 ;;   modules, such as its requires and provides. An individual module
 ;;   is reprsented by a linklet bundle, and a module is compiled with
-;;   submodulesthrough nested linklet directories.
+;;   submodules through nested linklet directories.
 ;;
 ;;   Besides the extra metadata module, the handling of syntax-object
 ;;   unmarshaling is a little different for modules than top-level

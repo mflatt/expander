@@ -53,6 +53,11 @@ Running:
 
    Expands the given file, instead of compiling and running it.
 
+ % racket run.rkt -c <dir> --linklets -l <module-path>
+
+   Compiles the given file to a set of linklets in S-expression form,
+   instead of compiling and running it.
+
  % racket run.rkt -c <dir> -x
 
    Converts (or checks possibility of converting) a module to a
@@ -82,7 +87,8 @@ Roadmap to the implementation:
 
  eval/ - evaluation
    main.rkt - top-level evaluation, with top-level `module` forms as
-              an important special case
+              an important special case; the `compile-to-linklets`
+              function compiles to a set of S-expression linklets
    api.rkt - wrappers that implement `eval`, `compile`, and `expand`
              for `racket/base`
 
@@ -92,6 +98,8 @@ Roadmap to the implementation:
    ...-primitive.rkt - export built-in functions as modules
 
  run/ - helpers to drive the expander
+   linklet.rkt - a bootstrapping implementation of `linklet` by
+                 compilation into `lambda` plus primitives
 
  extract/ - extracts subset of compilation units (by "run.rkt")
 
