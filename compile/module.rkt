@@ -221,7 +221,7 @@
   ;; Combine with submodules in a linklet directory
   (define ld
     (hash->linklet-directory
-     (for/fold ([ht (hash #f bundle)]) ([sm (in-list (append pre-submodules post-submodules))])
+     (for/fold ([ht (hasheq #f bundle)]) ([sm (in-list (append pre-submodules post-submodules))])
        (hash-set ht
                  (car sm)
                  (compiled-in-memory-linklet-directory (cdr sm))))))

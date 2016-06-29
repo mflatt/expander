@@ -11,8 +11,8 @@
 ;; "pre" record, too.
 (define (compiled-tops->compiled-top cims)
   (compiled-in-memory (hash->linklet-directory
-                       (for/hash ([cim (in-list cims)]
-                                  [i (in-naturals)])
+                       (for/hasheq ([cim (in-list cims)]
+                                    [i (in-naturals)])
                          (values (string->symbol (number->string i))
                                  (compiled-in-memory-linklet-directory cim))))
                       0
