@@ -55,6 +55,7 @@
          namespace-attach-module
          namespace-attach-module-declaration
          
+         module-path-index?
          module-path-index-join
          module-path?
          
