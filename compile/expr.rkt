@@ -15,6 +15,7 @@
          "context.rkt"
          "header.rkt"
          "reserved-symbol.rkt"
+         "self-quoting.rkt"
          "../host/correlate.rkt"
          "correlate.rkt")
 
@@ -97,7 +98,12 @@
          (compile (m 'e) result-used?)]
         [(quote)
          (define m (match-syntax s '(quote datum)))
-         (correlate* s `(quote ,(syntax->datum (m 'datum))))]
+         (define datum (syntax->datum (m 'datum)))
+         (cond
+          [(self-quoting-in-linklet? datum)
+           (correlate* s datum)]
+          [else
+           (correlate* s `(quote ,datum))])]
         [(quote-syntax)
          (define m (match-syntax s '(quote-syntax datum . _)))
          (if result-used?

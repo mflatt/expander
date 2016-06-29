@@ -49,6 +49,7 @@
          dynamic-require         
          dynamic-require-reader
          module-declared?
+         module->language-info
          maybe-raise-missing-module
          
          namespace-module-identifier

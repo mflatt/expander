@@ -1,6 +1,7 @@
 #lang racket/base
 (require "../common/set.rkt"
          "built-in-symbol.rkt"
+         "self-quoting.rkt"
          "../host/correlate.rkt")
 
 ;; To support extraction of a bootstrapped version of the expander, we
@@ -42,11 +43,13 @@
               1)]
         [else
          (define v (correlated-e e))
-         (and (symbol? v)
-              (or (hash-ref locals v #f)
-                  (built-in-symbol? v)
-                  (required-reference? v))
-              1)])))
+         (and
+          (or (self-quoting-in-linklet? v)
+              (and (symbol? v)
+                   (or (hash-ref locals v #f)
+                       (built-in-symbol? v)
+                       (required-reference? v))))
+          1)])))
   (not (and actual-results
             (or (not expected-results)
                 (= actual-results expected-results)))))
@@ -105,16 +108,22 @@
      (field-count-expr-to-field-count (list-ref l 4))))
 
 (define (quoted? val? v)
-  (and (pair? (correlated-e v))
-       (eq? (correlated-e (car (correlated-e v))) 'quote)
-       (val? (correlated-e (correlated-cadr v)))))
+  (or (and (pair? (correlated-e v))
+           (eq? (correlated-e (car (correlated-e v))) 'quote)
+           (val? (correlated-e (correlated-cadr v))))
+      (val? (correlated-e v))))
+
+(define (quoted-value v)
+  (if (pair? (correlated-e v))
+      (correlated-e (correlated-cadr v))
+      (correlated-e v)))
 
 (define (false? v)
   (eq? (correlated-e v) #f))
 
 (define (field-count-expr-to-field-count v)
   (and (quoted? exact-nonnegative-integer? v)
-       (correlated-e (correlated-cadr v))))
+       (quoted-value v)))
 
 (define (inspector-or-false? v)
   (or (quoted? false? v)
@@ -146,7 +155,7 @@
 
 (define (immutable-field? val-expr immutables-expr)
   (and (quoted? exact-nonnegative-integer? val-expr)
-       (memv (correlated-e (correlated-cadr val-expr))
+       (memv (quoted-value val-expr)
              (immutables-expr-to-immutables immutables-expr null))))
 
 (define (immutables-expr-to-immutables e fail-v)
@@ -165,7 +174,7 @@
 (define (procedure-spec? e immutables-expr)
   (or (quoted? false? e)
       (and (quoted? exact-nonnegative-integer? e)
-           (memv (correlated-e (correlated-cadr e))
+           (memv (quoted-value e)
                  (immutables-expr-to-immutables immutables-expr null)))))
 
 (define (immutables-ok? e init-field-count-expr)
