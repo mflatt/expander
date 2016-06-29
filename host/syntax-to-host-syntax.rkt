@@ -16,8 +16,7 @@
                 (define s (host:datum->syntax #f d (srcloc->vector (syntax-srcloc orig-s))))
                 (define keys (syntax-property-symbol-keys orig-s))
                 (for/fold ([s s]) ([key (in-list keys)])
-                  (host:syntax-property s key (syntax-property orig-s key)
-                                        (syntax-property-preserved? orig-s key))))
+                  (host:syntax-property s key (syntax-property orig-s key))))
               syntax-e))
 
 (define (srcloc->vector s)

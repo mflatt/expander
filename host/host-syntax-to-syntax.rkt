@@ -5,7 +5,7 @@
          "../syntax/datum-map.rkt"
          (prefix-in host:
                     (only-in "syntax.rkt"
-                             syntax? syntax-e syntax-property syntax-property-preserved?
+                             syntax? syntax-e syntax-property
                              syntax-property-symbol-keys
                              syntax-source syntax-line syntax-column
                              syntax-position syntax-span)))
@@ -34,8 +34,7 @@
                   [(null? keys) s]
                   [(and (null? (cdr keys)) (eq? (car keys) 'paren-shape)) s]
                   [else (for/fold ([s s]) ([key (in-list keys)])
-                          (syntax-property s key (host:syntax-property v key)
-                                           (host:syntax-property-preserved? v key)))])]
+                          (syntax-property s key (host:syntax-property v key) #t))])]
                 [else v]))))
 
 (define original-props

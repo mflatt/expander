@@ -14,7 +14,6 @@
     ...))
 
 (bounce read-syntax read-syntax/recursive
-        datum->syntax syntax->datum syntax->list
-        syntax-property-preserved? syntax-property-symbol-keys
+        datum->syntax syntax->datum syntax-property-symbol-keys
         syntax-property syntax-span syntax-position syntax-column
         syntax-line syntax-source syntax-e syntax?)

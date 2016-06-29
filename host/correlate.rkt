@@ -52,10 +52,12 @@
        (length l)))
 
 (define (correlated->list e)
-  (if (syntax? e)
-      (or (syntax->list e)
-          (error 'correlate->list "not a list"))
-      e))
+  (let loop ([e e])
+    (cond
+     [(pair? e) (cons (car e) (loop (cdr e)))]
+     [(null? e) null]
+     [(syntax? e) (loop (syntax-e e))]
+     [else (error 'correlate->list "not a list")])))
 
 (define (correlated->datum e)
   (datum-map e (lambda (tail? d)
