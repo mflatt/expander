@@ -106,7 +106,7 @@
                                       (fail-k))]
                                  [else
                                   ;; Found transformer; expand in a fresh namespace
-                                  (define tmp-ns (make-namespace ns))
+                                  (define tmp-ns (new-namespace ns))
                                   (define mod-path (resolved-module-path->module-path mod-name))
                                   (namespace-require mod-path tmp-ns)
                                   (eval sym tmp-ns)])))])]))
