@@ -55,14 +55,16 @@ Running:
 
  % racket run.rkt -c <dir> -x
 
-   Reports extraction for bootstrap. Currently, there will be
-   failures, because the runtime system doesn't yet implement linklets
-   and interfaces, and because the runtime system's `read-syntax` and
-   simple syntax-manipulation functions are used.
+   Converts (or checks possibility of converting) a module to a
+   stand-alone linklet with no imports, used mainly to extract the
+   expander itself. Use `-s` to store source linklets in the cache
+   <dir> so that a flattened linklet can be generated; otherwise,
+   "run.rkt" will just check that flattening is possible. Use `-o` to
+   write the linklet to a file.
 
 ----------------------------------------
 
-Roadmap to a few key pieces:
+Roadmap to the implementation:
 
  syntax/ - syntax-object and binding representation
    syntax.rkt - syntax-object structure
