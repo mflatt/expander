@@ -45,11 +45,7 @@
 (define (set-first s) (hash-iterate-key s (hash-iterate-first s)))
 
 (define (subset? s1 s2)
-  (cond
-   [((hash-count s1) . <= . (hash-count s2))
-    (for/and ([k (in-hash-keys s1)])
-      (hash-ref s2 k #f))]
-   [else #f]))
+  (hash-keys-subset? s1 s2))
 
 (define (set-subtract s1 s2)
   (for/fold ([s1 s1]) ([k (in-hash-keys s2)])
