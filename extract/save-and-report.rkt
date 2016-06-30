@@ -2,21 +2,29 @@
 (require racket/pretty
          "../host/linklet.rkt"
          (prefix-in bootstrap: "../run/linklet.rkt")
-         "../run/status.rkt")
+         "../run/status.rkt"
+         "c-encode.rkt")
 
 (provide save-and-report-flattened!)
 
 (define (save-and-report-flattened! flattened-linklet-expr
-                                    print-extracted-to)
+                                    print-extracted-to
+                                    #:as-c? as-c?)
   (when print-extracted-to
     (log-status "Writing combined linklet to ~a" print-extracted-to)
     (call-with-output-file
      print-extracted-to
      #:exists 'truncate
      (lambda (o)
-       (displayln ";; This file is the result of applying the macro expander to itself" o)
+       (unless as-c?
+         (displayln ";; This file is the result of applying the macro expander to itself" o))
+       (define s-expr-o (if as-c?
+                            (open-output-bytes)
+                            o))
        (parameterize ([pretty-print-columns 120])
-         (pretty-write flattened-linklet-expr o)))))
+         (pretty-write flattened-linklet-expr s-expr-o))
+       (when as-c?
+         (encode-to-c (open-input-bytes (get-output-bytes s-expr-o)) o)))))
 
   ;; Tentatively compile and report size and time
   (log-status "Compiling flattened...")

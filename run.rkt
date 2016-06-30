@@ -26,6 +26,7 @@
 (define cache-skip-first? #f)
 (define time-expand? #f)
 (define print-extracted-to #f)
+(define extract-to-c? #f)
 (define quiet-load? #f)
 (define startup-module (path->complete-path "main.rkt"))
 (define submod-name #f)
@@ -56,6 +57,8 @@
     (set! time-expand? #t)]
    [("-o" "--output") file "Print extracted bootstrap linklet to <file>"
     (set! print-extracted-to file)]
+   [("-C") "Print extracted bootstrap as a C encoding"
+    (set! extract-to-c? #t)]
    #:once-any
    [("-t") file "Load specified file"
     (set! startup-module (path->complete-path file))]
@@ -179,7 +182,9 @@
 
 (when extract?
   ;; Extract a bootstrapping slice of the requested module
-  (extract startup-module cache #:print-extracted-to print-extracted-to))
+  (extract startup-module cache
+           #:print-extracted-to print-extracted-to
+           #:as-c? extract-to-c?))
 
 (when load-file
   (load load-file))

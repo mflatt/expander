@@ -16,7 +16,8 @@
 ;; phase 0. In other words, keep enogh to produce any value or affect
 ;; that `dynamic-require` would produce.
 (define (extract start-mod-path cache
-                 #:print-extracted-to print-extracted-to)
+                 #:print-extracted-to print-extracted-to
+                 #:as-c? as-c?)
   ;; Located modules:
   (define compiled-modules (make-hash))
 
@@ -95,4 +96,5 @@
                 #:needed needed
                 #:exports exports))
     
-    (save-and-report-flattened! flattened-linklet-expr print-extracted-to)))
+    (save-and-report-flattened! flattened-linklet-expr print-extracted-to
+                                #:as-c? as-c?)))
