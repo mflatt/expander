@@ -35,7 +35,7 @@
          compile-to-linklets)
 
 ;; This `eval` is suitable as an eval handler that will be called by
-;; the `eval` and `eval-syntax` of '#%kernel.
+;; the `eval` and `eval-syntax` of '#%kernel. 
 ;; [Don't use keyword arguments here, because the function is
 ;;  exported for use by an embedding runtime system.]
 (define (eval s [ns (current-namespace)] [compile (lambda (s ns)

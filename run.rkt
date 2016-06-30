@@ -69,7 +69,8 @@
     (set! submod-name (string->symbol name))]
    #:args args args))
 
-(define cache (make-cache cache-dir))
+(define cache (make-cache cache-dir (lambda (path)
+                                      (log-status "changed: ~a" path))))
 
 ;; Install handlers:
 (boot)
@@ -91,7 +92,7 @@
                                                 (lambda ()
                                                   (when cache-dir
                                                     (unless quiet-load?
-                                                      (log-status "cached ~s" path))))))
+                                                      (log-status "cached: ~a" path))))))
                       => (lambda (m)
                            ;; Since we'ce set `use-compiled-file-paths` to null,
                            ;; the load/use-compiled handler thinks that we're
@@ -105,11 +106,11 @@
                       (void)]
                      [else
                       (unless quiet-load?
-                        (log-status "compile ~s" path))
+                        (log-status "compile: ~a" path))
                       (set! cache-skip-first? #f)
                       (with-handlers ([exn:fail? (lambda (exn)
                                                    (unless quiet-load?
-                                                     (log-status "...during ~s..." path))
+                                                     (log-status "...during ~a..." path))
                                                    (raise exn))])
                         (define s
                           (call-with-input-file*
@@ -121,7 +122,10 @@
                                    (check-module-form
                                     (read-syntax (object-name i) i)
                                     path))))))
-                        (define c (compile s))
+                        (define cache-layer (make-cache-layer))
+                        (define c
+                          (parameterize ([current-cache-layer cache-layer])
+                            (compile s)))
                         (when time-expand?
                           ;; Re-expanding avoids timing load of required modules
                           (time (expand s)))
@@ -130,7 +134,7 @@
                                (not cache-read-only?)
                                (or (not cache-save-only)
                                    (hash-ref cache-save-only (path->string path) #f)))
-                          (cache-compiled! cache path c)
+                          (cache-compiled! cache path c cache-layer)
                           (loop)]
                          [else (eval c)]))]))]
                  [else (orig-load path #f)])))

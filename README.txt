@@ -35,9 +35,10 @@ Running:
  % racket bootstrap-run.rkt -c <dir>
 
    Runs the expander to load itself from source. Expanded and compiled
-   modules are stored in <dir>, somewhat like bytecode files, but
-   there's not automatically dependency tracking; throw away <dir> if
-   the expander or any source changes.
+   modules are stored in <dir>, somewhat like bytecode files.
+   Dependency tarcking doesn't take into account the expander itself,
+   so throw away <dir> if the expander changes in a way that you want
+   reflected in compilation results.
 
  % racket run.rkt -c <dir> -l <module-path>
  % racket run.rkt -c <dir> -t <file-path-for-module>
