@@ -219,6 +219,13 @@
         (add-required-module! requires+provides mpi phase-shift
                               (module-cross-phase-persistent? m))
         mpi))
+  (when visit?
+    (namespace-module-visit! m-ns interned-mpi phase-shift #:visit-phase run-phase))
+  (when run?
+    (namespace-module-instantiate! m-ns interned-mpi phase-shift #:run-phase run-phase))
+  (when (not (or visit? run?))
+    ;; make the module available:
+    (namespace-module-make-available! m-ns interned-mpi phase-shift #:visit-phase run-phase))
   (bind-all-provides!
    m
    bind-in-stx phase-shift m-ns interned-mpi
@@ -268,13 +275,6 @@
                                                s bind-phase binding
                                                #:can-be-shadowed? can-be-shadowed?)))
               adjusted-sym))
-  (when visit?
-    (namespace-module-visit! m-ns interned-mpi phase-shift #:visit-phase run-phase))
-  (when run?
-    (namespace-module-instantiate! m-ns interned-mpi phase-shift #:run-phase run-phase))
-  (when (not (or visit? run?))
-    ;; make the module available:
-    (namespace-module-make-available! m-ns interned-mpi phase-shift #:visit-phase run-phase))
   ;; check that we covered all expected ids:
   (define need-syms (cond
                     [(adjust-only? adjust)
