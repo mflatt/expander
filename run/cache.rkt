@@ -86,7 +86,7 @@
          (hash-ref (cache-in-memory cache) (entry-key e) #f))
     => (lambda (c)
          (notify-success)
-         (register-dependency! (entry-key e))
+         (register-dependency! path)
          c)]
    [else #f]))
 
