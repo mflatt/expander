@@ -99,9 +99,15 @@
                             ;; existing places
                             #:protected '(dynamic-place))
 (declare-hash-based-module! '#%boot boot-primitives #:namespace ns)
-(declare-hash-based-module! '#%linklet linklet-primitives #:namespace ns
-                            #:primitive? #t
-                            #:register-builtin? #t)
+(let ([linklet-primitives
+       ;; Remove symbols that are in the '#%linklet primitive table
+       ;; but provided by `#%kernel`:
+       (hash-remove (hash-remove linklet-primitives
+                                 'variable-reference?)
+                    'variable-reference-constant?)])
+  (declare-hash-based-module! '#%linklet linklet-primitives #:namespace ns
+                              #:primitive? #t
+                              #:register-builtin? #t))
 (declare-hash-based-module! '#%expobs expobs-primitives #:namespace ns
                             #:protected? #t)
 (declare-kernel-module! ns
