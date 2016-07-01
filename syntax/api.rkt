@@ -72,7 +72,19 @@
   (unless (or (not stx-l)
               (syntax? stx-l)
               (encoded-srcloc? stx-l))
-    (raise-argument-error 'datum->syntax "(or #f syntax? ...)" stx-l))
+    (raise-argument-error 'datum->syntax
+                          (string-append "(or #f syntax?\n"
+                                         "       (list/c any/c\n"
+                                         "               (or/c exact-positive-integer? #f)\n"
+                                         "               (or/c exact-nonnegative-integer? #f)\n"
+                                         "               (or/c exact-positive-integer? #f)\n"
+                                         "               (or/c exact-nonnegative-integer? #f))\n"
+                                         "       (vector/c any/c\n"
+                                         "                 (or/c exact-positive-integer? #f)\n"
+                                         "                 (or/c exact-nonnegative-integer? #f)\n"
+                                         "                 (or/c exact-positive-integer? #f)\n"
+                                         "                 (or/c exact-nonnegative-integer? #f)))")
+                          stx-l))
   (unless (or (not stx-p) (syntax? stx-p))
     (raise-argument-error 'datum->syntax "(or #f syntax?)" stx-p))
   (raw:datum->syntax stx-c s (to-srcloc-stx stx-l) stx-p))
