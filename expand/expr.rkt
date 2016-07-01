@@ -499,6 +499,7 @@
                 (or (register-eventual-variable!? id ctx)
                     (expand-context-allow-unbound? ctx))))
        (log-expand ctx 'next)
+       (register-variable-referenced-if-local! binding)
        (rebuild
         s disarmed-s
         (list (m 'set!)

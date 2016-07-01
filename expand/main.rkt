@@ -39,6 +39,8 @@
          lookup
          apply-transformer
          
+         register-variable-referenced-if-local!
+         
          expand/capture-lifts
          expand-transformer
          expand+eval-for-syntaxes-binding
@@ -240,12 +242,8 @@
     id]
    [else
     (log-expand ctx 'variable s)
-    ;; A reference to a variable expands to itself --- but if the
-    ;; binding's frame has a reference record, then register the
-    ;; use
-    (when (and (local-binding? binding)
-               (reference-record? (binding-frame-id binding)))
-      (reference-record-used! (binding-frame-id binding) (local-binding-key binding)))
+    ;; A reference to a variable expands to itself
+    (register-variable-referenced-if-local! binding)
     ;; If the variable is locally bound, replace the use's scopes with the binding's scopes
     (define result-s (substitute-variable id t #:no-stops? (free-id-set-empty? (expand-context-stops ctx))))
     (log-expand ctx 'return result-s)
@@ -393,6 +391,13 @@
                                         s)
                                        s)
                        s)]))
+
+(define (register-variable-referenced-if-local! binding)
+  ;; If the binding's frame has a reference record, then register
+  ;; the use for the purposes of `letrec` splitting
+  (when (and (local-binding? binding)
+             (reference-record? (binding-frame-id binding)))
+    (reference-record-used! (binding-frame-id binding) (local-binding-key binding))))
 
 ;; ----------------------------------------
 
