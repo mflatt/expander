@@ -19,7 +19,8 @@
          "boot/linklet-primitive.rkt"
          "boot/runtime-primitive.rkt"
          "boot/handler.rkt"
-         "syntax/api.rkt")
+         "syntax/api.rkt"
+         "host/dynamic-require-reader.rkt")
 
 ;; All bindings provided by this module must correspond to variables
 ;; (as opposed to syntax). Provided functions must not accept keyword

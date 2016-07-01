@@ -9,8 +9,7 @@
          "../namespace/api.rkt"
          "main.rkt")
 
-(provide dynamic-require
-         dynamic-require-reader)
+(provide dynamic-require)
 
 (define (dynamic-require mod-path sym [fail-k default-fail-thunk])
   (unless (or (module-path? mod-path)
@@ -110,9 +109,6 @@
                                   (define mod-path (resolved-module-path->module-path mod-name))
                                   (namespace-require mod-path tmp-ns)
                                   (eval sym tmp-ns)])))])]))
-
-(define (dynamic-require-reader mod-path sym)
-  (dynamic-require mod-path sym))
 
 ;; The `dynamic-require` function cheats by recognizing this failure
 ;; thunk and substituting a more specific error:
