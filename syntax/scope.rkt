@@ -637,8 +637,7 @@
     (define candidates
       (for*/list ([sc (in-set scopes)]
                   [bindings (in-value
-                             (let ([bindings (or (hash-ref (scope-bindings sc) sym #f)
-                                                 #hash())])
+                             (let ([bindings (hash-ref (scope-bindings sc) sym #hash())])
                                ;; Check bulk bindings; if a symbol match is found,
                                ;; synthesize a non-bulk binding table, as long as the
                                ;; same set of scopes is not already mapped
