@@ -21,7 +21,7 @@
    (unless (eq? (expand-context-context ctx) 'top-level)
      (raise-syntax-error #f "not allowed in an expression position" s))
    (define disarmed-s (syntax-disarm s))
-   (define m (match-syntax s '(define-values (id ...) rhs)))
+   (define-match m s '(define-values (id ...) rhs))
    (define ids (as-expand-time-top-level-bindings (m 'id) s ctx))
    (define exp-rhs (expand (m 'rhs) (as-named-context ctx ids)))
    (rebuild
@@ -36,7 +36,7 @@
    (unless (eq? (expand-context-context ctx) 'top-level)
      (raise-syntax-error #f "not allowed in an expression position" s))
    (define disarmed-s (syntax-disarm s))
-   (define m (match-syntax disarmed-s '(define-syntaxes (id ...) rhs)))
+   (define-match m disarmed-s '(define-syntaxes (id ...) rhs))
    (define ids (as-expand-time-top-level-bindings (m 'id) s ctx))
    (define exp-rhs (expand-transformer (m 'rhs) (as-named-context ctx ids)))
    (rebuild
@@ -55,7 +55,7 @@
    (unless (eq? (expand-context-context ctx) 'top-level)
      (raise-syntax-error #f "allowed only in a module or the top level" s))
    (define disarmed-s (syntax-disarm s))
-   (define m (match-syntax disarmed-s '(#%require req ...)))
+   (define-match m disarmed-s '(#%require req ...))
    (define sc (new-scope 'macro)) ; to hide bindings
    ;; Check the `#%require` form syntax and trigger compile-time
    ;; instanations

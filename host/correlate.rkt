@@ -16,7 +16,7 @@
          correlated->list
          correlated->datum
          correlated-property
-         match-correlated)
+         define-correlated-match)
 
 (define (correlate src-e s-exp)
   (define e
@@ -70,6 +70,5 @@
     [(e k) (syntax-property e k)]
     [(e k v) (syntax-property e k v)]))
 
-(define-values (match-correlated try-match-correlated)
-  (make-syntax-matchers syntax? syntax-e (lambda (false str e) (error str))))
-
+(define-define-match define-correlated-match
+  syntax? syntax-e (lambda (false str e) (error str)))

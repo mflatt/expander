@@ -465,7 +465,7 @@
         [(begin)
          ;; Splice a `begin` form
          (log-expand body-ctx 'prim-begin)
-         (define m (match-syntax disarmed-exp-body '(begin e ...)))
+         (define-match m disarmed-exp-body '(begin e ...))
          (define (track e) (syntax-track-origin e exp-body))
          (define splice-bodys (append (map track (m 'e)) (cdr bodys)))
          (log-expand body-ctx 'splice splice-bodys)
@@ -482,7 +482,7 @@
          ;; Found a variable definition; add bindings, extend the
          ;; environment, and continue
          (log-expand body-ctx 'prim-define-values)
-         (define m (match-syntax disarmed-exp-body '(define-values (id ...) rhs)))
+         (define-match m disarmed-exp-body '(define-values (id ...) rhs))
          (define ids (remove-use-site-scopes (m 'id) body-ctx))
          (log-expand body-ctx 'rename-one (datum->syntax #f (list ids (m 'rhs))))
          (define new-dups (check-no-duplicate-ids ids phase exp-body dups))
@@ -524,7 +524,7 @@
          ;; compile-time right-hand side, install the compile-time
          ;; values in the environment, and continue
          (log-expand body-ctx 'prim-define-syntaxes)
-         (define m (match-syntax disarmed-exp-body '(define-syntaxes (id ...) rhs)))
+         (define-match m disarmed-exp-body '(define-syntaxes (id ...) rhs))
          (define ids (remove-use-site-scopes (m 'id) body-ctx))
          (log-expand body-ctx 'rename-one (datum->syntax #f (list ids (m 'rhs))))
          (define new-dups (check-no-duplicate-ids ids phase exp-body dups))

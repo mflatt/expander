@@ -19,12 +19,12 @@
   (for ([body (in-list bodys)])
     (case (core-form-sym body 0)
       [(begin)
-       (define m (match-syntax body '(begin e ...)))
+       (define-match m body '(begin e ...))
        (check-body (m 'e))]
       [(#%declare #%provide #%require module module*)
        (void)]
       [(define-values)
-       (define m (match-syntax body '(define-values (id ...) rhs)))
+       (define-match m body '(define-values (id ...) rhs))
        (check-expr (m 'rhs) (length (m 'id)) body)]
       [else
        (disallow body)])))
@@ -34,11 +34,11 @@
     [(lambda case-lambda)
      (check-count 1 num-results enclosing)]
     [(quote)
-     (define m (match-syntax e '(quote datum)))
+     (define-match m e '(quote datum))
      (check-datum (m 'datum))
      (check-count 1 num-results enclosing)]
     [(#%app)
-     (define m (match-syntax e '(#%app rator rand ...)))
+     (define-match m e '(#%app rator rand ...))
      (define rands (m 'rand))
      (for ([rand (in-list rands)])
        (check-expr rand 1 e))
@@ -73,7 +73,9 @@
 
 (define (quoted-string? e)
   (and (eq? 'quote (core-form-sym e 0))
-       (string? (syntax-e ((match-syntax e '(quote datum)) 'datum)))))
+       (let ()
+         (define-match m e '(quote datum))
+         (string? (syntax-e (m 'datum))))))
 
 (define (cross-phase-primitive-name id)
   (define b (resolve+shift id 0))

@@ -32,8 +32,8 @@
                         #:to-source? [to-source? #f])
   ;; Some information about a module is commuicated here through syntax
   ;; propertoes, such as 'module-requires
-  (define m-m (match-syntax (syntax-disarm s) '(module name initial-require mb)))
-  (define m (match-syntax (syntax-disarm (m-m 'mb)) '(#%module-begin body ...)))
+  (define-match m-m (syntax-disarm s) '(module name initial-require mb))
+  (define-match m (syntax-disarm (m-m 'mb)) '(#%module-begin body ...))
   (define enclosing-self (compile-context-module-self cctx))
   (define self (or given-self
                    (make-generic-self-module-path-index
@@ -94,7 +94,7 @@
                    #:other-form-callback (lambda (body cctx)
                                            (case (core-form-sym body (compile-context-phase cctx))
                                              [(#%declare)
-                                              (define m (match-syntax body '(#%declare kw ...)))
+                                              (define-match m body '(#%declare kw ...))
                                               (for ([kw (in-list (m 'kw))])
                                                 (when (eq? (syntax-e kw) '#:cross-phase-persistent)
                                                   (set! cross-phase-persistent? #t))
@@ -267,10 +267,11 @@
         (define f (core-form-sym body phase))
         (cond
          [(eq? f form-name)
-          (define sm-m (match-syntax body '(_ name . _)))
+          (define-match sm-m body '(_ name . _))
+          (define-match f-m body #:try '(module* name #f . _))
           (define s-shifted
             (cond
-             [(try-match-syntax body '(module* name #f . _))
+             [(f-m)
               (syntax-shift-phase-level body (phase- 0 phase))]
              [else body]))
           (cons (cons (syntax-e (sm-m 'name))
@@ -279,7 +280,7 @@
                                       #:to-source? to-source?))
                 (loop (cdr bodys) phase))]
          [(eq? f 'begin-for-syntax)
-          (define m (match-syntax body `(begin-for-syntax e ...)))
+          (define-match m body '(begin-for-syntax e ...))
           (append (loop (m 'e) (add1 phase))
                   (loop (cdr bodys) phase))]
          [else

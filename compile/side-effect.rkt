@@ -21,14 +21,14 @@
                  (correlated-e (car (correlated-e e))))
         [(quote lambda case-lambda #%variable-reference) 1]
         [(letrec-values let-values)
-         (define m (match-correlated e '(_ ([ids rhs] ...) body)))
+         (define-correlated-match m e '(_ ([ids rhs] ...) body))
          (and (not (for/or ([ids (in-list (m 'ids))]
                             [rhs (in-list (m 'rhs))])
                      (any-side-effects? rhs (correlated-length ids) required-reference?
                                         #:locals locals)))
               (loop (m 'body) (add-binding-info locals (m 'ids) (m 'rhs))))]
         [(values)
-         (define m (match-correlated e '(_ e ...)))
+         (define-correlated-match m e '(_ e ...))
          (and (for/and ([e (in-list (m 'e))])
                 (not (any-side-effects? e 1 required-reference? #:locals locals)))
               (length (m 'e)))]

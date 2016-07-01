@@ -59,7 +59,7 @@
   (lambda (s ctx)
     (log-expand ctx 'prim-lambda)
     (define disarmed-s (syntax-disarm s))
-    (define m (match-syntax disarmed-s '(lambda formals body ...+)))
+    (define-match m disarmed-s '(lambda formals body ...+))
     (define-values (formals body)
       (lambda-clause-expander s disarmed-s (m 'formals) (m 'body) ctx 'lambda-renames))
     (rebuild
@@ -84,8 +84,8 @@
  (lambda (s ctx)
    (log-expand ctx 'prim-case-lambda)
    (define disarmed-s (syntax-disarm s))
-   (define m (match-syntax disarmed-s '(case-lambda [formals body ...+] ...)))
-   (define cm (match-syntax disarmed-s '(case-lambda clause ...)))
+   (define-match m disarmed-s '(case-lambda [formals body ...+] ...))
+   (define-match cm disarmed-s '(case-lambda clause ...))
    (rebuild
     s disarmed-s
     `(,(m 'case-lambda)
@@ -128,22 +128,23 @@
   (lambda (s ctx)
     (log-expand ctx log-tag)
     (define disarmed-s (syntax-disarm s))
-    (define m (if syntaxes?
-                  (match-syntax disarmed-s '(letrec-syntaxes+values
-                                             ([(trans-id ...) trans-rhs] ...)
-                                             ([(val-id ...) val-rhs] ...)
-                                             body ...+))
-                  (match-syntax disarmed-s '(let-values ([(val-id ...) val-rhs] ...)
-                                             body ...+))))
+    (define-match stx-m disarmed-s #:when syntaxes?
+      '(letrec-syntaxes+values
+        ([(trans-id ...) trans-rhs] ...)
+        ([(val-id ...) val-rhs] ...)
+        body ...+))
+    (define-match val-m disarmed-s #:unless syntaxes?
+      '(let-values ([(val-id ...) val-rhs] ...)
+        body ...+))
    (define sc (new-scope 'local))
    (define phase (expand-context-phase ctx))
    (define frame-id (and split-by-reference?
                          (make-reference-record))) ; accumulates info on referenced variables
    ;; Add the new scope to each binding identifier:
-   (define trans-idss (for/list ([ids (in-list (if syntaxes? (m 'trans-id) null))])
+   (define trans-idss (for/list ([ids (in-list (if syntaxes? (stx-m 'trans-id) null))])
                         (for/list ([id (in-list ids)])
                           (add-scope id sc))))
-   (define val-idss (for/list ([ids (in-list (m 'val-id))])
+   (define val-idss (for/list ([ids (in-list (if syntaxes? (stx-m 'val-id) (val-m 'val-id)))])
                       (for/list ([id (in-list ids)])
                         (add-scope id sc))))
    (check-no-duplicate-ids (list trans-idss val-idss) phase s)
@@ -157,13 +158,14 @@
                        (for/list ([id (in-list ids)])
                          (add-local-binding! id phase counter #:frame-id frame-id #:in s))))
    ;; Add new scope to body:
-   (define bodys (for/list ([body (in-list (m 'body))]) (add-scope body sc)))
+   (define bodys (for/list ([body (in-list (if syntaxes? (stx-m 'body) (val-m 'body)))])
+                   (add-scope body sc)))
    (log-expand ctx renames-log-tag val-idss (datum->syntax #f bodys))
    ;; Evaluate compile-time expressions (if any):
    (when syntaxes?
      (log-expand ctx 'prepare-env)
      (log-expand ctx 'enter-bind))
-   (define trans-valss (for/list ([rhs (in-list (if syntaxes? (m 'trans-rhs) '()))]
+   (define trans-valss (for/list ([rhs (in-list (if syntaxes? (stx-m 'trans-rhs) '()))]
                                   [ids (in-list trans-idss)])
                          (log-expand ctx 'next)
                          (eval-for-syntaxes-binding (add-scope rhs sc) ids ctx)))
@@ -200,7 +202,7 @@
    (define letrec-values-id
      (if syntaxes?
          (datum->syntax (syntax-shift-phase-level core-stx phase) 'letrec-values)
-         (m 'let-values)))
+         (val-m 'let-values)))
    
    (define (get-body track?)
      (log-expand ctx 'next-group)
@@ -220,7 +222,7 @@
        (rebuild
         s disarmed-s
         `(,letrec-values-id ,(for/list ([ids (in-list val-idss)]
-                                        [rhs (in-list (m 'val-rhs))])
+                                        [rhs (in-list (if syntaxes? (stx-m 'val-rhs) (val-m 'val-rhs)))])
                                (log-expand ctx 'next)
                                `[,ids ,(if rec?
                                            (expand (add-scope rhs sc)
@@ -231,7 +233,7 @@
       [else
        (log-expand ctx 'next-group)
        (log-expand ctx 'letrec-values)
-       (define val-rhss (for/list ([rhs (in-list (m 'val-rhs))])
+       (define val-rhss (for/list ([rhs (in-list (if syntaxes? (stx-m 'val-rhs) (val-m 'val-rhs)))])
                           (add-scope rhs sc)))
        (expand-and-split-bindings-by-reference
         val-idss val-keyss val-rhss (for/list ([rhs (in-list val-idss)])
@@ -264,7 +266,7 @@
  (lambda (s ctx)
    (log-expand ctx 'prim-#%stratified)
    (define disarmed-s (syntax-disarm s))
-   (define m (match-syntax disarmed-s '(#%stratified-body body ...+)))
+   (define-match m disarmed-s '(#%stratified-body body ...+))
    (expand-body (m 'body) ctx #:stratified? #t #:track? #t
                 #:source s #:disarmed-source disarmed-s)))
 
@@ -275,7 +277,7 @@
  (lambda (s ctx)
    (log-expand ctx 'prim-#%datum)
    (define disarmed-s (syntax-disarm s))
-   (define m (match-syntax disarmed-s '(#%datum . datum)))
+   (define-match m disarmed-s '(#%datum . datum))
    (define datum (m 'datum))
    (when (and (syntax? datum)
               (keyword? (syntax-e datum)))
@@ -292,7 +294,7 @@
  (lambda (s ctx)
    (log-expand ctx 'prim-#%app)
    (define disarmed-s (syntax-disarm s))
-   (define m (match-syntax disarmed-s '(#%app e ...)))
+   (define-match m disarmed-s '(#%app e ...))
    (define es (m 'e))
    (cond
     [(null? es)
@@ -317,7 +319,7 @@
  'quote
  (lambda (s ctx)
    (log-expand ctx 'prim-quote)
-   (match-syntax (syntax-disarm s) '(quote datum))
+   (define-match m (syntax-disarm s) '(quote datum))
    s))
 
 (add-core-form!
@@ -325,18 +327,17 @@
  (lambda (s ctx)
    (log-expand ctx 'prim-quote-syntax)
    (define disarmed-s (syntax-disarm s))
-   (define m-local (try-match-syntax disarmed-s '(quote-syntax datum #:local)))
-   (define m (or m-local
-                 (match-syntax disarmed-s '(quote-syntax datum))))
+   (define-match m-local disarmed-s #:try '(quote-syntax datum #:local))
+   (define-match m disarmed-s #:unless (m-local) '(quote-syntax datum))
    (cond
-    [m-local
+    [(m-local)
      ;; #:local means don't prune, and it counts as a reference to
      ;; all variables for letrec splitting
      (reference-records-all-used! (expand-context-reference-records ctx))
-     (define m-kw (try-match-syntax disarmed-s '(_ _ kw)))
+     (define-match m-kw disarmed-s '(_ _ kw))
      (rebuild
       s disarmed-s
-      `(,(m 'quote-syntax) ,(m 'datum) ,(m-kw 'kw)))]
+      `(,(m-local 'quote-syntax) ,(m-local 'datum) ,(m-kw 'kw)))]
     [else
      ;; otherwise, prune scopes up to transformer boundary:
      (rebuild
@@ -349,7 +350,7 @@
  (lambda (s ctx)
    (log-expand ctx 'prim-if)
    (define disarmed-s (syntax-disarm s))
-   (define m (match-syntax disarmed-s '(if tst thn els)))
+   (define-match m disarmed-s '(if tst thn els))
    (define expr-ctx (as-expression-context ctx))
    (define tail-ctx (as-tail-context expr-ctx #:wrt ctx))
    (log-expand ctx 'next-group)
@@ -369,7 +370,7 @@
  (lambda (s ctx)
    (log-expand ctx 'prim-with-continuation-mark)
    (define disarmed-s (syntax-disarm s))
-   (define m (match-syntax disarmed-s '(with-continuation-mark key val body)))
+   (define-match m disarmed-s '(with-continuation-mark key val body))
    (define expr-ctx (as-expression-context ctx))
    (rebuild
     s disarmed-s
@@ -386,7 +387,7 @@
  (lambda (s ctx)
    (log-expand ctx log-tag)
    (define disarmed-s (syntax-disarm s))
-   (define m (match-syntax disarmed-s '(begin e ...+)))
+   (define-match m disarmed-s '(begin e ...+))
    (define expr-ctx (as-expression-context ctx))
    (define es (m 'e))
    (define last-i (sub1 (length es)))
@@ -439,7 +440,7 @@
                 ;; has avoided making `#%top` explicit
                 s]
                [else
-                (define m (match-syntax disarmed-s '(#%top . id)))
+                (define-match m disarmed-s '(#%top . id))
                 (m 'id)]))
    (define b (resolve+shift id (expand-context-phase ctx)
                             #:ambiguous-value 'ambiguous))
@@ -471,7 +472,7 @@
         [(resolve tl-id (expand-context-phase ctx))
          ;; Expand to a reference to a top-level variable, instead of
          ;; a local or imported variable
-         (define m (match-syntax disarmed-s '(#%top . id)))
+         (define-match m disarmed-s '(#%top . id))
          (rebuild s disarmed-s (cons (m '#%top) tl-id))]
         [else s])])])))
 
@@ -480,7 +481,7 @@
  (lambda (s ctx)
    (log-expand ctx 'prim-set!)
    (define disarmed-s (syntax-disarm s))
-   (define m (match-syntax disarmed-s '(set! id rhs)))
+   (define-match m disarmed-s '(set! id rhs))
    (define id (m 'id))
    (let rename-loop ([id id] [from-rename? #f])
      (define binding (resolve+shift id (expand-context-phase ctx)
@@ -509,7 +510,7 @@
       [(set!-transformer? t)
        (cond
         [(not-in-this-expand-context? t ctx)
-         (expand (avoid-current-expand-context (substitute-set!-rename s disarmed-s m id from-rename?) t ctx)
+         (expand (avoid-current-expand-context (substitute-set!-rename s disarmed-s (m 'set!) (m 'rhs) id from-rename?) t ctx)
                  ctx)]
         [else
          (define-values (exp-s re-ctx)
@@ -520,19 +521,19 @@
       [(rename-transformer? t)
        (cond
         [(not-in-this-expand-context? t ctx)
-         (expand (avoid-current-expand-context (substitute-set!-rename s disarmed-s m id from-rename? t) t ctx)
+         (expand (avoid-current-expand-context (substitute-set!-rename s disarmed-s (m 'set!) (m 'rhs) id from-rename? t) t ctx)
                  ctx)]
         [else (rename-loop (rename-transformer-target t) #t)])]
       [else
        (raise-syntax-error #f "cannot mutate syntax identifier" s id)]))))
 
-(define (substitute-set!-rename s disarmed-s m id from-rename? [t #f])
+(define (substitute-set!-rename s disarmed-s set!-id id rhs-s from-rename? [t #f])
   (cond
    [(or t from-rename?)
     (define new-id (if t
                        (rename-transformer-target t)
                        id))
-    (syntax-rearm (datum->syntax disarmed-s (list (m 'set!) new-id (m 'rhs)) disarmed-s disarmed-s)
+    (syntax-rearm (datum->syntax disarmed-s (list set!-id new-id rhs-s) disarmed-s disarmed-s)
                   s)]
    [else s]))
 
@@ -541,21 +542,18 @@
  (lambda (s ctx)
    (log-expand ctx 'prim-#%variable-reference)
    (define disarmed-s (syntax-disarm s))
-   (define id-m (try-match-syntax disarmed-s '(#%variable-reference id)))
-   (define top-m (and (not id-m)
-                      (try-match-syntax disarmed-s '(#%variable-reference (#%top . id)))))
-   (define empty-m (and (not id-m)
-                        (not top-m)
-                        (match-syntax disarmed-s '(#%variable-reference))))
-   (when (or id-m top-m)
-     (define id ((or id-m top-m) 'id))
-     (define binding (resolve+shift id (expand-context-phase ctx)
+   (define-match id-m disarmed-s #:try '(#%variable-reference id))
+   (define-match top-m disarmed-s #:unless (id-m) #:try '(#%variable-reference (#%top . id)))
+   (define-match empty-m disarmed-s #:unless (or (id-m) (top-m)) '(#%variable-reference))
+   (when (or (id-m) (top-m))
+     (define var-id (if (id-m) (id-m 'id) (top-m 'id)))
+     (define binding (resolve+shift var-id (expand-context-phase ctx)
                                     #:ambiguous-value 'ambiguous))
      (when (eq? binding 'ambiguous)
-       (raise-ambiguous-error id ctx))
+       (raise-ambiguous-error var-id ctx))
      (unless binding
-       (raise-unbound-syntax-error #f "unbound identifier" s id null
-                                   (syntax-debug-info-string id ctx))))
+       (raise-unbound-syntax-error #f "unbound identifier" s var-id null
+                                   (syntax-debug-info-string var-id ctx))))
    s))
 
 (add-core-form!
@@ -563,7 +561,7 @@
  (lambda (s ctx)
    (log-expand ctx 'prim-#%expression)
    (define disarmed-s (syntax-disarm s))
-   (define m (match-syntax disarmed-s '(#%expression e)))
+   (define-match m disarmed-s '(#%expression e))
    (define exp-e (expand (m 'e) (as-tail-context (as-expression-context ctx)
                                                  #:wrt ctx)))
    (case (and (not (expand-context-preserve-#%expression-and-do-not-add-#%top? ctx))

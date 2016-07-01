@@ -51,7 +51,7 @@
       (case fm
         [(for-meta)
          (check-nested 'raw for-meta-ok?)
-         (define m (match-syntax req '(for-meta phase-level spec ...)))
+         (define-match m req '(for-meta phase-level spec ...))
          (define p (syntax-e (m 'phase-level)))
          (unless (phase? p)
            (raise-syntax-error #f "bad phase" orig-s req))
@@ -63,7 +63,7 @@
                #f just-meta-ok? 'raw)]
         [(for-syntax)
          (check-nested 'raw for-meta-ok?)
-         (define m (match-syntax req '(for-syntax spec ...)))
+         (define-match m req '(for-syntax spec ...))
          (loop (m 'spec)
                (or top-req req)
                (phase+ phase-shift 1)
@@ -72,7 +72,7 @@
                #f just-meta-ok? 'raw)]
         [(for-template)
          (check-nested 'raw for-meta-ok?)
-         (define m (match-syntax req '(for-template spec ...)))
+         (define-match m req '(for-template spec ...))
          (loop (m 'spec)
                (or top-req req)
                (phase+ phase-shift -1)
@@ -81,7 +81,7 @@
                #f just-meta-ok? 'raw)]
         [(for-label)
          (check-nested 'raw for-meta-ok?)
-         (define m (match-syntax req '(for-label spec ...)))
+         (define-match m req '(for-label spec ...))
          (loop (m 'spec)
                (or top-req req)
                (phase+ phase-shift #f)
@@ -90,7 +90,7 @@
                #f just-meta-ok? 'raw)]
         [(just-meta)
          (check-nested 'raw just-meta-ok?)
-         (define m (match-syntax req '(just-meta phase-level spec ...)))
+         (define-match m req '(just-meta phase-level spec ...))
          (define p (syntax-e (m 'phase-level)))
          (unless (phase? p)
            (raise-syntax-error #f "bad phase" orig-s req))
@@ -102,7 +102,7 @@
                for-meta-ok? #f 'raw)]
         [(only)
          (check-nested 'phaseless)
-         (define m (match-syntax req '(only spec id ...)))
+         (define-match m req '(only spec id ...))
          (loop (list (m 'spec))
                (or top-req req)
                phase-shift
@@ -111,7 +111,7 @@
                #f #f 'path)]
         [(prefix)
          (check-nested 'phaseless)
-         (define m (match-syntax req '(prefix id:prefix spec)))
+         (define-match m req '(prefix id:prefix spec))
          (loop (list (m 'spec))
                (or top-req req)
                phase-shift
@@ -120,7 +120,7 @@
                #f #f 'path)]
         [(all-except)
          (check-nested 'phaseless)
-         (define m (match-syntax req '(all-except spec id ...)))
+         (define-match m req '(all-except spec id ...))
          (loop (list (m 'spec))
                (or top-req req)
                phase-shift
@@ -129,7 +129,7 @@
                #f #f 'path)]
         [(prefix-all-except)
          (check-nested 'phaseless)
-         (define m (match-syntax req '(prefix-all-except id:prefix spec id ...)))
+         (define-match m req '(prefix-all-except id:prefix spec id ...))
          (loop (list (m 'spec))
                (or top-req req)
                phase-shift
@@ -138,7 +138,7 @@
                #f #f 'path)]
         [(rename)
          (check-nested 'phaseless)
-         (define m (match-syntax req '(rename spec id:to id:from)))
+         (define-match m req '(rename spec id:to id:from))
          (loop (list (m 'spec))
                (or top-req req)
                phase-shift
@@ -336,22 +336,22 @@
                     (syntax-e (car (syntax-e req)))))
     (case fm
       [(for-meta)
-       (define m (match-syntax req '(for-meta phase-level spec ...)))
+       (define-match m req '(for-meta phase-level spec ...))
        (define p (syntax-e (m 'phase-level)))
        (unless (phase? p)
          (raise-syntax-error #f "bad phase" req))
        (rebuild-req req `(,(m 'for-meta) ,(phase+ p 1) ,@(map (loop #t) (m 'spec))))]
       [(for-syntax)
-       (define m (match-syntax req '(for-syntax spec ...)))
+       (define-match m req '(for-syntax spec ...))
        (rebuild-req req `(for-meta 2 ,@(map (loop #t) (m 'spec))))]
       [(for-template)
-       (define m (match-syntax req '(for-template spec ...)))
+       (define-match m req '(for-template spec ...))
        (rebuild-req req `(for-meta 0 ,@(map (loop #t) (m 'spec))))]
       [(for-label)
-       (define m (match-syntax req '(for-label spec ...)))
+       (define-match m req '(for-label spec ...))
        (rebuild-req req `(,(m 'for-label) ,@(map (loop #t) (m 'spec))))]
       [(just-meta)
-       (define m (match-syntax req '(just-meta phase-level spec ...)))
+       (define-match m req '(just-meta phase-level spec ...))
        (rebuild-req req `(,(m 'just-meta) ,(m 'phase-level) ,@(map (loop #f) (m 'spec))))]
       [else
        (if shifted?

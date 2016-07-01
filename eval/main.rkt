@@ -93,7 +93,7 @@
                        #:to-source? to-source?)]
       [(begin)
        ;; expansion must have captured lifts
-       (define m (match-syntax disarmed-exp-s '(begin e ...)))
+       (define-match m disarmed-exp-s '(begin e ...))
        (compiled-tops->compiled-top
         (for/list ([e (in-list (m 'e))])
           (loop e))
@@ -186,7 +186,7 @@
      [else
       (case (core-form-sym disarmed-exp-s phase)
         [(begin)
-         (define m (match-syntax disarmed-exp-s '(begin e ...)))
+         (define-match m disarmed-exp-s '(begin e ...))
          ;; Map `loop` over the `e`s, but in the case of `eval`,
          ;; tail-call for last one:
          (define (begin-loop es)
@@ -203,7 +203,7 @@
              (wrap (m 'begin) exp-s (begin-loop (m 'e)))
              (begin-loop (m 'e)))]
         [(begin-for-syntax)
-         (define m (match-syntax disarmed-exp-s '(begin-for-syntax e ...)))
+         (define-match m disarmed-exp-s '(begin-for-syntax e ...))
          (define next-phase (add1 phase))
          (define next-ns (namespace->namespace-at-phase ns next-phase))
          (namespace-visit-available-modules! next-ns) ; to match old behavior for empty body
@@ -255,7 +255,7 @@
     ;; We don't "hide" this require in the same way as
     ;; a top-level `#%require`, because it's already
     ;; hidden in the sense of having an extra scope
-    (define m (match-syntax (raw:syntax-disarm s) '(#%require req)))
+    (define-match m (raw:syntax-disarm s) '(#%require req))
     (parse-and-perform-requires! (list (m 'req)) s
                                  ns phase #:run-phase phase
                                  (make-requires+provides #f))))

@@ -61,7 +61,7 @@
       (for ([body (in-list bodys)])
         (case (core-form-sym body phase)
           [(define-values)
-           (define m (match-syntax body '(define-values (id ...) rhs)))
+           (define-match m body '(define-values (id ...) rhs))
            (for ([sym (in-list (def-ids-to-binding-syms (m 'id) phase self))])
              (define def-sym (select-fresh sym header))
              (hash-set! (header-binding-sym-to-define-sym header)
@@ -72,7 +72,7 @@
                                                       (header-binding-syms-in-order header)))
              (register-as-defined! header def-sym))]
           [(begin-for-syntax)
-           (define m (match-syntax body `(begin-for-syntax e ...)))
+           (define-match m body '(begin-for-syntax e ...))
            (loop! (m 'e) (add1 phase) (find-or-create-header! (add1 phase)))]))))
   
   ;; Provided for callbacks to detect reuiqred references:
@@ -87,7 +87,7 @@
       (define body (syntax-disarm in-body))
       (case (core-form-sym body phase)
         [(define-values)
-         (define m (match-syntax body '(define-values (id ...) rhs)))
+         (define-match m body '(define-values (id ...) rhs))
          (define ids (m 'id))
          (define binding-syms (def-ids-to-binding-syms ids phase self))
          (define def-syms
@@ -137,7 +137,7 @@
                                             [header header])
                                #f)))])]
         [(define-syntaxes)
-         (define m (match-syntax body '(define-syntaxes (id ...) rhs)))
+         (define-match m body '(define-syntaxes (id ...) rhs))
          (define ids (m 'id))
          (define binding-syms (def-ids-to-binding-syms ids phase self))
          (define next-header (find-or-create-header! (add1 phase)))
@@ -169,7 +169,7 @@
                         gen-syms)))])
          (set! saw-define-syntaxes? #t)]
         [(begin-for-syntax)
-         (define m (match-syntax body `(begin-for-syntax e ...)))
+         (define-match m body '(begin-for-syntax e ...))
          (loop! (m 'e) (add1 phase) (find-or-create-header! (add1 phase)))]
         [(#%require #%provide #%declare module module*)
          ;; Must be handled separately, if allowed at all

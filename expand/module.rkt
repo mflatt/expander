@@ -77,7 +77,7 @@
                        #:mpis-for-enclosing-reset [mpis-for-enclosing-reset #f])
   (log-expand init-ctx 'prim-module)
   (define disarmed-s (syntax-disarm s))
-  (define m (match-syntax disarmed-s '(module id:module-name initial-require body ...)))
+  (define-match m disarmed-s '(module id:module-name initial-require body ...))
    
    (define initial-require (syntax->datum (m 'initial-require)))
    (unless (or keep-enclosing-scope-at-phase
@@ -194,7 +194,7 @@
      (log-expand ctx 'rename-one added-s)
 
      (define disarmed-mb-s (syntax-disarm added-s))
-     (define mb-m (match-syntax disarmed-mb-s '(#%module-begin body ...)))
+     (define-match mb-m disarmed-mb-s '(#%module-begin body ...))
      (define bodys (mb-m 'body))
      
      ;; For variable repeferences before corresponding binding (phase >= 1)
@@ -322,8 +322,9 @@
      (define declare-enclosing-module
        ;; Ensure this module on demand for `module*` submodules that might use it
        (delay (declare-module-for-expansion fully-expanded-bodys-except-post-submodules
-                                            #:module-match m
-                                            #:module-begin-match mb-m
+                                            #:module-name-id (m 'id:module-name)
+                                            #:module-intial-require (m 'initial-require)
+                                            #:module-begin-id (mb-m '#%module-begin)
                                             #:requires-and-provides requires+provides
                                             #:namespace m-ns
                                             #:self self
@@ -577,7 +578,7 @@
        ;; Dispatch on form revealed by partial expansion
        (case (core-form-sym disarmed-exp-body phase)
          [(begin)
-          (define m (match-syntax disarmed-exp-body '(begin e ...)))
+          (define-match m disarmed-exp-body '(begin e ...))
           (define (track e) (syntax-track-origin e exp-body))
           (define spliced-bodys (append (map track (m 'e)) (cdr bodys)))
           (log-expand partial-body-ctx 'splice spliced-bodys)
@@ -585,7 +586,7 @@
          [(begin-for-syntax)
           (log-expand partial-body-ctx 'enter-prim exp-body)
           (log-expand partial-body-ctx 'enter-prim-begin-for-syntax)
-          (define m (match-syntax disarmed-exp-body '(begin-for-syntax e ...)))
+          (define-match m disarmed-exp-body '(begin-for-syntax e ...))
           (define nested-bodys (pass-1-and-2-loop (m 'e) (add1 phase)))
           (define ct-m-ns (namespace->namespace-at-phase m-ns (add1 phase)))
           (namespace-run-available-modules! m-ns (add1 phase)) ; to support running `begin-for-syntax`
@@ -600,7 +601,7 @@
          [(define-values)
           (log-expand partial-body-ctx 'enter-prim exp-body)
           (log-expand partial-body-ctx 'enter-prim-define-values)
-          (define m (match-syntax disarmed-exp-body '(define-values (id ...) rhs)))
+          (define-match m disarmed-exp-body '(define-values (id ...) rhs))
           (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
           (check-no-duplicate-ids ids phase exp-body)
           (check-ids-unbound ids phase requires+provides #:in exp-body)
@@ -618,7 +619,7 @@
          [(define-syntaxes)
           (log-expand partial-body-ctx 'enter-prim exp-body)
           (log-expand partial-body-ctx 'enter-prim-define-syntaxes)
-          (define m (match-syntax disarmed-exp-body '(define-syntaxes (id ...) rhs)))
+          (define-match m disarmed-exp-body '(define-syntaxes (id ...) rhs))
           (define ids (remove-use-site-scopes (m 'id) partial-body-ctx))
           (check-no-duplicate-ids ids phase exp-body)
           (check-ids-unbound ids phase requires+provides #:in exp-body)
@@ -648,7 +649,7 @@
           (log-expand partial-body-ctx 'enter-prim exp-body)
           (log-expand partial-body-ctx 'enter-prim-require)
           (define ready-body (remove-use-site-scopes disarmed-exp-body partial-body-ctx))
-          (define m (match-syntax ready-body '(#%require req ...)))
+          (define-match m ready-body '(#%require req ...))
           (parse-and-perform-requires! (m 'req) exp-body #:self self
                                        m-ns phase #:run-phase phase
                                        requires+provides
@@ -675,7 +676,7 @@
           (cons exp-body
                 (loop tail? (cdr bodys)))]
          [(#%declare)
-          (define m (match-syntax disarmed-exp-body '(#%declare kw ...)))
+          (define-match m disarmed-exp-body '(#%declare kw ...))
           (for ([kw (in-list (m 'kw))])
             (unless (keyword? (syntax-e kw))
               (raise-syntax-error #f "expected a keyword" exp-body kw))
@@ -747,7 +748,7 @@
       (define exp-body
         (case (core-form-sym disarmed-body phase)
           [(define-values)
-           (define m (match-syntax disarmed-body '(define-values (id ...) rhs)))
+           (define-match m disarmed-body '(define-values (id ...) rhs))
            (define exp-rhs (expand (m 'rhs) (as-named-context (as-expression-context body-ctx)
                                                               (m 'id))))
            (rebuild 
@@ -818,7 +819,7 @@
         [(#%provide)
          (log-expand ctx 'enter-prim (car bodys))
          (log-expand ctx 'enter-prim-provide)
-         (define m (match-syntax disarmed-body '(#%provide spec ...)))
+         (define-match m disarmed-body '(#%provide spec ...))
          (define specs
            (parse-and-expand-provides! (m 'spec) (car bodys)
                                        requires+provides self
@@ -835,7 +836,7 @@
                 `(,(m '#%provide) ,@specs))
                (loop (cdr bodys) phase))]
         [(begin-for-syntax)
-         (define m (match-syntax disarmed-body '(begin-for-syntax e ...)))
+         (define-match m disarmed-body '(begin-for-syntax e ...))
          (define nested-bodys (loop (m 'e) (add1 phase)))
          (cons (rebuild (car bodys) disarmed-body `(,(m 'begin-for-syntax) ,@nested-bodys))
                (loop (cdr bodys) phase))]
@@ -848,8 +849,9 @@
 ;; In support of pass 4, declare a module (in a temporary namespace)
 ;; before any `module*` submodule is expanded
 (define (declare-module-for-expansion fully-expanded-bodys-except-post-submodules
-                                      #:module-match m
-                                      #:module-begin-match mb-m
+                                      #:module-name-id module-name-id
+                                      #:module-intial-require module-initial-require
+                                      #:module-begin-id module-begin-id
                                       #:requires-and-provides requires+provides
                                       #:namespace m-ns
                                       #:self self
@@ -860,8 +862,8 @@
                     requires+provides
                     (datum->syntax
                      #f
-                     `(,(datum->syntax core-stx 'module) ,(m 'id:module-name) ,(m 'initial-require)
-                       (,(mb-m '#%module-begin)
+                     `(,(datum->syntax core-stx 'module) ,module-name-id ,module-initial-require
+                       (,module-begin-id
                         ,@fully-expanded-bodys-except-post-submodules)))
                     self
                     self)
@@ -912,9 +914,10 @@
          ;; Ensure that the enclosing module is declared:
          (force declare-enclosing-module)
          (define ready-body (remove-use-site-scopes (car bodys) submod-ctx))
+         (define-match f-m  disarmed-body #:try '(module* name #f . _))
          (define submod
            (cond
-            [(try-match-syntax disarmed-body '(module* name #f . _))
+            [(f-m)
              ;; Need to shift the submodule relative to the enclosing module:
              (define neg-phase (phase- 0 phase))
              (define shifted-s (syntax-shift-phase-level ready-body neg-phase))
@@ -935,7 +938,7 @@
          (cons submod
                (loop (cdr bodys) phase))]
         [(begin-for-syntax)
-         (define m (match-syntax disarmed-body '(begin-for-syntax e ...)))
+         (define-match m disarmed-body '(begin-for-syntax e ...))
          (define nested-bodys (loop (m 'e) (add1 phase)))
          (cons (rebuild (car bodys) disarmed-body `(,(m 'begin-for-syntax) ,@nested-bodys))
                (loop (cdr bodys) phase))]
@@ -964,7 +967,7 @@
     (define disarmed-body (syntax-disarm body))
     (case (core-form-sym disarmed-body phase)
       [(define-values)
-       (define m (match-syntax disarmed-body '(define-values (id ...) rhs)))
+       (define-match m disarmed-body '(define-values (id ...) rhs))
        (define ids (m 'id))
        (define vals (eval-for-bindings ids (m 'rhs) phase m-ns ctx))
        (for ([id (in-list ids)]
@@ -1003,7 +1006,7 @@
   (log-expand ctx (if is-star? 'enter-prim-submodule* 'enter-prim-submodule))
   
   ;; Register name and check for duplicates
-  (define m (match-syntax s '(module name . _)))
+  (define-match m s '(module name . _))
   (define name (syntax-e (m 'name)))
   (when (hash-ref declared-submodule-names name #f)
     (raise-syntax-error #f "submodule already declared with the same name" s name))
@@ -1059,7 +1062,7 @@
 (define (make-parse-lifted-require m-ns self requires+provides
                                    #:declared-submodule-names declared-submodule-names)
   (lambda (s phase)
-    (define m (match-syntax (syntax-disarm s) '(#%require req)))
+    (define-match m (syntax-disarm s) '(#%require req))
     (parse-and-perform-requires! (list (m 'req)) s #:self self
                                  m-ns phase #:run-phase phase
                                  requires+provides

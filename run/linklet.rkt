@@ -170,12 +170,12 @@
       (case (correlated-e (car e))
         [(quote) e]
         [(set!)
-         (define m (match-correlated e '(set! var rhs)))
+         (define-correlated-match m e '(set! var rhs))
          (if (set-member? box-syms (correlated-e (m 'var)))
              `(set-box! ,(m 'var) ,(desugar (m 'rhs)))
              `(set! ,(m 'var) ,(desugar (m 'rhs))))]
         [(define-values)
-         (define m (match-correlated e '(define-values (id ...) rhs)))
+         (define-correlated-match m e '(define-values (id ...) rhs))
          (define ids (m 'id))
          (define tmps (map gensym ids))
          `(define-values ,(for/list ([id (in-list ids)]
@@ -193,10 +193,10 @@
                                     #:when (not (set-member? box-syms (correlated-e id))))
                            tmp)))))]
         [(lambda)
-         (define m (match-correlated e '(lambda formals body)))
+         (define-correlated-match m e '(lambda formals body))
          `(lambda ,(m 'formals) ,(desugar (m 'body)))]
         [(case-lambda)
-         (define m (match-correlated e '(case-lambda [formals body] ...)))
+         (define-correlated-match m e '(case-lambda [formals body] ...))
          `(case-lambda ,@(for/list ([formals (in-list (m 'formals))]
                                [body (in-list (m 'body))])
                       `[,formals ,(desugar body)]))]

@@ -48,19 +48,19 @@
         [(lambda)
          (cond
           [result-used?
-           (define m (match-syntax s '(lambda formals body)))
+           (define-match m s '(lambda formals body))
            (correlate* s `(lambda ,@(compile-lambda (m 'formals) (m 'body) cctx)))]
           [else (correlate* s `(quote ,(syntax->datum s)))])]
         [(case-lambda)
          (cond
           [result-used?
-           (define m (match-syntax s '(case-lambda [formals body] ...)))
+           (define-match m s '(case-lambda [formals body] ...))
            (correlate* s `(case-lambda ,@(for/list ([formals (in-list (m 'formals))]
                                                [body (in-list (m 'body))])
                                       (compile-lambda formals body cctx))))]
           [else (correlate* s `(quote ,(syntax->datum s)))])]
         [(#%app)
-         (define m (match-syntax s '(#%app . rest)))
+         (define-match m s '(#%app . rest))
          (define es (let ([es (m 'rest)])
                       (if (syntax? es)
                           (syntax->list (syntax-disarm es))
@@ -68,19 +68,19 @@
          (for/list ([s (in-list es)])
            (compile s #t))]
         [(if)
-         (define m (match-syntax s '(if tst thn els)))
+         (define-match m s '(if tst thn els))
          (correlate* s `(if
                          ,(compile (m 'tst) #f)
                          ,(compile (m 'thn) result-used?)
                          ,(compile (m 'els) result-used?)))]
         [(with-continuation-mark)
-         (define m (match-syntax s '(if key val body)))
+         (define-match m s '(if key val body))
          (correlate* s `(with-continuation-mark
                          ,(compile (m 'key) #t)
                          ,(compile (m 'val) #t)
                          ,(compile (m 'body) result-used?)))]
         [(begin begin0)
-         (define m (match-syntax s '(begin e ...+)))
+         (define-match m s '(begin e ...+))
          (define used-pos (case core-sym
                             [(begin0) 0]
                             [else (sub1 (length (m 'e)))]))
@@ -88,16 +88,16 @@
                                                 [i (in-naturals)])
                                        (compile e (= i used-pos)))))]
         [(set!)
-         (define m (match-syntax s '(set! id rhs)))
+         (define-match m s '(set! id rhs))
          (correlate* s `(,@(compile-identifier (m 'id) cctx
                                                #:set-to (compile (m 'rhs) #t))))]
         [(let-values letrec-values)
          (compile-let core-sym s cctx result-used?)]
         [(#%expression)
-         (define m (match-syntax s '(#%expression e)))
+         (define-match m s '(#%expression e))
          (compile (m 'e) result-used?)]
         [(quote)
-         (define m (match-syntax s '(quote datum)))
+         (define-match m s '(quote datum))
          (define datum (syntax->datum (m 'datum)))
          (cond
           [(self-quoting-in-linklet? datum)
@@ -105,16 +105,15 @@
           [else
            (correlate* s `(quote ,datum))])]
         [(quote-syntax)
-         (define m (match-syntax s '(quote-syntax datum . _)))
+         (define-match m s '(quote-syntax datum . _))
          (if result-used?
              (compile-quote-syntax (m 'datum) phase cctx)
              (correlate* s `(quote ,(syntax->datum (m 'datum)))))]
         [(#%variable-reference)
-         (define id-m (try-match-syntax s '(#%variable-reference id)))
-         (define top-m (and (not id-m)
-                            (try-match-syntax s '(#%variable-reference (#%top . id)))))
-         (define id (or (and id-m (id-m 'id))
-                        (and top-m (top-m 'id))))
+         (define-match id-m s #:try '(#%variable-reference id))
+         (define-match top-m s #:unless (id-m) #:try '(#%variable-reference (#%top . id)))
+         (define id (or (and (id-m) (id-m 'id))
+                        (and (top-m) (top-m 'id))))
          (correlate* s 
                      (if id
                          `(#%variable-reference ,(compile-identifier id cctx))
@@ -122,7 +121,7 @@
         [(#%top)
          (when (compile-context-module-self cctx)
            (error "found `#%top` in a module body:" s))
-         (define m (match-syntax s '(#%top . id)))
+         (define-match m s '(#%top . id))
          (compile-identifier (m 'id) cctx #:top? #t)]
         [else
          (error "unrecognized core form:" core-sym)])]
@@ -145,7 +144,7 @@
 
 (define (compile-let core-sym s cctx result-used?)
   (define rec? (eq? core-sym 'letrec-values))
-  (define m (match-syntax s '(let-values ([(id ...) rhs] ...) body)))
+  (define-match m s '(let-values ([(id ...) rhs] ...) body))
   (define phase (compile-context-phase cctx))
   (define idss (m 'id))
   (define symss (for/list ([ids (in-list idss)])

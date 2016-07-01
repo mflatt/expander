@@ -75,8 +75,8 @@
 
 ;; Helper for recognizing and dispatching on core forms:
 (define (core-form-sym s phase)
-  (define m (try-match-syntax s '(id . _)))
-  (and m
+  (define-match m s #:try '(id . _))
+  (and (m)
        (let ([b (resolve+shift (m 'id) phase)])
          (and (module-binding? b)
               (eq? core-module-name (module-path-index-resolve (module-binding-module b)))

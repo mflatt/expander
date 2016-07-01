@@ -4,8 +4,7 @@
          "scope.rkt"
          "error.rkt")
 
-(provide match-syntax
-         try-match-syntax)
+(provide define-match)
 
-(define-values (match-syntax try-match-syntax)
-  (make-syntax-matchers syntax? syntax-e raise-syntax-error))
+(define-define-match define-match
+  syntax? syntax-e raise-syntax-error)
