@@ -6,5 +6,8 @@
 
 (provide define-match)
 
+;; See "../common/make-match.rkt" for information on using
+;; `define-match`
+
 (define-define-match define-match
   syntax? syntax-e raise-syntax-error)

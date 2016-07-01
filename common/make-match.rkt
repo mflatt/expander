@@ -3,7 +3,52 @@
 
 (provide define-define-match)
 
-;; Yet another pattern matcher along the lines of `syntax-rules`
+;; Yet another pattern matcher along the lines of `syntax-rules`, but
+;; intended for relatively simple and small patterns.
+;;
+;; The `define-match` form generated here has the following syntax to
+;; match the result of <s-expr> against <pattern>:
+;;
+;;  (define-match <m-id> <s-expr> <guard> <try> '<pattern>)
+;;
+;;   <guard> = <epsilon> | #:when <expr> | #:unless <expr>
+;;   <try>   = <epsilon> | #:try
+;;
+;;   <pattern> = <id>      ; matches anything
+;;             | id:<id>   ; matches only identifiers
+;;             | (<pattern> ...)  ; zero or more
+;;             | (<pattern> ...+) ; one or more
+;;             | (<pattern> . <pattern>)
+;;
+;; Note that the ' before <pattern> doesn't produce a symbol or list;
+;; it's just a literal to textually highlight the pattern.
+;;
+;; The <m-id> bound by `define-match` is used as either
+;;   
+;;   (<m-id>)
+;;
+;; to check whether the match suceeded (which makes sense only if a
+;; guard or `#:try` is included) or
+;;
+;;    (<m-id> '<pattern-id>)
+;;
+;; to access the value for a match. Again, the ' here does not produce
+;; a symbol, but serves only as visual highlighting.
+;;
+;; Unlike `syntax-rules`/`syntax-case`/`syntax-parse`, there's no
+;; template system and no help in making sure your uses of variables
+;; before `...` expect the right shape. For example, with
+;;
+;;   (define-match m s '(a ...))
+;;
+;; then `(m 'a)` will always produce a list of matches of `a`.
+;;
+;; If a pattern doesn't match and there's no `#:try`, then a syntax
+;; error is reported.
+;;
+;; The `define-define-match` form is a macro-generating macro so that
+;; it can be used with different underlying notions of syntax, as
+;; specific by the `rt-syntax?`, etc., macro arguments.
 
 (define-syntax-rule (define-define-match define-match
                       rt-syntax? rt-syntax-e rt-raise-syntax-error)
@@ -31,15 +76,17 @@
      ;; patterns, because it keeps recomputing the set of pattern
      ;; variables, but we're only going to use it on simple patterns
      
-     (define-for-syntax (compile-pattern pattern)
+     (define-for-syntax (compile-pattern pattern already-checked?)
        (cond
         [(symbol? pattern)
          (if (regexp-match? #rx"^id(:|$)" (symbol->string pattern))
-             #`(if (or (and (rt-syntax? s)
-                            (symbol? (rt-syntax-e s)))
-                       (symbol? s))
-                   s
-                   (rt-raise-syntax-error #f "not an identifier" orig-s s))
+             (if already-checked?
+                 #'s
+                 #`(if (or (and (rt-syntax? s)
+                                (symbol? (rt-syntax-e s)))
+                           (symbol? s))
+                       s
+                       (rt-raise-syntax-error #f "not an identifier" orig-s s)))
              #'s)]
         [else
          #`(let ([s (if (rt-syntax? s) (rt-syntax-e s) s)])
@@ -51,30 +98,36 @@
                  (with-syntax ([(pattern-id ...) (extract-pattern-ids (car pattern))])
                    #`(let ([flat-s (to-syntax-list s)])
                        (cond
-                        [(not flat-s)
+                        [#,(if already-checked? #'#f #'(not flat-s))
                          (rt-raise-syntax-error #f "bad syntax" orig-s)]
-                        [#,(if (eq? '...+ (cadr pattern)) #'(null? flat-s) #'#f)
+                        [#,(if (and (eq? '...+ (cadr pattern)) (not already-checked?)) #'(null? flat-s) #'#f)
                          (rt-raise-syntax-error #f "bad syntax" orig-s)]
                         [else
                          (for/lists (pattern-id ...) ([s (in-list flat-s)])
-                                    #,(compile-pattern (car pattern)))])))]
+                                    #,(compile-pattern (car pattern) already-checked?))])))]
                 [(pair? pattern)
                  (with-syntax ([(a-pattern-id ...) (generate-temporaries (extract-pattern-ids (car pattern)))]
                                [(d-pattern-id ...) (generate-temporaries (extract-pattern-ids (cdr pattern)))])
-                   #`(if (pair? s)
-                         (let-values ([(a-pattern-id ...) (let ([s (car s)]) #,(compile-pattern (car pattern)))]
-                                      [(d-pattern-id ...) (let ([s (cdr s)]) #,(compile-pattern (cdr pattern)))])
+                   #`(if #,(if already-checked? #'#t #'(pair? s))
+                         (let-values ([(a-pattern-id ...) (let ([s (car s)]) #,(compile-pattern (car pattern)
+                                                                                                 already-checked?))]
+                                      [(d-pattern-id ...) (let ([s (cdr s)]) #,(compile-pattern (cdr pattern)
+                                                                                                 already-checked?))])
                            (values a-pattern-id ... d-pattern-id ...))
                          (rt-raise-syntax-error #f "bad syntax" orig-s)))]
                 [(null? pattern)
-                 #'(if (null? s)
-                       (values)
-                       (rt-raise-syntax-error #f "bad syntax" orig-s))]
+                 (if already-checked?
+                     #'(values)
+                     #'(if (null? s)
+                           (values)
+                           (rt-raise-syntax-error #f "bad syntax" orig-s)))]
                 [(or (keyword? pattern)
                      (boolean? pattern))
-                 #`(if (eq? '#,pattern s)
-                       (values)
-                       (rt-raise-syntax-error #f "bad syntax" orig-s))]
+                 (if already-checked?
+                     #'(values)
+                     #`(if (eq? '#,pattern s)
+                           (values)
+                           (rt-raise-syntax-error #f "bad syntax" orig-s)))]
                 [else
                  (raise-syntax-error 'define-match "bad pattern" pattern)]))]))
      
@@ -142,7 +195,7 @@
             (with-syntax ([(pattern-id ...) pattern-ids]
                           [(pattern-result-id ...) (generate-temporaries pattern-ids)]
                           [(false-result ...) (map (lambda (x) #'#f) pattern-ids)]
-                          [matcher (compile-pattern (syntax->datum #'pattern))])
+                          [matcher (compile-pattern (syntax->datum #'pattern) try?)])
               #`(begin
                   (define-values (ok? pattern-result-id ...)
                     (let ([s expr])
