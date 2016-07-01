@@ -44,17 +44,19 @@
 (define (set-remove s e) (hash-remove s e))
 (define (set-first s) (hash-iterate-key s (hash-iterate-first s)))
 
+(define-syntax in-set (make-rename-transformer #'in-immutable-hash-keys))
+
 (define (subset? s1 s2)
   (hash-keys-subset? s1 s2))
 
 (define (set-subtract s1 s2)
-  (for/fold ([s1 s1]) ([k (in-hash-keys s2)])
+  (for/fold ([s1 s1]) ([k (in-set s2)])
     (hash-remove s1 k)))
 
 (define (set-union s1 s2)
   (if ((set-count s1) . < . (set-count s2))
       (set-union s2 s1)
-      (for/fold ([s1 s1]) ([k (in-hash-keys s2)])
+      (for/fold ([s1 s1]) ([k (in-set s2)])
         (hash-set s1 k #t))))
 
 (define (set-partition s pred)
@@ -64,7 +66,7 @@
         (values y (set-add n v)))))
 
 (define (set->list s)
-  (for/list ([k (in-hash-keys s)])
+  (for/list ([k (in-set s)])
     k))
 
 (define (list->set l)
@@ -88,5 +90,3 @@
                        (let ()
                          body ...)
                        #t)))
-
-(define-syntax in-set (make-rename-transformer #'in-hash-keys))
