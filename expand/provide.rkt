@@ -1,5 +1,6 @@
 #lang racket/base
-(require "../syntax/syntax.rkt"
+(require  "../syntax/syntax.rkt"
+          "../syntax/taint.rkt"
          "../common/phase.rkt"
          "../syntax/scope.rkt"
          "../syntax/match.rkt"
@@ -31,16 +32,17 @@
     (apply
      append
      (for/list ([spec (in-list specs)])
-       (define fm (and (pair? (syntax-e spec))
-                       (identifier? (car (syntax-e spec)))
-                       (syntax-e (car (syntax-e spec)))))
+       (define disarmed-spec (syntax-disarm spec))
+       (define fm (and (pair? (syntax-e disarmed-spec))
+                       (identifier? (car (syntax-e disarmed-spec)))
+                       (syntax-e (car (syntax-e disarmed-spec)))))
        (define (check-nested want-layer)
          (unless (member want-layer (member layer layers))
            (raise-syntax-error provide-form-name (format "nested `~a' not allowed" fm) orig-s spec)))
        (case fm
          [(for-meta)
           (check-nested 'raw)
-          (define-match m spec '(for-meta phase-level spec ...))
+          (define-match m disarmed-spec '(for-meta phase-level spec ...))
           (define p (syntax-e (m 'phase-level)))
           (unless (phase? p)
             (raise-syntax-error provide-form-name "bad `for-meta' phase" orig-s spec))
@@ -53,7 +55,7 @@
                                                        'phaseless))))]
          [(for-syntax)
           (check-nested 'raw)
-          (define-match m spec '(for-syntax spec ...))
+          (define-match m disarmed-spec '(for-syntax spec ...))
           (list
            (rebuild
             spec spec
@@ -63,7 +65,7 @@
                                        'phaseless))))]
          [(for-label)
           (check-nested 'raw)
-          (define-match m spec '(for-label spec ...))
+          (define-match m disarmed-spec '(for-label spec ...))
           (list
            (rebuild
             spec spec
@@ -75,7 +77,7 @@
           (check-nested 'phaseless)
           (when protected?
             (raise-syntax-error provide-form-name "nested `protect' not allowed" orig-s spec))
-          (define-match m spec '(protect p-spec ...))
+          (define-match m disarmed-spec '(protect p-spec ...))
           (list
            (rebuild
             spec spec
@@ -85,47 +87,47 @@
                                     layer))))]
          [(rename)
           (check-nested 'phaseless)
-          (define-match m spec '(rename id:from id:to))
+          (define-match m disarmed-spec '(rename id:from id:to))
           (parse-identifier! (m 'id:from) orig-s (syntax-e (m 'id:to)) at-phase ns rp protected?)
           (list spec)]
          [(struct)
           (check-nested 'phaseless)
-          (define-match m spec '(struct id:struct (id:field ...)))
+          (define-match m disarmed-spec '(struct id:struct (id:field ...)))
           (parse-struct! (m 'id:struct) orig-s (m 'id:field) at-phase ns rp protected?)
           (list spec)]
          [(all-from)
           (check-nested 'phaseless)
-          (define-match m spec '(all-from mod-path))
+          (define-match m disarmed-spec '(all-from mod-path))
           (parse-all-from (m 'mod-path) orig-s self null at-phase ns rp protected?)
           (list spec)]
          [(all-from-except)
           (check-nested 'phaseless)
-          (define-match m spec '(all-from-except mod-path id ...))
+          (define-match m disarmed-spec '(all-from-except mod-path id ...))
           (parse-all-from (m 'mod-path) orig-s self (m 'id) at-phase ns rp protected?)
           (list spec)]
          [(all-defined)
           (check-nested 'phaseless)
-          (define-match m spec '(all-defined))
+          (define-match m disarmed-spec '(all-defined))
           (parse-all-from-module self spec orig-s null #f at-phase ns rp protected?)
           (list spec)]
          [(all-defined-except)
           (check-nested 'phaseless)
-          (define-match m spec '(all-defined-except id ...))
+          (define-match m disarmed-spec '(all-defined-except id ...))
           (parse-all-from-module self spec orig-s (m 'id) #f at-phase ns rp protected?)
           (list spec)]
          [(prefix-all-defined)
           (check-nested 'phaseless)
-          (define-match m spec '(prefix-all-defined id:prefix))
+          (define-match m disarmed-spec '(prefix-all-defined id:prefix))
           (parse-all-from-module self spec orig-s null (syntax-e (m 'id:prefix)) at-phase ns rp protected?)
           (list spec)]
          [(prefix-all-defined-except)
           (check-nested 'phaseless)
-          (define-match m spec '(prefix-all-defined-except id:prefix id ...))
+          (define-match m disarmed-spec '(prefix-all-defined-except id:prefix id ...))
           (parse-all-from-module self spec orig-s (m 'id) (syntax-e (m 'id:prefix)) at-phase ns rp protected?)
           (list spec)]
          [(expand)
-          (define-match ex-m spec '(expand (id . datum)))
-          (define-match m spec '(expand form))
+          (define-match ex-m disarmed-spec '(expand (id . datum))) ; just check syntax
+          (define-match m disarmed-spec '(expand form)) ; get form to expand
           (define exp-spec (expand (m 'form) (struct-copy expand-context ctx
                                                           [only-immediate? #t])))
           (unless (and (pair? (syntax-e exp-spec))
