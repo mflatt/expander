@@ -9,7 +9,7 @@
          "require+provide.rkt"
          "context.rkt"
          "protect.rkt"
-         "env.rkt"
+         "binding-for-transformer.rkt"
          "../namespace/core.rkt"
          "../common/module-path.rkt")
 
@@ -153,10 +153,7 @@
   (define b (resolve+shift/extra-inspector spec at-phase ns))
   (unless b
     (raise-syntax-error provide-form-name "provided identifier is not defined or required" orig-s spec))
-  ;; Use `binding-lookup` to both check for taints and determine whether the
-  ;; binding is a transformer or variable binding
-  (define-values (val insp) (binding-lookup b empty-env null ns at-phase spec))
-  (define as-transformer? (not (variable? val)))
+  (define as-transformer? (binding-for-transformer? b spec at-phase ns))
   (define immed-b (resolve+shift spec at-phase #:immediate? #t))
   (add-provide! rp sym at-phase b immed-b spec orig-s
                 #:as-protected? protected?
