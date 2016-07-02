@@ -111,31 +111,25 @@
                                            [phase phase]
                                            [header header])))
          (compiled-expression-callback rhs (length def-syms) phase (as-required? header))
-         (cond
-          [(compile-context-module-self cctx)
-           ;; In a module, generate a definition:
-           (add-body! phase `(define-values ,def-syms ,rhs))]
-          [else
-           ;; Not in a module, generate a set of assignments
-           (define gen-syms (for/list ([binding-sym (in-list binding-syms)])
-                              (select-fresh binding-sym header)))
+         ;; Generate a definition:
+         (add-body! phase `(define-values ,def-syms ,rhs))
+         (unless (or (compile-context-module-self cctx)
+                     (null? ids))
+           ;; Not in a module; ensure that the defined names are
+           ;; treated as mutable
            (add-body! phase
-                      `(let-values ([,gen-syms ,rhs])
-                        ;; Top-level variables are treated as "this variable must exist"
-                        ;; declarations at the linklet level, and (re-)defining the
-                        ;; variable just mutates it.
+                      `(if #f
                         (begin
-                          ,@(for/list ([def-sym (in-list def-syms)]
-                                       [gen-sym (in-list gen-syms)])
-                              `(set! ,def-sym ,gen-sym))
-                          (void))))
-           (unless (null? ids)
-             (add-body! phase (compile-top-level-bind
-                               ids binding-syms
-                               (struct-copy compile-context cctx
-                                            [phase phase]
-                                            [header header])
-                               #f)))])]
+                          ,@(for/list ([def-sym (in-list def-syms)])
+                              `(set! ,def-sym #f)))
+                        (void)))
+           ;; Also, install a binding at run time
+           (add-body! phase (compile-top-level-bind
+                             ids binding-syms
+                             (struct-copy compile-context cctx
+                                          [phase phase]
+                                          [header header])
+                             #f)))]
         [(define-syntaxes)
          (define-match m body '(define-syntaxes (id ...) rhs))
          (define ids (m 'id))
