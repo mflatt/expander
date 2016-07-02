@@ -44,13 +44,13 @@
       (define updated-props
         (cond
          [((hash-count old-props-with-origin) . < . (hash-count new-props))
-          (for/fold ([new-props new-props]) ([(k v) (in-hash old-props-with-origin)])
+          (for/fold ([new-props new-props]) ([(k v) (in-immutable-hash old-props-with-origin)])
             (define new-v (hash-ref new-props k missing))
             (hash-set new-props k (if (eq? new-v missing)
                                       v
                                       (cons/preserve new-v v))))]
          [else
-          (for/fold ([old-props old-props-with-origin]) ([(k v) (in-hash new-props)])
+          (for/fold ([old-props old-props-with-origin]) ([(k v) (in-immutable-hash new-props)])
             (define old-v (hash-ref old-props k missing))
             (hash-set old-props k (if (eq? old-v missing)
                                       v

@@ -47,7 +47,7 @@
   (lambda (s)
     (unless (syntax? s)
       (raise-argument-error 'syntax-property-symbol-keys "syntax" s))
-    (for/list ([(k v) (in-hash (syntax-props s))]
+    (for/list ([(k v) (in-immutable-hash (syntax-props s))]
                #:when (and (symbol? k) (symbol-interned? k)))
       k)))
 

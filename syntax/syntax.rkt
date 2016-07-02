@@ -56,8 +56,8 @@
             ,(ser (intern-properties
                    (syntax-props s)
                    (lambda ()
-                     (for/hash ([(k v) (in-hash (syntax-props s))]
-                                #:when (preserved-property-value? v))
+                     (for/hasheq ([(k v) (in-hash (syntax-props s))]
+                                  #:when (preserved-property-value? v))
                        (values k (check-value-to-preserve (plain-property-value v) syntax?))))
                    state))
             ,(serialize-state-inspector-id state)
@@ -70,7 +70,7 @@
                      (syntax-content s)))
           (reach (syntax-scopes s))
           (reach (syntax-shifted-multi-scopes s))
-          (for ([(k v) (in-hash (syntax-props s))]
+          (for ([(k v) (in-immutable-hash (syntax-props s))]
                 #:when (preserved-property-value? (plain-property-value v)))
             (reach v))))
 
@@ -85,7 +85,7 @@
 (define empty-scopes (seteq))
 (define empty-shifted-multi-scopes (set))
 (define empty-mpi-shifts null)
-(define empty-props #hash())
+(define empty-props #hasheq())
 
 (define empty-syntax
   (syntax #f
@@ -174,7 +174,7 @@
           scopes #f shifted-multi-scopes
           mpi-shifts #f srcloc
           (if props
-              (for/hash ([(k v) (in-hash props)])
+              (for/hasheq ([(k v) (in-immutable-hash props)])
                 (values k (preserved-property-value v)))
               empty-props)
           inspector

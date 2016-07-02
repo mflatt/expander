@@ -452,7 +452,7 @@
    [(eq? (propagation-prev-scs prop) scs)
     (syntax-scopes parent-s)]
    [else
-    (for/fold ([scs scs]) ([(sc op) (in-hash (propagation-scope-ops prop))])
+    (for/fold ([scs scs]) ([(sc op) (in-immutable-hash (propagation-scope-ops prop))])
       (case op
        [(add) (set-add scs sc)]
        [(remove) (set-remove scs sc)]
@@ -465,7 +465,7 @@
                                  (propagation-scope-ops prop))]
    [else
     (define new-ops
-      (for/fold ([ops (propagation-scope-ops base-prop)]) ([(sc op) (in-hash (propagation-scope-ops prop))])
+      (for/fold ([ops (propagation-scope-ops base-prop)]) ([(sc op) (in-immutable-hash (propagation-scope-ops prop))])
         (case op
           [(add) (hash-set ops sc 'add)]
           [(remove) (hash-set ops sc 'remove)]
@@ -651,7 +651,7 @@
                                  (hash-set bindings
                                            (bulk-binding-at-scopes bulk-at)
                                            ((bulk-binding-create bulk) bulk b-info sym)))))]
-                  [(b-scopes binding) (in-hash bindings)]
+                  [(b-scopes binding) (in-immutable-hash bindings)]
                   #:when (subset? b-scopes scopes))
         (cons b-scopes binding)))
     (define max-candidate
@@ -689,13 +689,13 @@
     (cond
      [((hash-count bindings) . < . (hash-count bulk-symbols))
       ;; Faster to consider each sym in `sym-binding`
-      (for/fold ([bindings bindings]) ([(sym sym-bindings) (in-hash bindings)])
+      (for/fold ([bindings bindings]) ([(sym sym-bindings) (in-immutable-hash bindings)])
         (if (hash-ref bulk-symbols sym #f)
             (hash-set bindings sym (hash-remove sym-bindings scopes))
             bindings))]
      [else
       ;; Faster to consider each sym in `bulk-symbols`
-      (for/fold ([bindings bindings]) ([sym (in-hash-keys bulk-symbols)])
+      (for/fold ([bindings bindings]) ([sym (in-immutable-hash-keys bulk-symbols)])
         (define sym-bindings (hash-ref bindings sym #f))
         (if sym-bindings
             (hash-set bindings sym (hash-remove sym-bindings scopes))
@@ -716,10 +716,10 @@
   (or (hash-ref (serialize-state-bindings-intern state) bindings #f)
       (let ([reachable-scopes (serialize-state-reachable-scopes state)])
         (define new-bindings
-          (for*/hash ([(sym bindings-for-sym) (in-hash bindings)]
+          (for*/hash ([(sym bindings-for-sym) (in-immutable-hash bindings)]
                       [new-bindings-for-sym
                        (in-value
-                        (for/hash ([(scopes binding) (in-hash bindings-for-sym)]
+                        (for/hash ([(scopes binding) (in-immutable-hash bindings-for-sym)]
                                    #:when (subset? scopes reachable-scopes))
                           (values (intern-scopes scopes state) binding)))]
                       #:unless (zero? (hash-count new-bindings-for-sym)))
@@ -741,8 +741,8 @@
                   new-bulk-bindings)))))
 
 (define (register-bindings-reachable bindings reachable-scopes reach register-trigger)
-  (for* ([(sym bindings-for-sym) (in-hash bindings)]
-         [(scopes binding) (in-hash bindings-for-sym)])
+  (for* ([(sym bindings-for-sym) (in-immutable-hash bindings)]
+         [(scopes binding) (in-immutable-hash bindings-for-sym)])
     (define v (and (binding-reach-scopes? binding)
                    ((binding-reach-scopes-ref binding) binding)))
     (when v
