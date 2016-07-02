@@ -7,7 +7,7 @@
          "../syntax/binding.rkt"
          "../syntax/error.rkt"
          "../namespace/namespace.rkt"
-         "../namespace/protect.rkt"
+         "../namespace/provided.rkt"
          "../common/module-path.rkt")
 
 (provide make-requires+provides
@@ -41,13 +41,13 @@
                            require-mpis ; module-path-index to itself as interned
                            require-mpis/fast ; same table, but `eq?`-keyed for fast already-interned checks
                            require-mpis-in-order ; require-phase -> list of module-path-index
-                           requires   ; mpi [interned] -> require-phase -> sym -> list of (required id phase boolean)
+                           requires   ; mpi [interned] -> require-phase -> sym -> list of required
                            provides   ; phase -> sym -> binding or protected
                            phase-to-defined-syms ; phase -> sym -> boolean
                            [can-cross-phase-persistent? #:mutable]
                            [all-bindings-simple? #:mutable])) ; tracks whether bindings are easily reconstructed
 
-(struct required (id phase can-be-shadowed?))
+(struct required (id phase can-be-shadowed? as-transformer?))
 
 (define (make-requires+provides self)
   (requires+provides self
@@ -103,7 +103,8 @@
 
 ;; Register a specific identifier that is required
 (define (add-defined-or-required-id! r+p id phase binding
-                                          #:can-be-shadowed? [can-be-shadowed? #f])
+                                          #:can-be-shadowed? [can-be-shadowed? #f]
+                                          #:as-transformer? as-transformer?)
   ;; Register specific required identifier
   (unless (equal? phase (phase+ (module-binding-nominal-phase binding)
                                 (module-binding-nominal-require-phase binding)))
@@ -111,20 +112,22 @@
   (add-defined-or-required-id-at-nominal! r+p id phase
                                           #:nominal-module (module-binding-nominal-module binding)
                                           #:nominal-require-phase (module-binding-nominal-require-phase binding)
-                                          #:can-be-shadowed? can-be-shadowed?))
+                                          #:can-be-shadowed? can-be-shadowed?
+                                          #:as-transformer? as-transformer?))
 
 ;; The internals of `add-defined-or-required-id!` that consumes just
 ;; the needed part of the binding
 (define (add-defined-or-required-id-at-nominal! r+p id phase
                                                 #:nominal-module nominal-module
                                                 #:nominal-require-phase nominal-require-phase
-                                                #:can-be-shadowed? can-be-shadowed?)
+                                                #:can-be-shadowed? can-be-shadowed?
+                                                #:as-transformer? as-transformer?)
   (define at-mod (hash-ref! (requires+provides-requires r+p)
                             (intern-mpi r+p nominal-module)
                             make-hasheqv))
   (define sym-to-reqds (hash-ref! at-mod nominal-require-phase make-hasheq))
   (define sym (syntax-e id))
-  (hash-set! sym-to-reqds sym (cons (required id phase can-be-shadowed?)
+  (hash-set! sym-to-reqds sym (cons (required id phase can-be-shadowed? as-transformer?)
                                     (hash-ref sym-to-reqds sym null))))
 
 ;; Add bindings of an enclosing module
@@ -145,7 +148,8 @@
                                               (phase+ (required-phase reqd) phase-shift)
                                               #:nominal-module enclosing-mod
                                               #:nominal-require-phase phase-shift
-                                              #:can-be-shadowed? #t))))
+                                              #:can-be-shadowed? #t
+                                              #:as-transformer? (required-as-transformer? reqd)))))
 
 ;; Removes a required identifier, in anticiation of it being defined
 (define (remove-required-id! r+p id phase #:unless-matches binding)
@@ -277,7 +281,9 @@
 
 ;; Register that a binding is provided as a given symbol; report an
 ;; error if the provide is inconsistent with an earlier one
-(define (add-provide! r+p sym phase binding immed-binding id orig-s as-protected?)
+(define (add-provide! r+p sym phase binding immed-binding id orig-s
+                      #:as-protected? as-protected?
+                      #:as-transformer? as-transformer?)
   (when (and as-protected?
              (not (eq? (module-binding-module immed-binding) (requires+provides-self r+p))))
     (raise-syntax-error #f "cannot protect imported identifier with re-provide" sym))
@@ -285,11 +291,11 @@
                 phase
                 (lambda (at-phase)
                   (define b/p (hash-ref at-phase sym #f))
-                  (define b (if (protected? b/p) (protected-binding b/p) b/p))
+                  (define b (provided-as-binding b/p))
                   (cond
                    [(not b)
-                    (hash-set at-phase sym (if as-protected?
-                                               (protected binding)
+                    (hash-set at-phase sym (if (or as-protected? as-transformer?)
+                                               (provided binding as-protected? as-transformer?)
                                                binding))]
                    [(same-binding? b binding)
                     ;; If `binding` has different nominal info (i.e., same binding
@@ -345,7 +351,9 @@
                 (values sym
                         (let loop ([binding binding])
                           (cond
-                           [(protected? binding)
-                            (protected (loop (protected-binding binding)))]
+                           [(provided? binding)
+                            (provided (loop (provided-binding binding))
+                                      (provided-protected? binding)
+                                      (provided-syntax? binding))]
                            [else
                             (binding-module-path-index-shift binding from-mpi to-mpi)]))))))]))

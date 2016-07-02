@@ -7,7 +7,7 @@
          "../expand/root-expand-context.rkt"
          "../host/linklet.rkt"
          "namespace.rkt"
-         "protect.rkt"
+         "provided.rkt"
          "registry.rkt"
          (submod "namespace.rkt" for-module))
 
@@ -29,6 +29,7 @@
          module-inspector
          module-submodule-names
          module-supermodule-name
+         module-get-all-variables
          module-access
          module-compute-access!
          
@@ -51,7 +52,7 @@
 
 (struct module (self            ; module path index used for a self reference
                 requires        ; list of (cons phase list-of-module-path-index)
-                provides        ; phase-level -> sym -> binding or protected binding
+                provides        ; phase-level -> sym -> binding or (provided binding bool bool)
                 [access #:mutable] ; phase-level -> sym -> 'provided or 'protected; computed on demand from `provides`
                 language-info   ; #f or vector
                 min-phase-level ; phase-level
@@ -64,7 +65,8 @@
                 no-protected?   ; short cut for checking protected access
                 inspector       ; declaration-time inspector
                 submodule-names ; associated submodules (i.e, when declared together)
-                supermodule-name)) ; associated supermodule (i.e, when declared together)
+                supermodule-name ; associated supermodule (i.e, when declared together)
+                get-all-variables)) ; for `module->indirect-exports`
 
 (define (make-module #:self self
                      #:requires [requires null]
@@ -79,7 +81,8 @@
                      #:cross-phase-persistent? [cross-phase-persistent? primitive?]
                      #:no-protected? [no-protected? #f]
                      #:submodule-names [submodule-names null]
-                     #:supermodule-name [supermodule-name #f])
+                     #:supermodule-name [supermodule-name #f]
+                     #:get-all-variables [get-all-variables (lambda () null)]) ; ok to omit exported
   (module self requires provides
           #f ; access
           language-info
@@ -92,7 +95,8 @@
           no-protected?
           (current-code-inspector)
           submodule-names
-          supermodule-name))
+          supermodule-name
+          get-all-variables))
 
 (struct module-instance (namespace
                          module                        ; can be #f for the module being expanded
@@ -415,11 +419,9 @@
   (define access
     (for/hasheqv ([(phase at-phase) (in-hash (module-provides m))])
       (values phase
-              (for/hash ([(sym binding) (in-hash at-phase)])
-                (values (module-binding-sym (if (protected? binding)
-                                                (protected-binding binding)
-                                                binding))
-                        (if (protected? binding)
+              (for/hash ([(sym binding/p) (in-hash at-phase)])
+                (values (module-binding-sym (provided-as-binding binding/p))
+                        (if (provided-as-protected? binding/p)
                             'protected
                             'provided))))))
   (set-module-access! m access)

@@ -2,7 +2,6 @@
 (require "../syntax/syntax.rkt"
          "../syntax/binding.rkt"
          "../syntax/error.rkt"
-         "../namespace/protect.rkt"
          "../namespace/namespace.rkt"
          "../namespace/module.rkt"
          "../common/module-path.rkt"

@@ -8,6 +8,7 @@
          "require+provide.rkt"
          "context.rkt"
          "protect.rkt"
+         "env.rkt"
          "../namespace/core.rkt"
          "../common/module-path.rkt")
 
@@ -150,8 +151,14 @@
   (define b (resolve+shift/extra-inspector spec at-phase ns))
   (unless b
     (raise-syntax-error provide-form-name "provided identifier is not defined or required" orig-s spec))
+  ;; Use `binding-lookup` to both check for taints and determine whether the
+  ;; binding is a transformer or variable binding
+  (define-values (val insp) (binding-lookup b empty-env null ns at-phase spec))
+  (define as-transformer? (not (variable? val)))
   (define immed-b (resolve+shift spec at-phase #:immediate? #t))
-  (add-provide! rp sym at-phase b immed-b spec orig-s protected?))
+  (add-provide! rp sym at-phase b immed-b spec orig-s
+                #:as-protected? protected?
+                #:as-transformer? as-transformer?))
 
 (define (parse-struct! id:struct orig-s fields at-phase ns rp protected?)
   (define (mk fmt)
@@ -216,7 +223,9 @@
                        (hash-set! found except-id #t))))
       (define b (resolve+shift/extra-inspector id phase ns))
       (define immed-b (resolve+shift id phase #:immediate? #t))
-      (add-provide! rp (add-prefix (syntax-e id)) phase b immed-b id orig-s protected?)))
+      (add-provide! rp (add-prefix (syntax-e id)) phase b immed-b id orig-s 
+                    #:as-protected? protected?
+                    #:as-transformer? (required-as-transformer? i))))
   
   ;; Check that all exclusions matched something to exclude:
   (unless (= (hash-count found) (length except-ids))

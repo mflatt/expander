@@ -28,7 +28,10 @@
           'module-compiled-name module-compiled-name
           'module-compiled-submodules module-compiled-submodules
           'module-compiled-language-info module-compiled-language-info
-
+          'module-compiled-imports module-compiled-imports
+          'module-compiled-exports module-compiled-exports
+          'module-compiled-indirect-exports module-compiled-indirect-exports
+                    
           'make-empty-namespace make-empty-namespace
 
           'namespace-attach-module namespace-attach-module
@@ -50,6 +53,9 @@
           'module-declared? module-declared?
           'module-predefined? module-predefined?
           'module->language-info module->language-info
+          'module->imports module->imports
+          'module->exports module->exports
+          'module->indirect-exports module->indirect-exports
           'module->namespace module->namespace
           'namespace-unprotect-module namespace-unprotect-module))
 

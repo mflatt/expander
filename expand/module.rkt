@@ -627,7 +627,8 @@
                                                       self phase all-scopes-stx
                                                       #:frame-id frame-id
                                                       #:requires+provides requires+provides
-                                                      #:in exp-body))
+                                                      #:in exp-body
+                                                      #:as-transformer? #t))
           (add-defined-syms! requires+provides syms phase)
           ;; Expand and evaluate RHS:
           (define-values (exp-rhs vals)

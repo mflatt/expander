@@ -19,7 +19,7 @@
 
 (define (compile+eval-expression e #:namespace [ns demo-ns])
   (define exp-e (expand-expression e #:namespace ns))
-  (define c (compile exp-e ns  check-serialize?
+  (define c (compile exp-e ns check-serialize?
                      (lambda (exp-e ns)
                        (if check-reexpand?
                            (parameterize ([current-output-port (open-output-bytes)])
@@ -1303,6 +1303,47 @@
 (check-error
  (namespace-attach-module-declaration demo-ns ''provides-random-r has-already-ns)
  #rx"different declaration")
+
+;; ----------------------------------------
+;; module exports
+
+(define one-of-each-provide-at-each-phase-expr
+  '(module one-of-each-provide-at-each-phase '#%kernel
+    (#%require (for-syntax '#%kernel)
+               (for-meta 2 '#%kernel))
+    (define-values (one) 1)
+    (define-values (also-one) 1)
+    (define-syntaxes (one-s) (quote-syntax 1))
+    (begin-for-syntax
+      (define-values (two) 2)
+      (define-values (also-two) 2)
+      (define-syntaxes (two-s) (quote-syntax 2)))
+    (#%provide one one-s
+               (for-syntax two two-s))))
+
+(eval-module-declaration one-of-each-provide-at-each-phase-expr)
+
+(parameterize ([current-namespace demo-ns])
+  (eval-expression '(call-with-values
+                     (lambda () (module->exports ''one-of-each-provide-at-each-phase))
+                     list)
+                   #:check '(((0 one) (1 two))
+                             ((0 one-s) (1 two-s)))))
+
+(parameterize ([current-namespace demo-ns])
+  (eval-expression '(module->indirect-exports ''one-of-each-provide-at-each-phase)
+                   #:check '((0 also-one) (1 also-two))))
+
+(check-value (call-with-values
+              (lambda () (module-compiled-exports
+                     (compile one-of-each-provide-at-each-phase-expr demo-ns)))
+              list)
+             '(((0 one) (1 two))
+               ((0 one-s) (1 two-s))))
+
+(check-value (module-compiled-indirect-exports
+              (compile one-of-each-provide-at-each-phase-expr demo-ns))
+             '((0 also-one) (1 also-two)))
 
 ;; ----------------------------------------
 ;; top-level fallbacks

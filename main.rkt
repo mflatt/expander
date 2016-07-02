@@ -5,6 +5,7 @@
          "namespace/namespace.rkt"
          "eval/main.rkt"
          "eval/dynamic-require.rkt"
+         "eval/reflect.rkt"
          "namespace/api.rkt"
          (prefix-in wrapper: "eval/api.rkt")
          "namespace/attach.rkt"
@@ -72,6 +73,8 @@
          identifier?
          syntax-property
          syntax-debug-info
+         module-compiled-exports
+         module-compiled-indirect-exports
          
          syntax-shift-phase-level
          bound-identifier=?)

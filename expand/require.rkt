@@ -8,6 +8,7 @@
          "../syntax/error.rkt"
          "../namespace/namespace.rkt"
          "../namespace/module.rkt"
+         "../namespace/provided.rkt"
          "../syntax/match.rkt"
          "require+provide.rkt"
          "env.rkt"
@@ -235,7 +236,7 @@
            [(adjust-rename? adjust) (list (adjust-rename-from-sym adjust))]
            [else #f])
    #:can-bulk? (not adjust)
-   #:filter (lambda (binding)
+   #:filter (lambda (binding as-transformer?)
               (define sym (module-binding-nominal-sym binding))
               (define provide-phase (module-binding-nominal-phase binding))
               (define adjusted-sym
@@ -273,7 +274,8 @@
                     (remove-required-id! requires+provides s bind-phase #:unless-matches binding))
                   (add-defined-or-required-id! requires+provides
                                                s bind-phase binding
-                                               #:can-be-shadowed? can-be-shadowed?)))
+                                               #:can-be-shadowed? can-be-shadowed?
+                                               #:as-transformer? as-transformer?)))
               adjusted-sym))
   ;; check that we covered all expected ids:
   (define need-syms (cond
@@ -301,14 +303,14 @@
   (for ([(provide-phase-level provides) (in-hash (module-provides m))])
     (define phase (phase+ phase-shift provide-phase-level))
     (for ([sym (in-list (or only-syms (hash-keys provides)))])
-      (define out-binding (hash-ref provides sym #f))
-      (when out-binding
-        (define b (provide-binding-to-require-binding out-binding sym
+      (define binding/p (hash-ref provides sym #f))
+      (when binding/p
+        (define b (provide-binding-to-require-binding binding/p sym
                                                       #:self self
                                                       #:mpi mpi
                                                       #:provide-phase-level provide-phase-level
                                                       #:phase-shift phase-shift))
-        (let-values ([(sym) (filter b)])
+        (let-values ([(sym) (filter b (provided-as-transformer? binding/p))])
           (when (and sym
                      (not can-bulk?)) ;; bulk binding added later
             ;; Add a non-bulk binding, since `filter` has checked/adjusted it

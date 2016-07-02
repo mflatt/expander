@@ -4,12 +4,16 @@
          "namespace.rkt"
          (submod "namespace.rkt" for-module)
          "module.rkt"
+         "provide-for-api.rkt"
          (submod "module.rkt" for-module-reflect)
          "../common/contract.rkt")
 
 (provide module-declared?
          module-predefined?
          module->language-info
+         module->imports
+         module->exports
+         module->indirect-exports
          module->namespace
          namespace-unprotect-module)
 
@@ -30,13 +34,28 @@
   (define m (namespace->module ns name))
   (and m (module-primitive? m)))
 
-(define (module->language-info mod [load? #f])
+(define (module-> extract who mod [load? #f])
   (unless (module-reference? mod)
-    (raise-argument-error 'module->language-info module-reference-str mod))
-  (define m (namespace->module/complain 'module->lanuage-info
+    (raise-argument-error who module-reference-str mod))
+  (define m (namespace->module/complain who
                                         (current-namespace)
                                         (reference->resolved-module-path mod #:load? load?)))
-  (module-language-info m))
+  (extract m))
+
+(define (module->language-info mod [load? #f])
+  (module-> module-language-info 'module->language-info mod load?))
+
+(define (module->imports mod)
+  (module-> module-requires 'module->imports mod))
+
+(define (module->exports mod)
+  (provides->api-provides (module-> module-provides 'module->exports mod)))
+
+(define (module->indirect-exports mod)
+  (module-> (lambda (m)
+              (variables->api-nonprovides (module-provides m)
+                                          ((module-get-all-variables m))))
+            'module->indirect-exports mod))
 
 (define (module->namespace mod [ns (current-namespace)])
   (unless (module-reference? mod)

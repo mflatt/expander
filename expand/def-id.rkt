@@ -38,7 +38,8 @@
                                        #:frame-id frame-id
                                        #:top-level-bind-scope [top-level-bind-scope #f]
                                        #:requires+provides [requires+provides #f]
-                                       #:in [orig-s #f])
+                                       #:in [orig-s #f]
+                                       #:as-transformer? [as-transformer? #f])
   (define defined-syms-at-phase
     (or (hash-ref defined-syms phase #f) (let ([ht (make-hasheq)])
                                            (hash-set! defined-syms phase ht)
@@ -62,7 +63,7 @@
       (remove-required-id! requires+provides id phase #:unless-matches b))
     (add-binding! id b phase #:in orig-s)
     (when requires+provides
-      (add-defined-or-required-id! requires+provides id phase b))
+      (add-defined-or-required-id! requires+provides id phase b #:as-transformer? as-transformer?))
     defined-sym))
 
 (define (no-extra-scopes? id all-scopes-stx top-level-bind-scope phase)

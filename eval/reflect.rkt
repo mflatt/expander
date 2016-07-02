@@ -2,14 +2,19 @@
 (require "../compile/compiled-in-memory.rkt"
          "../host/linklet.rkt"
          "../common/contract.rkt"
-         "module.rkt")
+         "module.rkt"
+         "../namespace/provided.rkt"
+         "../namespace/provide-for-api.rkt")
 
 (provide compiled-expression?
 
          compiled-module-expression?
          module-compiled-name
          module-compiled-submodules
-         module-compiled-language-info)
+         module-compiled-language-info
+         module-compiled-imports
+         module-compiled-exports
+         module-compiled-indirect-exports)
 
 ;; The representation of a module with its submodules is designed to
 ;; make reading an individual submodule (with its submodule path
@@ -116,6 +121,29 @@
   (check 'module-compiled-language-info compiled-module-expression? c)  
   (define inst (compiled-module->declaration-instance c))
   (instance-variable-value inst 'language-info))
+
+(define (module-compiled-imports c)
+  (check 'module-compiled-imports compiled-module-expression? c)
+  (define inst (compiled-module->declaration-instance c))
+  (instance-variable-value inst 'requires))
+
+(define (module-compiled-exports c)
+  (check 'module-compiled-imports compiled-module-expression? c)
+  (define inst (compiled-module->declaration-instance c))
+  (provides->api-provides (instance-variable-value inst 'provides)))
+
+(define (module-compiled-indirect-exports c)
+  (check 'module-compiled-indirect-imports compiled-module-expression? c)
+  (define-values (h inst) (compiled-module->h+declaration-instance c))
+  (define min-phase (instance-variable-value inst 'min-phase))
+  (define max-phase (instance-variable-value inst 'max-phase))
+  (variables->api-nonprovides (instance-variable-value inst 'provides)
+                              (for/hash ([phase-level (in-range min-phase (add1 max-phase))])
+                                (define linklet (hash-ref h phase-level #f))
+                                (values phase-level
+                                        (if linklet
+                                            (linklet-export-variables linklet)
+                                            null)))))
 
 ;; ----------------------------------------
 

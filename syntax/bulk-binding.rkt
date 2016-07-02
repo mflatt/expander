@@ -5,7 +5,7 @@
          "binding.rkt"
          "../common/module-path.rkt"
          (only-in "../compile/reserved-symbol.rkt" bulk-binding-registry-id)
-         "../namespace/protect.rkt")
+         "../namespace/provided.rkt")
 
 (provide provide-binding-to-require-binding
 
@@ -40,15 +40,13 @@
 
 ;; Helper for both regular imports and bulk bindings, which converts a
 ;; providing module's view of a binding to a requiring mdoule's view.
-(define (provide-binding-to-require-binding out-binding ; the provided binding
+(define (provide-binding-to-require-binding binding/p   ; the provided binding
                                             sym         ; the symbolic name of the provide
                                             #:self self ; the providing module's view of itself
                                             #:mpi mpi   ; the requiring module's view
                                             #:provide-phase-level provide-phase-level
                                             #:phase-shift phase-shift)
-  (define binding (if (protected? out-binding)
-                      (protected-binding out-binding)
-                      out-binding))
+  (define binding (provided-as-binding binding/p))
   (define from-mod (module-binding-module binding))
   (module-binding-update binding
                          #:module (module-path-index-shift from-mod self mpi)
@@ -57,7 +55,7 @@
                          #:nominal-sym sym
                          #:nominal-require-phase phase-shift
                          #:frame-id #f
-                         #:extra-inspector (and (not (protected? out-binding)) ; see [*] below
+                         #:extra-inspector (and (not (provided-as-protected? binding/p)) ; see [*] below
                                                 (module-binding-extra-inspector binding))))
 
 ;; [*] If a binding has an extra inspector, it's because the binding

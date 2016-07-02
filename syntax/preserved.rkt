@@ -21,7 +21,7 @@
 (define (check-value-to-preserve v syntax?)
   (datum-map v
              (lambda (tail? v)
-               (unless (or (null? v) (symbol? v) (number? v)
+               (unless (or (null? v) (boolean? v) (symbol? v) (number? v)
                            (char? v) (string? v) (bytes? v) (regexp? v)
                            (syntax? v)
                            (pair? v) (vector? v) (box? v) (hash? v)

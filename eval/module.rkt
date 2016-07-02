@@ -19,7 +19,8 @@
 ;; see "compile/main.rkt" and "compile/module.rkt"
 
 (provide eval-module
-         compiled-module->declaration-instance)
+         compiled-module->declaration-instance
+         compiled-module->h+declaration-instance)
 
 (define (eval-module c
                      #:namespace [ns (current-namespace)]
@@ -53,7 +54,7 @@
 
   (define min-phase (decl 'min-phase))
   (define max-phase (decl 'max-phase))
-  (define evaled-h (for*/hash ([phase-level (in-range min-phase (add1 max-phase))]
+  (define phases-h (for*/hash ([phase-level (in-range min-phase (add1 max-phase))]
                                [v (in-value (hash-ref h phase-level #f))]
                                #:when v)
                      (values phase-level v)))
@@ -70,7 +71,7 @@
         #hasheqv()))
   
   (define create-root-expand-context-from-module ; might be used to create root-expand-context
-    (make-create-root-expand-context-from-module requires evaled-h))
+    (make-create-root-expand-context-from-module requires phases-h))
   
   (define m (make-module #:self original-self
                          #:requires requires
@@ -81,6 +82,7 @@
                          #:cross-phase-persistent? (decl 'cross-phase-persistent?)
                          #:submodule-names (append pre-submodule-names post-submodule-names)
                          #:supermodule-name supermodule-name
+                         #:get-all-variables (lambda () (get-all-variables phases-h))
                          #:prepare-instance-callback
                          (lambda (data-box ns phase-shift self bulk-binding-registry insp)
                            (unless (unbox data-box)
@@ -91,7 +93,7 @@
                          #:instantiate-phase-callback
                          (lambda (data-box ns phase-shift phase-level self bulk-binding-registry insp)
                            (define syntax-literals-instance (unbox data-box))
-                           (define phase-linklet (hash-ref evaled-h phase-level #f))
+                           (define phase-linklet (hash-ref phases-h phase-level #f))
                            
                            (when phase-linklet
                              (define module-uses (hash-ref phase-to-link-modules phase-level))
@@ -240,6 +242,11 @@
     (compiled-module->dh+h+data-instance+declaration-instance c))
   declaration-instance)
 
+(define (compiled-module->h+declaration-instance c)
+  (define-values (dh h data-instance declaration-instance)
+    (compiled-module->dh+h+data-instance+declaration-instance c))
+  (values h declaration-instance))
+
 ;; ----------------------------------------
 
 (define (make-data-instance-from-compiled-in-memory cim)
@@ -249,3 +256,10 @@
   (instance-set-variable-value! data-instance 'deserialized-syntax
                                 (compiled-in-memory-syntax-literalss cim))
   data-instance)
+
+;; ----------------------------------------
+
+(define (get-all-variables phases-h)
+  (for/hash ([(phase linklet) (in-hash phases-h)])
+    (values phase
+            (linklet-export-variables linklet))))

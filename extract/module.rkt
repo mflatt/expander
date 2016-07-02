@@ -40,7 +40,7 @@
         (define decl (instantiate-linklet (hash-ref h 'decl)
                                           (list deserialize-instance
                                                 data-instance)))
-        ;; Make a `compiled-module` structure to represent the compilaed module
+        ;; Make a `compiled-module` structure to represent the compiled module
         ;; and all its linklets (but not its submodules, although they're in `h`)
         (define comp-mod (compiled-module decl h))
         (hash-set! compiled-modules name comp-mod)

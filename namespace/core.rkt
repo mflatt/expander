@@ -6,6 +6,7 @@
          "../expand/env.rkt"
          "../syntax/match.rkt"
          "../common/module-path.rkt"
+         "provided.rkt"
          "namespace.rkt"
          "module.rkt")
 
@@ -60,10 +61,13 @@
                 #:predefined? #t
                 #:self core-mpi
                 #:provides
-                (hasheqv 0 (for/hasheq ([sym (in-sequences
-                                              (in-hash-keys core-primitives)
-                                              (in-hash-keys core-forms))])
-                             (values sym (make-module-binding core-mpi 0 sym))))
+                (hasheqv 0 (for/hasheq ([syms (in-list (list core-primitives
+                                                             core-forms))]
+                                        [syntax? (in-list '(#f #t))]
+                                        #:when #t
+                                        [sym (in-hash-keys syms)])
+                             (define b (make-module-binding core-mpi 0 sym))
+                             (values sym (if syntax? (provided b #f #t) b))))
                 #:instantiate-phase-callback
                 (lambda (data-box ns phase phase-level self bulk-binding-registry insp)
                   (case phase-level

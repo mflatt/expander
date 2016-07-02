@@ -4,7 +4,7 @@
          "../namespace/core.rkt"
          "../namespace/namespace.rkt"
          "../namespace/module.rkt"
-         "../namespace/protect.rkt"
+         "../namespace/provided.rkt"
          "../syntax/binding.rkt"
          "core-primitive.rkt"
          "../common/module-path.rkt"
@@ -75,7 +75,7 @@
                              (values sym
                                      (if (or protected?
                                              (member sym protected-syms))
-                                         (protected binding)
+                                         (provided binding #t #f)
                                          binding))))
                 #:instantiate-phase-callback
                 (lambda (data-box ns phase-shift phase-level self bulk-binding-registry insp)
