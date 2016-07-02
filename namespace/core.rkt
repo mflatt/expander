@@ -57,6 +57,7 @@
    ns
    (make-module #:cross-phase-persistent? #t
                 #:no-protected? #t
+                #:predefined? #t
                 #:self core-mpi
                 #:provides
                 (hasheqv 0 (for/hasheq ([sym (in-sequences

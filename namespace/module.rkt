@@ -59,6 +59,7 @@
                 prepare-instance  ; box namespace phase-shift bulk-binding-registry inspector -> any
                 instantiate-phase ; box namespace phase-shift phase-level bulk-binding-registry inspector -> any
                 primitive?      ; inline variable values in compiled code?
+                predefined?     ; always defined on startup?
                 cross-phase-persistent?
                 no-protected?   ; short cut for checking protected access
                 inspector       ; declaration-time inspector
@@ -74,6 +75,7 @@
                      #:prepare-instance-callback [prepare-instance void]
                      #:language-info [language-info #f]
                      #:primitive? [primitive? #f]
+                     #:predefined? [predefined? #f]
                      #:cross-phase-persistent? [cross-phase-persistent? primitive?]
                      #:no-protected? [no-protected? #f]
                      #:submodule-names [submodule-names null]
@@ -85,6 +87,7 @@
           prepare-instance
           instantiate-phase
           primitive?
+          predefined?
           cross-phase-persistent?
           no-protected?
           (current-code-inspector)

@@ -48,6 +48,7 @@
           'namespace-base-phase namespace-base-phase          
           
           'module-declared? module-declared?
+          'module-predefined? module-predefined?
           'module->language-info module->language-info
           'module->namespace module->namespace
           'namespace-unprotect-module namespace-unprotect-module))

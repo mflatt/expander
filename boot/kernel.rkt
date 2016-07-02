@@ -64,6 +64,7 @@
    ns
    (make-module #:cross-phase-persistent? #t
                 #:primitive? primitive?
+                #:predefined? #t
                 #:no-protected? (not protected?)
                 #:self mpi
                 #:provides
@@ -92,6 +93,7 @@
   (declare-module!
    ns
    (make-module #:cross-phase-persistent? #t
+                #:predefined? #t
                 #:self mpi
                 #:requires (list (cons 0 require-mpis))
                 #:provides

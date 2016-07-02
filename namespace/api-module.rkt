@@ -8,6 +8,7 @@
          "../common/contract.rkt")
 
 (provide module-declared?
+         module-predefined?
          module->language-info
          module->namespace
          namespace-unprotect-module)
@@ -20,6 +21,14 @@
   (define ns (current-namespace))
   (define name (reference->resolved-module-path mod #:load? load?))
   (and (namespace->module ns name) #t))
+
+(define (module-predefined? mod)
+  (unless (module-reference? mod)
+    (raise-argument-error 'module-predefined? module-reference-str mod))
+  (define ns (current-namespace))
+  (define name (reference->resolved-module-path mod #:load? #f))
+  (define m (namespace->module ns name))
+  (and m (module-primitive? m)))
 
 (define (module->language-info mod [load? #f])
   (unless (module-reference? mod)
