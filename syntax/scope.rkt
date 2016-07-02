@@ -546,13 +546,17 @@
   (if (equal? src-scopes dest-scopes)
       s
       (let-values ([(src-smss src-scs)
-                    (set-partition (for/set ([sc (in-set src-scopes)])
+                    (set-partition (for/seteq ([sc (in-set src-scopes)])
                                      (generalize-scope sc))
-                                   shifted-multi-scope?)]
+                                   shifted-multi-scope?
+                                   (set)
+                                   (seteq))]
                    [(dest-smss dest-scs)
-                    (set-partition (for/set ([sc (in-set dest-scopes)])
+                    (set-partition (for/seteq ([sc (in-set dest-scopes)])
                                      (generalize-scope sc))
-                                   shifted-multi-scope?)])
+                                   shifted-multi-scope?
+                                   (set)
+                                   (seteq))])
         (define-memo-lite (swap-scs scs)
           (if (subset? src-scs scs)
               (set-union (set-subtract scs src-scs) dest-scs)

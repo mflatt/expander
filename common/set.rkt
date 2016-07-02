@@ -59,8 +59,8 @@
       (for/fold ([s1 s1]) ([k (in-set s2)])
         (hash-set s1 k #t))))
 
-(define (set-partition s pred)
-  (for/fold ([y (set)] [n (set)]) ([v (in-set s)])
+(define (set-partition s pred empty-y-set empty-n-set)
+  (for/fold ([y empty-y-set] [n empty-n-set]) ([v (in-set s)])
     (if (pred v)
         (values (set-add y v) n)
         (values y (set-add n v)))))
