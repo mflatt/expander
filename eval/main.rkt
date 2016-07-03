@@ -65,12 +65,22 @@
 ;; [Don't use keyword arguments here, because the function is
 ;;  exported for use by an embedding runtime system.]
 (define (compile s [ns (current-namespace)] [serializable? #t] [expand expand] [to-source? #f])
+  ;; The given `s` might be an already-compiled expression because it
+  ;; went through some strange path, such as a `load` on a bytecode
+  ;; file, which would wrap `#%top-interaction` around the compiled
+  ;; expression where the expansion just discards the wrapper
   (define cs
-    (per-top-level s ns
-                   #:single (lambda (s ns) (list (compile-single s ns expand
-                                                            serializable?
-                                                            to-source?)))
-                   #:combine append))
+    (cond
+     [(compiled-expression? s) (list s)]
+     [(and (syntax? s)
+           (compiled-expression? (syntax-e s)))
+      (list (syntax-e s))]
+     [else
+      (per-top-level s ns
+                     #:single (lambda (s ns) (list (compile-single s ns expand
+                                                              serializable?
+                                                              to-source?)))
+                     #:combine append)]))
   (if (= 1 (length cs))
       (car cs)
       (compiled-tops->compiled-top cs #:to-source? to-source?)))
