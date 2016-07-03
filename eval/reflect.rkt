@@ -76,7 +76,7 @@
        ;; loading code than easy manipulation...
        (define ht (linklet-directory->hash c))
        (define bh (linklet-bundle->hash (hash-ref ht #f)))
-       (define names (hash-ref bh (if non-star? 'pre-submodules 'post-submodules) null))
+       (define names (hash-ref bh (if non-star? 'pre 'post) null))
        (for/list ([name (in-list names)])
          (hash-ref ht name))])]
     [(c non-star? submods)
