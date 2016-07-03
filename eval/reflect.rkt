@@ -14,7 +14,8 @@
          module-compiled-language-info
          module-compiled-imports
          module-compiled-exports
-         module-compiled-indirect-exports)
+         module-compiled-indirect-exports
+         module-compiled-cross-phase-persistent?)
 
 ;; The representation of a module with its submodules is designed to
 ;; make reading an individual submodule (with its submodule path
@@ -144,6 +145,11 @@
                                         (if linklet
                                             (linklet-export-variables linklet)
                                             null)))))
+
+(define (module-compiled-cross-phase-persistent? c)
+  (check 'module-compiled-cross-phase-persistent?  compiled-module-expression? c)
+  (define inst (compiled-module->declaration-instance c))
+  (instance-variable-value inst 'cross-phase-persistent?))
 
 ;; ----------------------------------------
 
