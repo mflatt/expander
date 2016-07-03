@@ -710,6 +710,13 @@
                  (lambda args
                    (apply abort-current-continuation (default-continuation-prompt-tag) args))))))))])))
 
+(define (default-read-interaction src in)
+  (unless (input-port? in)
+    (raise-argument-error 'default-read-interaction "input-port?" in))
+  (parameterize ([read-accept-reader #t]
+                 [read-accept-lang #f])
+    (read-syntax src in)))
+
 (define (boot)
   (seal)
   (current-module-name-resolver standard-module-name-resolver)
@@ -717,7 +724,8 @@
   (current-reader-guard default-reader-guard)
   (current-eval default-eval-handler)
   (current-compile default-compile-handler)
-  (current-load default-load-handler))
+  (current-load default-load-handler)
+  (current-read-interaction default-read-interaction))
 
 (define (seal)
   (set! orig-paramz
