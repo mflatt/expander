@@ -135,11 +135,13 @@
                                              (namespace-submodule-declarations ns)
                                              ;; Fresh set of submodules:
                                              (make-hash))]
-                 [available-module-instances (make-hash)]
-                 [module-instances (make-hash)]
+                 [available-module-instances (make-hasheqv)]
+                 [module-instances (make-hasheqv)]
                  [declaration-inspector (current-code-inspector)]))
   (hash-set! (namespace-phase-to-namespace m-ns) phase m-ns)
-  (hash-set! (namespace-module-instances m-ns) (cons name phase) (make-module-instance m-ns #f))
+  (define at-phase (make-hasheq))
+  (hash-set! (namespace-module-instances m-ns) phase at-phase)
+  (hash-set! at-phase name (make-module-instance m-ns #f))
   m-ns)
 
 ;; ----------------------------------------
@@ -174,7 +176,9 @@
                                     #:check-available-at-phase-level [check-available-at-phase-level #f]
                                     #:unavailable-callback [unavailable-callback void])
   (define mi
-    (or (hash-ref (namespace-module-instances ns) (cons name 0-phase) #f)
+    (or (hash-ref (hash-ref (namespace-module-instances ns) 0-phase #hasheq())
+                  name
+                  #f)
         (let ([c-ns (or (namespace-cross-phase-persistent-namespace ns) ns)])
           (hash-ref (namespace-module-instances c-ns) name #f))
         (and complain-on-failure?
@@ -209,7 +213,11 @@
                0-phase
                (namespace->definitions existing-m-ns 0-phase))
     (hash-set! (module-instance-phase-level-to-state mi) 0 'started)
-    (hash-set! (namespace-module-instances ns) (cons name 0-phase) mi)]))
+    (define at-phase (or (hash-ref (namespace-module-instances ns) 0-phase #f)
+                         (let ([at-phase (make-hasheq)])
+                           (hash-set! (namespace-module-instances ns) 0-phase at-phase)
+                           at-phase)))
+    (hash-set! at-phase name mi)]))
 
 (define (namespace-create-module-instance! ns name 0-phase m mpi)
   (define m-ns (struct-copy namespace ns
@@ -223,11 +231,13 @@
                             [inspector (make-inspector (module-inspector m))]))
   (hash-set! (namespace-phase-to-namespace m-ns) 0-phase m-ns)
   (define mi (make-module-instance m-ns m))
-  (hash-set! (namespace-module-instances ns)
-             (if (module-cross-phase-persistent? m)
-                 name
-                 (cons name 0-phase))
-             mi)
+  (if (module-cross-phase-persistent? m)
+      (hash-set! (namespace-module-instances ns) name mi)
+      (let ([at-phase (or (hash-ref (namespace-module-instances ns) 0-phase #f)
+                          (let ([at-phase (make-hasheq)])
+                            (hash-set! (namespace-module-instances ns) 0-phase at-phase)
+                            at-phase))])
+        (hash-set! at-phase name mi)))
   mi)
 
 (define (check-availablilty mi check-available-at-phase-level unavailable-callback)

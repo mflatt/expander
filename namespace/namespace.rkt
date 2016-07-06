@@ -54,9 +54,9 @@
                    declaration-inspector ; declaration-time inspector
                    [inspector #:mutable] ; instantiation-time inspector
                    available-module-instances  ; phase -> list of module-instance [shared among modules]
-                   module-instances)   ; instance-key -> module-instance [shared among modules]
-        ;;                             ;   where an instance-key is either (cons resolved-module-path 0-phase)
-        ;;                             ;   or just a resolved-module-path, the latter for cross phase persistent modules
+                   module-instances)   ; union resolved-module-path -> module-instance        [shared among modules]
+        ;;                             ;       0-phase -> resolved-module-path -> module-instance
+        ;;                             ; where the firts option is for cross phase persistent modules
         #:property prop:custom-write
         (lambda (ns port mode)
           (write-string "#<namespace" port)
@@ -104,7 +104,7 @@
                    (make-hasheqv))
                (if share-from-ns
                    (namespace-module-instances share-from-ns)
-                   (make-hash))))
+                   (make-hasheqv))))
   (when register?
     (hash-set! (namespace-phase-to-namespace ns) phase ns))
   ns)
