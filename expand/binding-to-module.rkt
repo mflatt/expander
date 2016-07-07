@@ -32,7 +32,6 @@
   (unless mi
     (error 'expand
            (string-append "namespace mismatch; cannot locate module instance\n"
-                          "  X: ~s\n"
                           "  module: ~s\n"
                           "  use phase: ~a\n"
                           "  definition phase: ~a\n"
