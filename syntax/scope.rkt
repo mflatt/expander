@@ -8,7 +8,8 @@
          "tamper.rkt"
          "../common/phase.rkt"
          "fallback.rkt"
-         "datum-map.rkt")
+         "datum-map.rkt"
+         "cache.rkt")
 
 (provide new-scope
          new-multi-scope
@@ -609,14 +610,16 @@
   (define sym-bindings (hash-ref bindings sym #hash()))
   (set-scope-bindings! max-sc (hash-set bindings
                                         sym
-                                        (hash-set sym-bindings scopes binding))))
+                                        (hash-set sym-bindings scopes binding)))
+  (clear-resolve-cache! sym))
 
 (define (add-bulk-binding-in-scopes! scopes binding)
   (define max-sc (find-max-scope scopes))
   (set-scope-bulk-bindings! max-sc
                             (cons (bulk-binding-at scopes binding)
                                   (scope-bulk-bindings max-sc)))
-  (remove-matching-bindings! max-sc scopes binding))
+  (remove-matching-bindings! max-sc scopes binding)
+  (clear-resolve-cache!))
 
 (define (syntax-any-macro-scopes? s)
   (for/or ([sc (in-set (syntax-scopes s))])
@@ -638,49 +641,55 @@
   (let fallback-loop ([smss (syntax-shifted-multi-scopes s)])
     (define scopes (scope-set-at-fallback s (fallback-first smss) phase))
     (define sym (syntax-content s))
-    (define candidates
-      (for*/list ([sc (in-set scopes)]
-                  [bindings (in-value
-                             (let ([bindings (hash-ref (scope-bindings sc) sym #hash())])
-                               ;; Check bulk bindings; if a symbol match is found,
-                               ;; synthesize a non-bulk binding table, as long as the
-                               ;; same set of scopes is not already mapped
-                               (for*/fold ([bindings bindings])
-                                          ([bulk-at (in-list (scope-bulk-bindings sc))]
-                                           [bulk (in-value (bulk-binding-at-bulk bulk-at))]
-                                           [syms (in-value (bulk-binding-symbols bulk s extra-shifts))]
-                                           [b-info (in-value (hash-ref syms sym #f))]
-                                           #:when (and b-info
-                                                       (not (hash-ref bindings (bulk-binding-at-scopes bulk-at) #f))))
-                                 (hash-set bindings
-                                           (bulk-binding-at-scopes bulk-at)
-                                           ((bulk-binding-create bulk) bulk b-info sym)))))]
-                  [(b-scopes binding) (in-immutable-hash bindings)]
-                  #:when (subset? b-scopes scopes))
-        (cons b-scopes binding)))
-    (define max-candidate
-      (and (pair? candidates)
-           (for/fold ([max-c (car candidates)]) ([c (in-list (cdr candidates))])
-             (if ((set-count (car c)) . > . (set-count (car max-c)))
-                 c
-                 max-c))))
     (cond
-     [max-candidate
+     [(and (not exactly?)
+           (resolve-cache-get sym phase scopes))
+      => (lambda (b) b)]
+     [else
+      (define candidates
+        (for*/list ([sc (in-set scopes)]
+                    [bindings (in-value
+                               (let ([bindings (hash-ref (scope-bindings sc) sym #hash())])
+                                 ;; Check bulk bindings; if a symbol match is found,
+                                 ;; synthesize a non-bulk binding table, as long as the
+                                 ;; same set of scopes is not already mapped
+                                 (for*/fold ([bindings bindings])
+                                            ([bulk-at (in-list (scope-bulk-bindings sc))]
+                                             [bulk (in-value (bulk-binding-at-bulk bulk-at))]
+                                             [syms (in-value (bulk-binding-symbols bulk s extra-shifts))]
+                                             [b-info (in-value (hash-ref syms sym #f))]
+                                             #:when (and b-info
+                                                         (not (hash-ref bindings (bulk-binding-at-scopes bulk-at) #f))))
+                                   (hash-set bindings
+                                             (bulk-binding-at-scopes bulk-at)
+                                             ((bulk-binding-create bulk) bulk b-info sym)))))]
+                    [(b-scopes binding) (in-immutable-hash bindings)]
+                    #:when (subset? b-scopes scopes))
+          (cons b-scopes binding)))
+      (define max-candidate
+        (and (pair? candidates)
+             (for/fold ([max-c (car candidates)]) ([c (in-list (cdr candidates))])
+               (if ((set-count (car c)) . > . (set-count (car max-c)))
+                   c
+                   max-c))))
       (cond
-       [(not (for/and ([c (in-list candidates)])
-               (subset? (car c) (car max-candidate))))
+       [max-candidate
+        (cond
+         [(not (for/and ([c (in-list candidates)])
+                 (subset? (car c) (car max-candidate))))
+          (if (fallback? smss)
+              (fallback-loop (fallback-rest smss))
+              ambiguous-value)]
+         [else
+          (resolve-cache-set! sym phase scopes (cdr max-candidate))
+          (and (or (not exactly?)
+                   (equal? (set-count scopes)
+                           (set-count (car max-candidate))))
+               (cdr max-candidate))])]
+       [else
         (if (fallback? smss)
             (fallback-loop (fallback-rest smss))
-            ambiguous-value)]
-       [else
-        (and (or (not exactly?)
-                 (equal? (set-count scopes)
-                         (set-count (car max-candidate))))
-             (cdr max-candidate))])]
-     [else
-      (if (fallback? smss)
-          (fallback-loop (fallback-rest smss))
-          #f)])))
+            #f)])])))
 
 ;; ----------------------------------------
 
