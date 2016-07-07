@@ -12,6 +12,7 @@
          set-remove
          set-first
          subset?
+         set=?
          set-subtract
          set-union
          set-partition
@@ -48,6 +49,10 @@
 
 (define (subset? s1 s2)
   (hash-keys-subset? s1 s2))
+
+(define (set=? s1 s2)
+  (and (= (hash-count s1) (hash-count s2))
+       (hash-keys-subset? s1 s2)))
 
 (define (set-subtract s1 s2)
   (for/fold ([s1 s1]) ([k (in-set s2)])

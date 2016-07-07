@@ -1,4 +1,5 @@
 #lang racket/base
+(require "../common/set.rkt")
 
 (provide clear-resolve-cache!
          resolve-cache-get
@@ -15,14 +16,16 @@
     [()
      (set! cache (make-weak-box (make-hasheq)))]))
 
+(struct entry (scopes phase binding))
+
 (define (resolve-cache-get sym phase scopes)
   (define c (weak-box-value cache))
   (and c
        (let ([v (hash-ref c sym #f)])
          (and v
-              (eqv? phase (vector-ref v 1))
-              (equal? scopes (vector-ref v 0))
-              (vector-ref v 2)))))
+              (eqv? phase (entry-phase v))
+              (set=? scopes (entry-scopes v))
+              (entry-binding v)))))
 
 (define (resolve-cache-set! sym phase scopes b)
   (define c (weak-box-value cache))
@@ -31,4 +34,4 @@
     (clear-resolve-cache!)
     (resolve-cache-set! sym phase scopes b)]
    [else
-    (hash-set! c sym (vector scopes phase b))]))
+    (hash-set! c sym (entry scopes phase b))]))
