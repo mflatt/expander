@@ -840,7 +840,8 @@
   (define vals
     (call-with-values (lambda ()
                         (parameterize ([current-expand-context ctx]
-                                       [current-namespace ns])
+                                       [current-namespace ns]
+                                       [eval-jit-enabled #f])
                           (eval-top compiled ns)))
       list))
   (unless (= (length vals) (length ids))
