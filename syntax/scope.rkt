@@ -134,7 +134,9 @@
 ;; be small.
 (struct multi-scope (id       ; identity
                      name     ; for debugging
-                     scopes)  ; phase -> representative-scope
+                     scopes   ; phase -> representative-scope
+                     shifted  ; interned shifted-multi-scopes for non-label phases
+                     label-shifted) ; interned shifted-multi-scopes for label phases
         #:property prop:serialize
         (lambda (ms ser state)
           `(deserialize-multi-scope
@@ -145,7 +147,7 @@
           (reach (multi-scope-scopes ms))))
 
 (define (deserialize-multi-scope name scopes)
-  (multi-scope (new-deserialize-scope-id!) name scopes))
+  (multi-scope (new-deserialize-scope-id!) name scopes (make-hasheqv) (make-hash)))
 
 (struct representative-scope scope (owner   ; a multi-scope for which this one is a phase-specific identity
                                     phase)  ; phase of this scope
@@ -188,7 +190,6 @@
 
 (struct shifted-multi-scope (phase        ; non-label phase shift or shifted-to-label-phase
                              multi-scope) ; a multi-scope
-        #:transparent
         #:property prop:custom-write
         (lambda (sms port mode)
           (write-string "#<scope:" port)
@@ -206,7 +207,22 @@
           (reach (shifted-multi-scope-multi-scope sms))))
 
 (define (deserialize-shifted-multi-scope phase multi-scope)
-  (shifted-multi-scope phase multi-scope))
+  (intern-shifted-multi-scope phase multi-scope))
+
+(define (intern-shifted-multi-scope phase multi-scope)
+  (cond
+   [(phase? phase)
+    ;; `eqv?`-hashed by phase
+    (or (hash-ref (multi-scope-shifted multi-scope) phase #f)
+        (let ([sms (shifted-multi-scope phase multi-scope)])
+          (hash-set! (multi-scope-shifted multi-scope) phase sms)
+          sms))]
+   [else
+    ;; `equal?`-hashed by shifted-to-label-phase
+    (or (hash-ref (multi-scope-label-shifted multi-scope) phase #f)
+        (let ([sms (shifted-multi-scope phase multi-scope)])
+          (hash-set! (multi-scope-label-shifted multi-scope) phase sms)
+          sms))]))
 
 ;; A `shifted-to-label-phase` record in the `phase` field of a
 ;; `shifted-multi-scope` makes the shift reversible; when we're
@@ -279,7 +295,7 @@
   (scope (new-scope-id!) kind (make-bindings) (make-bulk-bindings)))
 
 (define (new-multi-scope [name #f])
-  (shifted-multi-scope 0 (multi-scope (new-scope-id!) name (make-hasheqv))))
+  (intern-shifted-multi-scope 0 (multi-scope (new-scope-id!) name (make-hasheqv) (make-hasheqv) (make-hash))))
 
 (define (multi-scope-to-scope-at-phase ms phase)
   ;; Get the identity of `ms` at phase`
@@ -357,8 +373,8 @@
 ;; phase shift)
 (define (generalize-scope sc)
   (if (representative-scope? sc)
-      (shifted-multi-scope (representative-scope-phase sc)
-                           (representative-scope-owner sc))
+      (intern-shifted-multi-scope (representative-scope-phase sc)
+                                  (representative-scope-owner sc))
       sc))
 
 (define (add-scope s sc)
@@ -502,15 +518,15 @@
      [else
       ;; Move the current phase 0 to the label phase, which
       ;; means recording the negation of the current phase
-      (shifted-multi-scope (shifted-to-label-phase (phase- 0 (shifted-multi-scope-phase sms)))
-                           (shifted-multi-scope-multi-scope sms))])]
+      (intern-shifted-multi-scope (shifted-to-label-phase (phase- 0 (shifted-multi-scope-phase sms)))
+                                  (shifted-multi-scope-multi-scope sms))])]
    [(shifted-to-label-phase? (shifted-multi-scope-phase sms))
     ;; Numeric shift has no effect on bindings in phase #f
     sms]
    [else
     ;; Numeric shift added to an existing numeric shift
-    (shifted-multi-scope (phase+ delta (shifted-multi-scope-phase sms))
-                         (shifted-multi-scope-multi-scope sms))]))
+    (intern-shifted-multi-scope (phase+ delta (shifted-multi-scope-phase sms))
+                                (shifted-multi-scope-multi-scope sms))]))
 
 ;; Since we tend to shift rarely and only for whole modules, it's
 ;; probably not worth making this lazy
@@ -550,13 +566,13 @@
                     (set-partition (for/seteq ([sc (in-set src-scopes)])
                                      (generalize-scope sc))
                                    shifted-multi-scope?
-                                   (set)
+                                   (seteq)
                                    (seteq))]
                    [(dest-smss dest-scs)
                     (set-partition (for/seteq ([sc (in-set dest-scopes)])
                                      (generalize-scope sc))
                                    shifted-multi-scope?
-                                   (set)
+                                   (seteq)
                                    (seteq))])
         (define-memo-lite (swap-scs scs)
           (if (subset? src-scs scs)
@@ -729,13 +745,13 @@
   (or (hash-ref (serialize-state-bindings-intern state) bindings #f)
       (let ([reachable-scopes (serialize-state-reachable-scopes state)])
         (define new-bindings
-          (for*/hash ([(sym bindings-for-sym) (in-immutable-hash bindings)]
-                      [new-bindings-for-sym
-                       (in-value
-                        (for/hash ([(scopes binding) (in-immutable-hash bindings-for-sym)]
-                                   #:when (subset? scopes reachable-scopes))
-                          (values (intern-scopes scopes state) binding)))]
-                      #:unless (zero? (hash-count new-bindings-for-sym)))
+          (for*/hasheq ([(sym bindings-for-sym) (in-immutable-hash bindings)]
+                        [new-bindings-for-sym
+                         (in-value
+                          (for/hash ([(scopes binding) (in-immutable-hash bindings-for-sym)]
+                                     #:when (subset? scopes reachable-scopes))
+                            (values (intern-scopes scopes state) binding)))]
+                        #:unless (zero? (hash-count new-bindings-for-sym)))
             (values sym new-bindings-for-sym)))
         (hash-set! (serialize-state-bindings-intern state) bindings new-bindings)
         new-bindings)))

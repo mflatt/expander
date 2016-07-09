@@ -20,7 +20,7 @@
   (define info (syntax-debug-info s (expand-context-phase ctx) #t))
   (let loop ([info info] [layer 0])
     (string-append
-     "\n  context " (layer->string layer) "...:"
+     "\n  context" (layer->string layer) "...:"
      (describe-context (hash-ref info 'context))
      (apply string-append
             (for/list ([b (hash-ref info 'bindings null)])
@@ -33,8 +33,8 @@
      (let ([fallbacks (hash-ref info 'fallbacks null)])
        (apply
         string-append
-        (for/fold ([str null]) ([fallback (in-list fallbacks)]
-                                [layer (in-naturals layer)])
+        (for/list ([fallback (in-list fallbacks)]
+                   [layer (in-naturals (add1 layer))])
           (loop fallback layer)))))))
 
 (define (describe-context scopes)

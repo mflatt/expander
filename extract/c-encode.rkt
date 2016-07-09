@@ -11,10 +11,10 @@
     (let* ([l (regexp-replace* #rx"\\\\" l "\\\\\\\\")]
            [l (regexp-replace* #rx"\"" l "\\\\\"")]
            [l (regexp-replace* #rx"\t" l " ")]
-           [l (regexp-replace* #rx" +" l " ")]
            [l (if (regexp-match? #rx"\"" l)
                   ;; Has a string - can't safely delete more spaces
                   l
-                  (regexp-replace* #rx" \\(" l "("))])
+                  (let ([l (regexp-replace* #rx" +" l " ")])
+                    (regexp-replace* #rx" \\(" l "(")))])
       (fprintf out "\"~a\"\n" l)))
   (fprintf out ");\n"))

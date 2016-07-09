@@ -83,7 +83,7 @@
 ;; ----------------------------------------
 
 (define empty-scopes (seteq))
-(define empty-shifted-multi-scopes (set))
+(define empty-shifted-multi-scopes (seteq))
 (define empty-mpi-shifts null)
 (define empty-props #hasheq())
 
