@@ -9,22 +9,23 @@
          "../namespace/api.rkt"
          "main.rkt")
 
-(provide dynamic-require)
+(provide dynamic-require
+         dynamic-require-for-syntax)
 
-(define (dynamic-require mod-path sym [fail-k default-fail-thunk])
+(define (do-dynamic-require who mod-path sym [fail-k default-fail-thunk])
   (unless (or (module-path? mod-path)
               (module-path-index? mod-path)
               (resolved-module-path? mod-path))
-    (raise-argument-error 'dynamic-require
+    (raise-argument-error who
                           "(or/c module-path? module-path-index? resolved-module-path?)"
                           mod-path))
   (unless (or (symbol? sym)
               (not sym)
               (equal? sym 0)
               (void? sym))
-    (raise-argument-error 'dynamic-require "(or/c symbol? #f 0 void?)" sym))
+    (raise-argument-error who "(or/c symbol? #f 0 void?)" sym))
   (unless (and (procedure? fail-k) (procedure-arity-includes? fail-k 0))
-    (raise-argument-error 'dynamic-require "(-> any)" fail-k))
+    (raise-argument-error who "(-> any)" fail-k))
   (define ns (current-namespace))
   (define mpi
     (cond
@@ -112,3 +113,12 @@
 ;; thunk and substituting a more specific error:
 (define (default-fail-thunk)
   (error "failed"))
+
+(define (dynamic-require mod-path sym [fail-k default-fail-thunk])
+  (do-dynamic-require 'dynamic-require mod-path sym fail-k))
+
+(define (dynamic-require-for-syntax mod-path sym [fail-k default-fail-thunk])
+  (parameterize ([current-namespace
+                  (let ([ns current-namespace])
+                    (namespace->namespace-at-phase ns (add1 (namespace-phase ns))))])
+    (do-dynamic-require 'dynamic-require-for-syntax mod-path sym fail-k)))

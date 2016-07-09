@@ -22,6 +22,7 @@
           'expand-to-top-form wrapper:expand-to-top-form
           'expand-syntax-to-top-form wrapper:expand-syntax-to-top-form
           'dynamic-require dynamic-require
+          'dynamic-require-for-syntax dynamic-require-for-syntax
 
           'compiled-expression? compiled-expression?
           'compiled-module-expression? compiled-module-expression?
