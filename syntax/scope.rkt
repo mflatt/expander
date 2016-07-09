@@ -313,30 +313,20 @@
 ;; lazily to subforms
 (define (apply-scope s sc op prop-op)
   (if (shifted-multi-scope? sc)
-      (apply-shifted-multi-scope s sc op)
+      (struct-copy syntax s
+                   [shifted-multi-scopes (op (syntax-shifted-multi-scopes s) sc)]
+                   [scope-propagations (and (datum-has-elements? (syntax-content s))
+                                            (prop-op (syntax-scope-propagations s)
+                                                     sc
+                                                     (syntax-scopes s)
+                                                     (syntax-shifted-multi-scopes s)))])
       (struct-copy syntax s
                    [scopes (op (syntax-scopes s) sc)]
                    [scope-propagations (and (datum-has-elements? (syntax-content s))
                                             (prop-op (syntax-scope-propagations s)
                                                      sc
-                                                     (syntax-scopes s)))])))
-
-;; Non-lazy application of a shifted multi scope;
-;; since this kind of scope is only added for modules,
-;; it's not worth making it lazy
-(define (apply-shifted-multi-scope s sms op)
-  (define-memo-lite (do-op smss)
-    (fallback-update-first
-     smss
-     (lambda (smss) (op smss sms))))
-  (syntax-map s
-              (lambda (tail? x) x)
-              (lambda (s d)
-                (struct-copy syntax s
-                             [content d]
-                             [shifted-multi-scopes
-                              (do-op (syntax-shifted-multi-scopes s))]))
-              syntax-e/no-taint))
+                                                     (syntax-scopes s)
+                                                     (syntax-shifted-multi-scopes s)))])))
 
 (define (syntax-e/no-taint s)
   (propagate-taint! s)
@@ -351,10 +341,15 @@
                                                  prop
                                                  (syntax-scopes sub-s)
                                                  s)]
+                                        [shifted-multi-scopes (propagation-apply-shifted
+                                                               prop
+                                                               (syntax-shifted-multi-scopes sub-s)
+                                                               s)]
                                         [scope-propagations (propagation-merge
                                                              prop
                                                              (syntax-scope-propagations sub-s)
-                                                             (syntax-scopes sub-s))]))
+                                                             (syntax-scopes sub-s)
+                                                             (syntax-shifted-multi-scopes sub-s))]))
                          #f)])
         (set-syntax-content! s new-content)
         (set-syntax-scope-propagations! s #f)
@@ -424,26 +419,26 @@
 
 ;; ----------------------------------------
 
-(struct propagation (prev-scs scope-ops)
+(struct propagation (prev-scs prev-smss scope-ops)
         #:property prop:propagation syntax-e)
 
-(define (propagation-add prop sc prev-scs)
+(define (propagation-add prop sc prev-scs prev-smss)
   (if prop
       (struct-copy propagation prop
                    [scope-ops (hash-set (propagation-scope-ops prop)
                                         sc
                                         'add)])
-      (propagation prev-scs (hasheq sc 'add))))
+      (propagation prev-scs prev-smss (hasheq sc 'add))))
 
-(define (propagation-remove prop sc prev-scs)
+(define (propagation-remove prop sc prev-scs prev-smss)
   (if prop
       (struct-copy propagation prop
                    [scope-ops (hash-set (propagation-scope-ops prop)
                                         sc
                                         'remove)])
-      (propagation prev-scs (hasheq sc 'remove))))
+      (propagation prev-scs prev-smss (hasheq sc 'remove))))
 
-(define (propagation-flip prop sc prev-scs)
+(define (propagation-flip prop sc prev-scs prev-smss)
   (if prop
       (let* ([ops (propagation-scope-ops prop)]
              [current-op (hash-ref ops sc #f)])
@@ -461,7 +456,7 @@
                                                [(add) 'remove]
                                                [(remove) 'add]
                                                [else 'flip])))])]))
-      (propagation prev-scs (hasheq sc 'flip))))
+      (propagation prev-scs prev-smss (hasheq sc 'flip))))
 
 (define (propagation-apply prop scs parent-s)
   (cond
@@ -469,16 +464,31 @@
    [(eq? (propagation-prev-scs prop) scs)
     (syntax-scopes parent-s)]
    [else
-    (for/fold ([scs scs]) ([(sc op) (in-immutable-hash (propagation-scope-ops prop))])
+    (for/fold ([scs scs]) ([(sc op) (in-immutable-hash (propagation-scope-ops prop))]
+                           #:when (not (shifted-multi-scope? sc)))
       (case op
        [(add) (set-add scs sc)]
        [(remove) (set-remove scs sc)]
        [else (set-flip scs sc)]))]))
 
-(define (propagation-merge prop base-prop prev-scs)
+(define (propagation-apply-shifted prop smss parent-s)
+  (cond
+   [(not prop) smss]
+   [(eq? (propagation-prev-smss prop) smss)
+    (syntax-shifted-multi-scopes parent-s)]
+   [else
+    (for/fold ([smss smss]) ([(sms op) (in-immutable-hash (propagation-scope-ops prop))]
+                             #:when (shifted-multi-scope? sms))
+      (case op
+       [(add) (set-add smss sms)]
+       [(remove) (set-remove smss sms)]
+       [else (set-flip smss sms)]))]))
+
+(define (propagation-merge prop base-prop prev-scs prev-smss)
   (cond
    [(not prop) base-prop]
    [(not base-prop) (propagation prev-scs
+                                 prev-smss
                                  (propagation-scope-ops prop))]
    [else
     (define new-ops
@@ -495,7 +505,8 @@
              [else (hash-set ops sc 'flip)])])))
     (if (zero? (hash-count new-ops))
         #f
-        (propagation (propagation-prev-scs base-prop) new-ops))]))
+        (struct-copy propagation base-prop
+                     [scope-ops new-ops]))]))
 
 ;; ----------------------------------------
 

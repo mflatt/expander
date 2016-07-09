@@ -27,7 +27,7 @@
          (encode-to-c (open-input-bytes (get-output-bytes s-expr-o)) o)))))
 
   ;; Tentatively compile and report size and time
-  (log-status "Compiling flattened...")
+  (log-status "Compiling flattened, just as a sanity check...")
   (define linklet
     (parameterize ([bootstrap:linklet-compile-to-s-expr #f])
       (compile-linklet flattened-linklet-expr)))
