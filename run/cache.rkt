@@ -5,6 +5,7 @@
 (provide make-cache
          get-cached-compiled
          cache-compiled!
+         register-dependency!
          
          current-cache-layer
          make-cache-layer)
@@ -79,21 +80,22 @@
    [(and cached-file
          (file-exists? cached-file))
     (notify-success)
-    (register-dependency! path)
     (parameterize ([read-accept-compiled #t])
       (call-with-input-file* cached-file read))]
    [(and e
          (hash-ref (cache-in-memory cache) (entry-key e) #f))
     => (lambda (c)
          (notify-success)
-         (register-dependency! path)
          c)]
    [else #f]))
 
-(define (register-dependency! path)
+(define (register-dependency! cache path)
   (define l (current-cache-layer))
   (when l
-    (set-box! l (cons (path->string path) (unbox l)))))
+    (define deps (unbox l))
+    (define s (path->string path))
+    (unless (member s deps)
+      (set-box! l (cons s deps)))))
 
 (define (cache-compiled! cache path c layer)
   (define key (sha1 (open-input-bytes (path->bytes path))))

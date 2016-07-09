@@ -97,7 +97,7 @@
                                                     (unless quiet-load?
                                                       (log-status "cached: ~a" path))))))
                       => (lambda (m)
-                           ;; Since we'ce set `use-compiled-file-paths` to null,
+                           ;; Since we've set `use-compiled-file-paths` to null,
                            ;; the load/use-compiled handler thinks that we're
                            ;; always loading from source, so don't find the
                            ;; expected submodule with
@@ -141,6 +141,17 @@
                           (loop)]
                          [else (eval c)]))]))]
                  [else (orig-load path #f)])))
+
+(define orig-resolver (current-module-name-resolver))
+(current-module-name-resolver
+ (case-lambda
+   [(r ns) (orig-resolver r ns)]
+   [(r wrt src load?)
+    (define p (orig-resolver r wrt src load?))
+    (define n (resolved-module-path-name p))
+    (when (path? n)
+      (register-dependency! cache n))
+    p]))
 
 ;; Set the reader guard to load modules on demand, and
 ;; synthesize a module for the host Racket to call
