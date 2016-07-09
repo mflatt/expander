@@ -7,6 +7,7 @@
          "export.rkt"
          "check-and-report.rkt"
          "flatten.rkt"
+         "gc-defn.rkt"
          "save-and-report.rkt")
 
 (provide extract)
@@ -96,5 +97,9 @@
                 #:needed needed
                 #:exports exports))
     
-    (save-and-report-flattened! flattened-linklet-expr print-extracted-to
+    ;; Remove unreferenced definitions
+    (define gced-linklet-expr
+      (garbage-collect-definitions flattened-linklet-expr))
+    
+    (save-and-report-flattened! gced-linklet-expr print-extracted-to
                                 #:as-c? as-c?)))

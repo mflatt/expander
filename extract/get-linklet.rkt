@@ -5,6 +5,7 @@
          "../host/linklet.rkt"
          "../compile/module-use.rkt"
          "../syntax/binding.rkt"
+         "../namespace/provided.rkt"
          "link.rkt"
          "linklet-info.rkt"
          "linklet.rkt"
@@ -87,7 +88,8 @@
       (define re-exports
         (and first?
              (set->list
-              (for*/set ([(sym binding) (in-hash (hash-ref provs phase #hasheq()))]
+              (for*/set ([(sym binding/p) (in-hash (hash-ref provs phase #hasheq()))]
+                         [(binding) (in-value (provided-as-binding binding/p))]
                          [l (in-value
                              (link (module-path-index->module-name (module-binding-module binding) name)
                                    (module-binding-phase binding)))]

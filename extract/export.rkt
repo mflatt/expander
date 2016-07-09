@@ -3,6 +3,7 @@
          "../host/linklet.rkt"
          "../common/module-path.rkt"
          "../syntax/module-binding.rkt"
+         "../namespace/provided.rkt"
          "link.rkt"
          "variable.rkt")
 
@@ -21,7 +22,8 @@
     
   (define provs (instance-variable-value (compiled-module-declaration comp-mod) 'provides))
   
-  (for/hash ([(sym binding) (in-hash (hash-ref provs 0 #hasheq()))])
+  (for/hash ([(sym binding/p) (in-hash (hash-ref provs 0 #hasheq()))])
+    (define binding (provided-as-binding binding/p))
     (values sym (variable (link (module-path-index->module-name (module-binding-module binding) name)
                                 (module-binding-phase binding))
                           (module-binding-sym binding)))))
