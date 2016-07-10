@@ -10,6 +10,8 @@
       #'form
       (cons #'form
             '(primitive-table
+              primitive->compiled-position
+              compiled-position->primitive
               
               linklet?
               compile-linklet             ; result is serializable

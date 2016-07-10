@@ -103,6 +103,10 @@
       (values sym
               (dynamic-require mod-name sym)))]))
 
+;; Bootstrap implementation doesn't support bytecode:
+(define (primitive->compiled-position v) #f)
+(define (compiled-position->primitive pos) #f)
+
 ;; ----------------------------------------
 
 (struct variable-reference (instance primitive-varref))
