@@ -658,6 +658,11 @@
                             "(or/c #f symbol? (cons/c (or/c #f symbol?) (non-empty-listof symbol?)))"
                             expected-mod))
     (cond
+     [(and expected-mod
+           (pair? expected-mod)
+           (not (car expected-mod)))
+      ;; We don't yet load submodules independently
+      (void)]
      [expected-mod
       (define m-s
         (call-with-input-file*
