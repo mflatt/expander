@@ -24,6 +24,7 @@
 (struct full-local-binding full-binding (key)
         #:property prop:serialize
         (lambda (b ser state)
+          ;; Data that is interpreted by the deserializer:
           `(deserialize-full-local-binding
             ,(ser (full-local-binding-key b))
             ,(ser (full-binding-free=id b)))))

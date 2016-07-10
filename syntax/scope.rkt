@@ -82,18 +82,21 @@
           (write-string ">" port))
         #:property prop:serialize
         (lambda (s ser state)
+          ;; The result here looks like an expression, but it's
+          ;; treated as data and interpreted for deserialization
           (unless (set-member? (serialize-state-reachable-scopes state) s)
             (error "internal error: found supposedly unreachable scope"))
           (if (eq? s top-level-common-scope)
               `(deserialize-scope)
-              `(deserialize-scope ,(ser (scope-kind s)))))
+              `(deserialize-scope . ,(scope-kind s))))
         #:property prop:serialize-fill!
-        (lambda (id s ser state)
+        (lambda (s ser state)
+          ;; Like the main serialization result, this result
+          ;; is data that is interpreted
           (if (and (empty-bindings? (scope-bindings s))
                    (empty-bulk-bindings? (scope-bulk-bindings s)))
               `(void)
               `(deserialize-scope-fill!
-                ,id
                 ,(ser (prune-bindings-to-reachable (scope-bindings s)
                                                    state))
                 ,(ser (prune-bulk-bindings-to-reachable (scope-bulk-bindings s)
@@ -139,6 +142,7 @@
                      label-shifted) ; interned shifted-multi-scopes for label phases
         #:property prop:serialize
         (lambda (ms ser state)
+          ;; Data that is interpreted by the deserializer:
           `(deserialize-multi-scope
             ,(ser (multi-scope-name ms))
             ,(ser (multi-scope-scopes ms))))
@@ -164,13 +168,13 @@
           (write-string ">" port))
         #:property prop:serialize
         (lambda (s ser state)
+          ;; Data that is interpreted by the deserializer:
           `(deserialize-representative-scope
             ,(ser (scope-kind s))
             ,(ser (representative-scope-phase s))))
         #:property prop:serialize-fill!
-        (lambda (id s ser state)
+        (lambda (s ser state)
           `(deserialize-representative-scope-fill!
-            ,id
             ,(ser (prune-bindings-to-reachable (scope-bindings s)
                                                state))
             ,(ser (prune-bulk-bindings-to-reachable (scope-bulk-bindings s)
@@ -199,6 +203,7 @@
           (write-string ">" port))
         #:property prop:serialize
         (lambda (sms ser state)
+          ;; Data that is interpreted by the deserializer:
           `(deserialize-shifted-multi-scope
             ,(ser (shifted-multi-scope-phase sms))
             ,(ser (shifted-multi-scope-multi-scope sms))))
@@ -235,6 +240,7 @@
                          bulk)  ; bulk-binding
         #:property prop:serialize
         (lambda (bba ser state)
+          ;; Data that is interpreted by the deserializer:
           `(deserialize-bulk-binding-at
             ,(ser (bulk-binding-at-scopes bba))
             ,(ser (bulk-binding-at-bulk bba))))

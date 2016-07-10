@@ -129,8 +129,8 @@
   (define declaration-body
     `((define-values (self-mpi) ,(add-module-path-index! mpis self))
       (define-values (cross-phase-persistent?) ,cross-phase-persistent?)
-      (define-values (requires) ,(generate-deserialize requires mpis))
-      (define-values (provides) ,(generate-deserialize provides mpis))
+      (define-values (requires) ,(generate-deserialize requires mpis #:syntax-support? #f))
+      (define-values (provides) ,(generate-deserialize provides mpis #:syntax-support? #f))
       (define-values (side-effects) ',(sort (hash-keys side-effects) <))
       (define-values (min-phase) ,min-phase)
       (define-values (max-phase) ,max-phase)

@@ -18,10 +18,9 @@
                          shifted-multi-scopes   ; interned shifted multi-scope lists
                          mpi-shifts             ; interned module path index shifts
                          props                  ; map full props to previously calculated
-                         interned-props         ; intern filtered props
-                         inspector-id))         ; symbol name bound to declaration-time inspector
+                         interned-props))       ; intern filtered props
 
-(define (make-serialize-state reachable-scopes inspector-id)
+(define (make-serialize-state reachable-scopes)
   (serialize-state reachable-scopes
                    (make-hasheq)   ; bindings-intern
                    (make-hasheq)   ; bulk-bindings-intern
@@ -29,8 +28,7 @@
                    (make-hash)     ; shifted-multi-scopes
                    (make-hasheq)   ; mpi-shifts
                    (make-hasheq)   ; props
-                   (make-hash)     ; interned-props
-                   inspector-id))
+                   (make-hash)))   ; interned-props
 
 (define (intern-scopes scs state)
   (or (hash-ref (serialize-state-scopes state) scs #f)

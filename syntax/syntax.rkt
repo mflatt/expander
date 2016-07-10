@@ -45,6 +45,8 @@
         #:property prop:serialize
         (lambda (s ser state)
           (define prop (syntax-scope-propagations s))
+          ;; The result here looks like an expression, but it's
+          ;; treated as data and interpreted for deserialization
           `(deserialize-syntax
             ,(ser (if prop
                       ((propagation-ref prop) s)
@@ -60,7 +62,7 @@
                                   #:when (preserved-property-value? v))
                        (values k (check-value-to-preserve (plain-property-value v) syntax?))))
                    state))
-            ,(serialize-state-inspector-id state)
+            #:inspector
             ,(ser (serialize-tamper (syntax-tamper s)))))
         #:property prop:reach-scopes
         (lambda (s reach)
@@ -169,6 +171,7 @@
 
 ;; ----------------------------------------
 
+;; Called by the deserializer
 (define (deserialize-syntax content scopes shifted-multi-scopes mpi-shifts srcloc props inspector tamper)
   (syntax content
           scopes #f shifted-multi-scopes

@@ -115,7 +115,7 @@
             ,(ser (bulk-binding-mpi b))
             ,(ser (bulk-binding-provide-phase-level b))
             ,(ser (bulk-binding-phase-shift b))
-            ,bulk-binding-registry-id)))
+            #:bulk-binding-registry)))
 
 (define (deserialize-bulk-binding mpi provide-phase-level phase-shift bulk-binding-registry)
   (bulk-binding #f #f mpi provide-phase-level phase-shift bulk-binding-registry))

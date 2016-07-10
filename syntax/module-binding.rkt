@@ -88,6 +88,8 @@
                 b))
           (cond
            [(full-module-binding? simplified-b)
+            ;; The result here looks like an expression, but it's
+            ;; treated as data and interpreted for deserialization
             `(deserialize-full-module-binding
               ,(ser (full-module-binding-module b))
               ,(ser (full-module-binding-sym b))
@@ -97,8 +99,9 @@
               ,(ser (full-module-binding-nominal-sym b))
               ,(ser (full-module-binding-nominal-require-phase b))
               ,(ser (full-binding-free=id b))
-              ,(and (full-module-binding-extra-inspector b)
-                    (serialize-state-inspector-id state)))]
+              ,(if (full-module-binding-extra-inspector b)
+                   '#:inspector
+                   (ser #f)))]
            [else
             (ser simplified-b)])))
 
@@ -106,6 +109,7 @@
         #:transparent
         #:property prop:serialize
         (lambda (b ser state)
+          ;; Data that is interpreted by the deserializer:
           `(deserialize-simple-module-binding
             ,(ser (simple-module-binding-module b))
             ,(ser (simple-module-binding-sym b))

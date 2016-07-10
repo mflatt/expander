@@ -36,4 +36,4 @@
 (define (compiled-top->compiled-tops ld)
   (define ht (linklet-directory->hash ld))
   (for/list ([i (in-range (hash-count ht))])
-    (hash-ref ht (string->number (number->string i)))))
+    (hash-ref ht (string->symbol (number->string i)))))
