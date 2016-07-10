@@ -27,7 +27,8 @@
 
 (define (compiled-expression? c)
   (or (compiled-in-memory? c)
-      (linklet-directory? c)))
+      (linklet-directory? c)
+      (linklet-bundle? c)))
 
 (define (compiled->linklet-directory c)
   (if (compiled-in-memory? c)
@@ -36,10 +37,12 @@
 
 (define (compiled-module-expression? c)
   (define ld (compiled->linklet-directory c))
-  (and (linklet-directory? ld)
-       (let ([b (hash-ref (linklet-directory->hash ld) #f #f)])
-         (and b (hash-ref (linklet-bundle->hash b) 'decl #f)))
-       #t))
+  (or (and (linklet-directory? ld)
+           (let ([b (hash-ref (linklet-directory->hash ld) #f #f)])
+             (and b (hash-ref (linklet-bundle->hash b) 'decl #f)))
+           #t)
+      (and (linklet-bundle? ld)
+           (hash-ref (linklet-bundle->hash ld) 'decl #f))))
 
 (define module-compiled-name
   (case-lambda

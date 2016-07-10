@@ -10,7 +10,8 @@
          "../namespace/api.rkt"
          "../common/module-path.rkt"
          "../eval/module-read.rkt"
-         "../expand/missing-module.rkt")
+         "../expand/missing-module.rkt"
+         "load-handler.rkt")
 
 (provide boot
          seal
@@ -643,77 +644,6 @@
   (lambda (s immediate-eval?) (compile s
                                   (current-namespace)
                                   (not immediate-eval?))))
-
-(define default-load-handler
-  (lambda (path expected-mod)
-    (unless (path-string? path)
-      (raise-argument-error 'default-load-handler "path-string?" path))
-    (unless (or (not expected-mod)
-                (symbol? expected-mod)
-                (and (pair? expected-mod)
-                     (list? expected-mod)
-                     (or (not (car expected-mod)) (symbol? (car expected-mod)))
-                     (andmap symbol? (cdr expected-mod))))
-      (raise-argument-error 'default-load-handler
-                            "(or/c #f symbol? (cons/c (or/c #f symbol?) (non-empty-listof symbol?)))"
-                            expected-mod))
-    (cond
-     [(and expected-mod
-           (pair? expected-mod)
-           (not (car expected-mod)))
-      ;; We don't yet load submodules independently
-      (void)]
-     [expected-mod
-      (define m-s
-        (call-with-input-file*
-         path
-         (lambda (i)
-           (unless (regexp-match? #rx"[.]zo$" path)
-             (port-count-lines! i))
-           (with-module-reading-parameterization
-               (lambda ()
-                 (define s (read-syntax (object-name i) i))
-                 (when (eof-object? s)
-                   (error 'default-load-handler
-                          (string-append "expected a `module' declaration;\n"
-                                         " found end-of-file\n"
-                                         "  in: ~e")
-                          (object-name i)))
-                 (define m-s (check-module-form s path))
-                 (define s2 (read-syntax (object-name i) i))
-                 (unless (eof-object? s2)
-                   (error 'default-load-handler
-                          (string-append "expected a `module' declaration;\n"
-                                         " found an extra form\n"
-                                         "  in: ~e\n"
-                                         "  found: ~.s")
-                          (object-name i)
-                          s2))
-                 m-s)))))
-      ((current-eval) m-s)]
-     [else
-      (define (add-top-interaction s)
-        (namespace-syntax-introduce
-         (datum->syntax #f (cons '#%top-interaction s))))
-      (call-with-input-file*
-       path
-       (lambda (i)
-         (port-count-lines! i)
-         (let loop ([vals (list (void))])
-           (define s
-             (parameterize ([read-accept-compiled #t]
-                            [read-accept-reader #t]
-                            [read-accept-lang #t])
-               (read-syntax (object-name i) i)))
-           (if (eof-object? s)
-               (apply values vals)
-               (loop
-                (call-with-continuation-prompt
-                 (lambda ()
-                   (call-with-values (lambda () ((current-eval) (add-top-interaction s))) list))
-                 (default-continuation-prompt-tag)
-                 (lambda args
-                   (apply abort-current-continuation (default-continuation-prompt-tag) args))))))))])))
 
 (define (default-read-interaction src in)
   (unless (input-port? in)
