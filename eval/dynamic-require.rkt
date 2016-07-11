@@ -89,14 +89,15 @@
       (define (fail)
         (if (eq? fail-k default-fail-thunk)
             (raise-arguments-error 'dynamic-require
-                                   "name is not provided"
+                                   "name's binding is missing"
                                    "name" sym
                                    "module" mod-name)
             (fail-k)))
       (cond
        [(not (provided-as-transformer? binding/p))
         (namespace-get-variable m-ns ex-phase ex-sym fail)]
-       [else(define missing (gensym 'missing))
+       [else
+        (define missing (gensym 'missing))
         (namespace-module-visit! ns mpi phase #:visit-phase phase)
         (define t (namespace-get-transformer m-ns ex-phase ex-sym missing))
         (cond

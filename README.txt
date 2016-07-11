@@ -5,7 +5,6 @@ See "demo.rkt" for examples.
 TODO:
  root namespace for reader `dynamc-require`
  module sources and `current-module-path-for-load`
- re-instantiate redeclared module
  bug fix for local definition contexts (MB's example)
 
 ----------------------------------------

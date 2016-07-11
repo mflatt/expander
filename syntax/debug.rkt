@@ -25,8 +25,9 @@
          [(identifier? s)
           (for*/list ([sc (in-set s-scs)]
                       [(scs b) (in-binding-table sym (scope-binding-table sc) s null)]
-                      #:when (or all-bindings?
-                                 (subset? scs s-scs)))
+                      #:when (and scs b
+                                  (or all-bindings?
+                                      (subset? scs s-scs))))
             (hash 'name (syntax-e s)
                   'context (scope-set->context scs)
                   'match? (subset? scs s-scs)

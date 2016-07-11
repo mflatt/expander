@@ -17,6 +17,7 @@
          namespace->module-instance
          namespace->module-namespace
          namespace-install-module-namespace!
+         namespace-record-module-instance-attached!
          
          make-module
          declare-module!
@@ -103,6 +104,7 @@
                          [shifted-requires #:mutable]  ; computed on demand; shifted from `module-requires`
                          phase-level-to-state          ; phase-level -> #f, 'available, or 'started
                          [made-available? #:mutable]   ; no #f in `phase-level-to-state`?
+                         [attached? #:mutable]         ; whether the instance has been attached elsewhere
                          data-box))                    ; for use by module implementation
 
 (define (make-module-instance m-ns m)
@@ -111,6 +113,7 @@
                    #f             ; shifted-requires (not yet computed)
                    (make-hasheqv) ; phase-level-to-state
                    #f             ; made-available?
+                   #f             ; attached?
                    (box #f)))     ; data-box
 
 ;; ----------------------------------------
@@ -147,6 +150,15 @@
 ;; ----------------------------------------
 
 (define (declare-module! ns m mod-name #:as-submodule? [as-submodule? #f])
+  (define prior-m (and (not as-submodule?)
+                       (hash-ref (module-registry-declarations (namespace-module-registry ns))
+                                 mod-name
+                                 #f)))
+  (define prior-mi (and prior-m
+                        (not (eq? m prior-m))
+                        (namespace->module-instance ns mod-name (namespace-phase ns))))
+  (when (and prior-m (not (eq? m prior-m)))
+    (check-redeclaration-ok prior-m prior-mi mod-name))
   (hash-set! (if as-submodule?
                  (namespace-submodule-declarations ns)
                  (module-registry-declarations (namespace-module-registry ns)))
@@ -161,7 +173,35 @@
                             (module-self m)
                             (module-provides m)))
   ;; Tell resolver that the module is declared
-  ((current-module-name-resolver) mod-name #f))
+  ((current-module-name-resolver) mod-name #f)
+  ;; If this module is already instantiated, re-instantiate it
+  (when prior-mi
+    (define m-ns (module-instance-namespace prior-mi))
+    (define states (module-instance-phase-level-to-state prior-mi))
+    (define phase (namespace-phase ns))
+    (define visit? (eq? 'started (hash-ref states (add1 phase) #f)))
+    (define run? (eq? 'started (hash-ref states phase #f)))
+
+    (define at-phase (hash-ref (namespace-module-instances ns) phase))
+    (hash-set! at-phase mod-name (make-module-instance m-ns m))
+               
+    (when visit?
+      (namespace-module-visit! ns (namespace-mpi m-ns) phase))
+    (when run?
+      (namespace-module-instantiate! ns (namespace-mpi m-ns) phase))))
+
+(define (check-redeclaration-ok prior-m prior-mi mod-name)
+  (when (module-cross-phase-persistent? prior-m)
+    (raise-arguments-error 'module
+                           "cannot redeclare cross-phase persistent module"
+                           "module name" mod-name))
+  (when (and prior-mi
+             (or (module-instance-attached? prior-mi)
+                 (not (inspector-superior? (current-code-inspector)
+                                           (namespace-inspector (module-instance-namespace prior-mi))))))
+    (raise-arguments-error 'module
+                           "current code inspector cannot redeclare module"
+                           "module name" mod-name)))
 
 (define (raise-unknown-module-error who mod-name)
   (raise-arguments-error who
@@ -256,6 +296,10 @@
                                          #:check-available-at-phase-level check-available-at-phase-level
                                          #:unavailable-callback unavailable-callback))
   (and mi (module-instance-namespace mi)))
+
+(define (namespace-record-module-instance-attached! ns mod-name phase)
+  (define mi (namespace->module-instance ns mod-name phase))
+  (set-module-instance-attached?! mi #t))
 
 ;; ----------------------------------------
 

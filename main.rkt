@@ -128,6 +128,7 @@
                                                '#%utils
                                                '#%boot
                                                '#%expobs
+                                               '#%linklet
                                                runtime-instances)
                              #:namespace ns
                              #:reexport? #f)

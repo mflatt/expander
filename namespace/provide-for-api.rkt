@@ -1,19 +1,34 @@
 #lang racket/base
-(require "provided.rkt")
+(require "provided.rkt"
+         "../common/phase.rkt"
+         "../syntax/module-binding.rkt")
 
 (provide provides->api-provides
          variables->api-nonprovides)
 
-(define (provides->api-provides provides)
+(define (provides->api-provides provides self)
   (define (extract ok?)
     (define result-l
       (for*/list ([(phase at-phase) (in-hash provides)]
                   [l (in-value
                       (for/list ([(sym b/p) (in-hash at-phase)]
                                  #:when (ok? b/p))
-                        sym))]
+                        (define b (provided-as-binding b/p))
+                        (cons sym
+                              (cond
+                               [(eq? self (module-binding-module b))
+                                null]
+                               [(and (zero-phase? (module-binding-phase b))
+                                     (zero-phase? (module-binding-nominal-phase b))
+                                     (eq? (module-binding-sym b) sym))
+                                (list (module-binding-module b))]
+                               [else
+                                (list (module-binding-module b)
+                                      (module-binding-phase b)
+                                      (module-binding-sym b)
+                                      (module-binding-nominal-phase b))]))))]
                   #:unless (null? l))
-        (cons phase (sort l symbol<?))))
+        (cons phase (sort l symbol<? #:key car))))
     (sort result-l < #:key car))
   (values (extract (lambda (b/p) (not (provided-as-transformer? b/p))))
           (extract provided-as-transformer?)))

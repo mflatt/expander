@@ -134,7 +134,8 @@
 (define (module-compiled-exports c)
   (check 'module-compiled-imports compiled-module-expression? c)
   (define inst (compiled-module->declaration-instance c))
-  (provides->api-provides (instance-variable-value inst 'provides)))
+  (provides->api-provides (instance-variable-value inst 'provides)
+                          (instance-variable-value inst 'self-mpi)))
 
 (define (module-compiled-indirect-exports c)
   (check 'module-compiled-indirect-imports compiled-module-expression? c)

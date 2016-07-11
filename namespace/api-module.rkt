@@ -49,7 +49,9 @@
   (module-> module-requires 'module->imports mod))
 
 (define (module->exports mod)
-  (provides->api-provides (module-> module-provides 'module->exports mod)))
+  (define-values (provides self)
+    (module-> (lambda (m) (values (module-provides m) (module-self m))) 'module->exports mod))
+  (provides->api-provides provides self))
 
 (define (module->indirect-exports mod)
   (module-> (lambda (m)

@@ -3,45 +3,45 @@
          "../syntax/property.rkt"
          "../syntax/original.rkt"
          "../syntax/datum-map.rkt"
-         (prefix-in host:
-                    (only-in "syntax.rkt"
+         (prefix-in reader:
+                    (only-in "reader-syntax.rkt"
                              syntax? syntax-e syntax-property
                              syntax-property-symbol-keys
                              syntax-source syntax-line syntax-column
                              syntax-position syntax-span)))
 
-(provide host-syntax->syntax)
+(provide reader-syntax->syntax)
 
-(define (host-syntax->syntax v)
+(define (reader-syntax->syntax v)
   (datum-map v
              (lambda (tail? v)
                (cond
-                [(host:syntax? v)
-                 (define e (host:syntax-e v))
+                [(reader:syntax? v)
+                 (define e (reader:syntax-e v))
                  (cond
                   [(syntax? e)
                    ;; Readtable, #lang, and #reader callbacks can lead to a
-                   ;; host syntax wrapper on our syntax
+                   ;; reader syntax wrapper on our syntax
                    e]
                   [else
                    (define s
                      (struct-copy syntax empty-syntax
-                                  [content (host-syntax->syntax (host:syntax-e v))]
-                                  [srcloc (srcloc (host:syntax-source v)
-                                                  (host:syntax-line v)
-                                                  (host:syntax-column v)
-                                                  (host:syntax-position v)
-                                                  (host:syntax-span v))]
-                                  [props (case (host:syntax-property v 'paren-shape)
+                                  [content (reader-syntax->syntax (reader:syntax-e v))]
+                                  [srcloc (srcloc (reader:syntax-source v)
+                                                  (reader:syntax-line v)
+                                                  (reader:syntax-column v)
+                                                  (reader:syntax-position v)
+                                                  (reader:syntax-span v))]
+                                  [props (case (reader:syntax-property v 'paren-shape)
                                            [(#\[) original-square-props]
                                            [(#\{) original-curly-props]
                                            [else original-props])]))
-                   (define keys (host:syntax-property-symbol-keys v))
+                   (define keys (reader:syntax-property-symbol-keys v))
                    (cond
                     [(null? keys) s]
                     [(and (null? (cdr keys)) (eq? (car keys) 'paren-shape)) s]
                     [else (for/fold ([s s]) ([key (in-list keys)])
-                            (syntax-property s key (host:syntax-property v key) #t))])])]
+                            (syntax-property s key (reader:syntax-property v key) #t))])])]
                 [else v]))))
 
 (define original-props

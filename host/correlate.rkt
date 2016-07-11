@@ -1,11 +1,11 @@
 #lang racket/base
-(require "syntax.rkt"
+(require "correlate-syntax.rkt"
          "../syntax/datum-map.rkt"
          "../common/make-match.rkt")
 
-;; A "correlated" is the host's notion of syntax objects. We use it to
-;; represent a compiled S-expression with source locations and
-;; properties
+;; A "correlated" is the host's notion of syntax objects for
+;; `compile-linklet`, which is an S-expression with source locations
+;; and properties (but no scopes).
 
 (provide correlate
          correlated?
@@ -16,7 +16,14 @@
          correlated->list
          correlated->datum
          correlated-property
-         define-correlated-match)
+         correlated-property-symbol-keys
+         define-correlated-match
+
+         correlated-source
+         correlated-line
+         correlated-column
+         correlated-position
+         correlated-span)
 
 (define (correlate src-e s-exp)
   (define e
@@ -65,6 +72,9 @@
                      (syntax->datum d)
                      d))))
 
+(define (correlated-property-symbol-keys e)
+  (syntax-property-symbol-keys e))
+
 (define correlated-property
   (case-lambda
     [(e k) (syntax-property e k)]
@@ -72,3 +82,9 @@
 
 (define-define-match define-correlated-match
   syntax? syntax-e (lambda (false str e) (error str)))
+
+(define (correlated-source s) (syntax-source s))
+(define (correlated-line s) (syntax-line s))
+(define (correlated-column s) (syntax-column s))
+(define (correlated-position s) (syntax-position s))
+(define (correlated-span s) (syntax-span s))

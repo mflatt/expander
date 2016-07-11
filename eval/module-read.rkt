@@ -46,7 +46,7 @@
                         exp)]
         [else
          (and filename
-              (error 'load-handler
+              (error 'default-load-handler
                      (string-append "expected a `module' declaration, but found something else\n"
                                     "  file: ~a")
                      filename))]))

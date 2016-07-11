@@ -10,7 +10,7 @@
          "run/cache.rkt"
          "boot/runtime-primitive.rkt"
          "host/linklet.rkt"
-         "host/reader-bridge.rkt"
+         "run/reader-bridge.rkt"
          "run/status.rkt"
          "run/submodule.rkt"
          "host/correlate.rkt"
@@ -157,10 +157,17 @@
 ;; synthesize a module for the host Racket to call
 ;; the hosted module system's instance
 (current-reader-guard (lambda (mod-path)
+                        (define synth-mod-path
+                          ;; Pick a module path that won't conflict with anything
+                          ;; in the host system
+                          (if (and (pair? mod-path)
+                                   (eq? 'submod (car mod-path)))
+                              `(submod ,(cadr mod-path) synthesized-reader)
+                              `(submod ,mod-path synthesized-reader)))
                         (when (module-declared? mod-path #t)
                           (define rs (dynamic-require mod-path 'read-syntax))
-                          (synthesize-reader-bridge-module mod-path rs))
-                        mod-path))
+                          (synthesize-reader-bridge-module mod-path synth-mod-path rs))
+                        synth-mod-path))
 
 (define (apply-to-module proc mod-path)
   (define path (resolved-module-path-name

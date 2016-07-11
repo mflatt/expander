@@ -3,7 +3,7 @@
          "../syntax/property.rkt"
          "../syntax/datum-map.rkt"
          "../host/correlate.rkt"
-         "../host/syntax-to-host-syntax.rkt")
+         (only-in "../host/syntax-to-reader-syntax.rkt" srcloc->vector))
 
 ;; The `correlate*` function takes the source location and relevant
 ;; properties of an expander syntax object and applies it to a

@@ -131,6 +131,7 @@
     (define m (namespace->module src-namespace mod-name))
     (declare-module! dest-namespace m mod-name)
     (when m-ns
+      (namespace-record-module-instance-attached! src-namespace mod-name phase)
       (or (namespace->module-namespace dest-namespace mod-name phase)
           (namespace-install-module-namespace! dest-namespace mod-name phase m m-ns))))
 

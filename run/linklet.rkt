@@ -5,6 +5,7 @@
          "../host/correlate.rkt"
          "../common/reflect-hash.rkt"
          "../boot/runtime-primitive.rkt"
+         "correlated-to-host-syntax.rkt"
          "linklet-operation.rkt")
 
 ;; A "linklet" is the primitive form of separate (not necessarily
@@ -137,6 +138,9 @@
 
 ;; ----------------------------------------
 
+;; Compile a `linklet` for to a plain `lambda`. Also, convert from the
+;; notion of correlated that works for `compile-linklet` to the notion
+;; of host syntax objects that works for `compile`.
 (define (desugar-linklet c)
   (define imports (list-ref c 1))
   (define exports (list-ref c 2))
@@ -218,17 +222,18 @@
   (define (last-is-definition? bodys)
     (define p (car (reverse bodys)))
     (and (pair? p) (eq? (correlated-e (car p)) 'define-values)))
-  `(lambda (self-inst ,@inst-names)
-    (let-values ,box-bindings
-      ,(cond
-        [(null? bodys) '(void)]
-        [else
-         `(begin
-           ,@(for/list ([body (in-list bodys)])
-               (desugar body))
-           ,@(if (last-is-definition? bodys)
-                 '((void))
-                 null))]))))
+  (correlated->host-syntax
+   `(lambda (self-inst ,@inst-names)
+     (let-values ,box-bindings
+       ,(cond
+         [(null? bodys) '(void)]
+         [else
+          `(begin
+            ,@(for/list ([body (in-list bodys)])
+                (desugar body))
+            ,@(if (last-is-definition? bodys)
+                  '((void))
+                  null))])))))
 
 ;; #:pairs? #f -> list of list of symbols
 ;; #:pairs? #t -> list of list of (cons ext-symbol int-symbol)

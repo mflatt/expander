@@ -56,7 +56,7 @@
                    available-module-instances  ; phase -> list of module-instance [shared among modules]
                    module-instances)   ; union resolved-module-path -> module-instance        [shared among modules]
         ;;                             ;       0-phase -> resolved-module-path -> module-instance
-        ;;                             ; where the firts option is for cross phase persistent modules
+        ;;                             ; where the first option is for cross phase persistent modules
         #:property prop:custom-write
         (lambda (ns port mode)
           (write-string "#<namespace" port)
