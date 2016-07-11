@@ -525,10 +525,6 @@
           (decode* deserialize-multi-scope name scopes)]
          [(deserialize-shifted-multi-scope)
           (decode* deserialize-shifted-multi-scope phase multi-scope)]
-         [(deserialize-single-binding-table)
-          (decode* deserialize-single-binding-table sym scopes binding)]
-         [(deserialize-single-binding-value)
-          (decode* deserialize-single-binding-value scopes binding)]
          [(deserialize-table-with-bulk-bindings)
           (decode* deserialize-table-with-bulk-bindings syms bulk-bindings)]
          [(deserialize-bulk-binding-at)
