@@ -1,7 +1,7 @@
 #lang racket/base
 (require "../compile/serialize-property.rkt"
          "syntax.rkt"
-         "scope.rkt" ; defines `prop:bulk-binding`
+         "binding-table.rkt" ; defines `prop:bulk-binding`
          "binding.rkt"
          "../common/module-path.rkt"
          (only-in "../compile/reserved-symbol.rkt" bulk-binding-registry-id)

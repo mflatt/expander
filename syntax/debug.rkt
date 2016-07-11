@@ -3,6 +3,7 @@
          "syntax.rkt"
          "scope.rkt"
          "fallback.rkt"
+         "binding-table.rkt"
          (submod "scope.rkt" for-debug)
          "binding.rkt"
          "module-binding.rkt")
@@ -23,23 +24,7 @@
         (cond
          [(identifier? s)
           (for*/list ([sc (in-set s-scs)]
-                      [bindings (in-value
-                                 (let ([bindings (or (hash-ref (scope-bindings sc) sym #f)
-                                                     #hash())])
-                                   ;; Check bulk bindings; if a symbol match is found,
-                                   ;; synthesize a non-bulk binding table, as long as the
-                                   ;; same set of scopes is not already mapped
-                                   (for*/fold ([bindings bindings])
-                                              ([bulk-at (in-list (scope-bulk-bindings sc))]
-                                               [bulk (in-value (bulk-binding-at-bulk bulk-at))]
-                                               [syms (in-value (bulk-binding-symbols bulk s null))]
-                                               [b-info (in-value (hash-ref syms sym #f))]
-                                               #:when (and b-info
-                                                           (not (hash-ref bindings (bulk-binding-at-scopes bulk-at) #f))))
-                                     (hash-set bindings
-                                               (bulk-binding-at-scopes bulk-at)
-                                               ((bulk-binding-create bulk) bulk b-info sym)))))]
-                      [(scs b) (in-hash bindings)]
+                      [(scs b) (in-binding-table sym (scope-binding-table sc) s null)]
                       #:when (or all-bindings?
                                  (subset? scs s-scs)))
             (hash 'name (syntax-e s)

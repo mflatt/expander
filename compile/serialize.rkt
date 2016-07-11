@@ -4,6 +4,7 @@
          "serialize-state.rkt"
          "../common/set.rkt"
          "../syntax/syntax.rkt"
+         "../syntax/binding-table.rkt"
          "../syntax/scope.rkt"
          "../syntax/binding.rkt"
          "../syntax/module-binding.rkt"
@@ -524,6 +525,12 @@
           (decode* deserialize-multi-scope name scopes)]
          [(deserialize-shifted-multi-scope)
           (decode* deserialize-shifted-multi-scope phase multi-scope)]
+         [(deserialize-single-binding-table)
+          (decode* deserialize-single-binding-table sym scopes binding)]
+         [(deserialize-single-binding-value)
+          (decode* deserialize-single-binding-value scopes binding)]
+         [(deserialize-table-with-bulk-bindings)
+          (decode* deserialize-table-with-bulk-bindings syms bulk-bindings)]
          [(deserialize-bulk-binding-at)
           (decode* deserialize-bulk-binding-at scopes bulk)]
          [(deserialize-representative-scope)
@@ -562,13 +569,11 @@
     [(void) (void)]
     [(deserialize-scope-fill!)
      (deserialize-scope-fill! v
-                              (decode (cadr d) mpis inspector bulk-binding-registry shared)
-                              (decode (caddr d) mpis inspector bulk-binding-registry shared))]
+                              (decode (cadr d) mpis inspector bulk-binding-registry shared))]
     [(deserialize-representative-scope-fill!)
      (deserialize-representative-scope-fill! v
                                              (decode (cadr d) mpis inspector bulk-binding-registry shared)
-                                             (decode (caddr d) mpis inspector bulk-binding-registry shared)
-                                             (decode (cadddr d) mpis inspector bulk-binding-registry shared))]
+                                             (decode (caddr d) mpis inspector bulk-binding-registry shared))]
     [else
      (error 'deserialize "bad fill encoding: ~v" d)]))
  

@@ -4,6 +4,7 @@
          "../compile/serialize-state.rkt"
          "../common/memo.rkt"
          "syntax.rkt"
+         "binding-table.rkt"
          "taint.rkt"
          "tamper.rkt"
          "../common/phase.rkt"
@@ -33,9 +34,6 @@
 
          add-binding-in-scopes!
          add-bulk-binding-in-scopes!
-         
-         prop:bulk-binding
-         (struct-out bulk-binding-class)
 
          resolve
 
@@ -49,7 +47,6 @@
          deserialize-representative-scope-fill!
          deserialize-multi-scope
          deserialize-shifted-multi-scope
-         deserialize-bulk-binding-at
          
          generalize-scope)
 
@@ -57,9 +54,6 @@
   (provide (struct-out scope)
            (struct-out multi-scope)
            (struct-out representative-scope)
-           (struct-out bulk-binding-at)
-           bulk-binding-symbols
-           bulk-binding-create
            scope-set-at-fallback))
 
 ;; A scope represents a distinct "dimension" of binding. We can attach
@@ -70,8 +64,7 @@
 
 (struct scope (id             ; internal scope identity; used for sorting
                kind           ; debug info
-               [bindings #:mutable]       ; sym -> scope-set -> binding [shadows any bulk binding]
-               [bulk-bindings #:mutable]) ; list of bulk-binding-at [earlier shadows later]
+               [binding-table #:mutable]) ; see "binding-table.rkt"
         ;; Custom printer:
         #:property prop:custom-write
         (lambda (sc port mode)
@@ -93,35 +86,29 @@
         (lambda (s ser state)
           ;; Like the main serialization result, this result
           ;; is data that is interpreted
-          (if (and (empty-bindings? (scope-bindings s))
-                   (empty-bulk-bindings? (scope-bulk-bindings s)))
+          (if (binding-table-empty? (scope-binding-table s))
               `(void)
               `(deserialize-scope-fill!
-                ,(ser (prune-bindings-to-reachable (scope-bindings s)
-                                                   state))
-                ,(ser (prune-bulk-bindings-to-reachable (scope-bulk-bindings s)
-                                                        state)))))
+                ,(ser (binding-table-prune-to-reachable (scope-binding-table s) state)))))
         #:property prop:reach-scopes
         (lambda (s reach)
           ;; the `bindings` field is handled via `prop:scope-with-bindings`
           (void))
         #:property prop:scope-with-bindings
         (lambda (s reachable-scopes reach register-trigger)
-          (when (scope-bindings s)
-            (register-bindings-reachable (scope-bindings s)
-                                         reachable-scopes
-                                         reach
-                                         register-trigger))))
+          (binding-table-register-reachable (scope-binding-table s)
+                                            reachable-scopes
+                                            reach
+                                            register-trigger)))
 
 (define deserialize-scope
   (case-lambda
     [() top-level-common-scope]
     [(kind)
-     (scope (new-deserialize-scope-id!) kind (make-bindings) (make-bulk-bindings))]))
+     (scope (new-deserialize-scope-id!) kind empty-binding-table)]))
 
-(define (deserialize-scope-fill! s bindings bulk-bindings)
-  (set-scope-bindings! s bindings)
-  (set-scope-bulk-bindings! s bulk-bindings))
+(define (deserialize-scope-fill! s bt)
+  (set-scope-binding-table! s bt))
 
 ;; A "multi-scope" represents a group of scopes, each of which exists
 ;; only at a specific phase, and each in a distinct phase. This
@@ -175,10 +162,7 @@
         #:property prop:serialize-fill!
         (lambda (s ser state)
           `(deserialize-representative-scope-fill!
-            ,(ser (prune-bindings-to-reachable (scope-bindings s)
-                                               state))
-            ,(ser (prune-bulk-bindings-to-reachable (scope-bulk-bindings s)
-                                                    state))
+            ,(ser (binding-table-prune-to-reachable (scope-binding-table s) state))
             ,(ser (representative-scope-owner s))))
         #:property prop:reach-scopes
         (lambda (s reach)
@@ -186,10 +170,10 @@
           (reach (representative-scope-owner s))))
 
 (define (deserialize-representative-scope kind phase)
-  (representative-scope (new-deserialize-scope-id!) kind #f #f #f phase))
+  (representative-scope (new-deserialize-scope-id!) kind #f #f phase))
 
-(define (deserialize-representative-scope-fill! s bindings bulk-bindings owner)
-  (deserialize-scope-fill! s bindings bulk-bindings)
+(define (deserialize-representative-scope-fill! s bt owner)
+  (deserialize-scope-fill! s bt)
   (set-representative-scope-owner! s owner))
 
 (struct shifted-multi-scope (phase        ; non-label phase shift or shifted-to-label-phase
@@ -236,40 +220,6 @@
 ;; corresponding representative scope
 (struct shifted-to-label-phase (from) #:prefab)
 
-(struct bulk-binding-at (scopes ; scope set
-                         bulk)  ; bulk-binding
-        #:property prop:serialize
-        (lambda (bba ser state)
-          ;; Data that is interpreted by the deserializer:
-          `(deserialize-bulk-binding-at
-            ,(ser (bulk-binding-at-scopes bba))
-            ,(ser (bulk-binding-at-bulk bba))))
-        #:property prop:reach-scopes
-        (lambda (sms reach)
-          ;; bulk bindings are pruned dependong on whether all scopes
-          ;; in `scopes` are reachable, and we shouldn't get here
-          ;; when looking for scopes
-          (error "shouldn't get here")))
-
-(define (deserialize-bulk-binding-at scopes bulk)
-  (bulk-binding-at scopes bulk))
-
-;; Bulk bindings are represented by a property, so that the implementation
-;; can be separate and manage serialiation:
-(define-values (prop:bulk-binding bulk-binding? bulk-binding-ref)
-  (make-struct-type-property 'bulk-binding))
-
-;; Value of `prop:bulk-binding`
-(struct bulk-binding-class (get-symbols ; bulk-binding list-of-shift -> sym -> binding-info
-                            create))    ; bul-binding -> binding-info sym -> binding
-(define (bulk-binding-symbols b s extra-shifts)
-  ;; Providing the identifier `s` supports its shifts
-  ((bulk-binding-class-get-symbols (bulk-binding-ref b))
-   b 
-   (append extra-shifts (if s (syntax-mpi-shifts s) null))))
-(define (bulk-binding-create b)
-  (bulk-binding-class-create (bulk-binding-ref b)))
-
 ;; Each new scope increments the counter, so we can check whether one
 ;; scope is newer than another.
 (define id-counter 0)
@@ -282,23 +232,11 @@
   ;; having a larger id
   (- (new-scope-id!)))
 
-(define (make-bindings)
-  #hasheq())
-
-(define (empty-bindings? bs)
-  (zero? (hash-count bs)))
-
-(define (make-bulk-bindings)
-  null)
-
-(define (empty-bulk-bindings? bbs)
-  (null? bbs))
-
 ;; A shared "outside-edge" scope for all top-level contexts
-(define top-level-common-scope (scope 0 'module (make-bindings) (make-bulk-bindings)))
+(define top-level-common-scope (scope 0 'module empty-binding-table))
 
 (define (new-scope kind)
-  (scope (new-scope-id!) kind (make-bindings) (make-bulk-bindings)))
+  (scope (new-scope-id!) kind empty-binding-table))
 
 (define (new-multi-scope [name #f])
   (intern-shifted-multi-scope 0 (multi-scope (new-scope-id!) name (make-hasheqv) (make-hasheqv) (make-hash))))
@@ -307,7 +245,7 @@
   ;; Get the identity of `ms` at phase`
   (or (hash-ref (multi-scope-scopes ms) phase #f)
       (let ([s (representative-scope (new-scope-id!) 'module
-                                     (make-bindings) (make-bulk-bindings)
+                                     empty-binding-table
                                      ms phase)])
         (hash-set! (multi-scope-scopes ms) phase s)
         s)))
@@ -639,19 +577,14 @@
 
 (define (add-binding-in-scopes! scopes sym binding)
   (define max-sc (find-max-scope scopes))
-  (define bindings (scope-bindings max-sc))
-  (define sym-bindings (hash-ref bindings sym #hash()))
-  (set-scope-bindings! max-sc (hash-set bindings
-                                        sym
-                                        (hash-set sym-bindings scopes binding)))
+  (define bt (binding-table-add (scope-binding-table max-sc) scopes sym binding))
+  (set-scope-binding-table! max-sc bt)
   (clear-resolve-cache! sym))
 
-(define (add-bulk-binding-in-scopes! scopes binding)
+(define (add-bulk-binding-in-scopes! scopes bulk-binding)
   (define max-sc (find-max-scope scopes))
-  (set-scope-bulk-bindings! max-sc
-                            (cons (bulk-binding-at scopes binding)
-                                  (scope-bulk-bindings max-sc)))
-  (remove-matching-bindings! max-sc scopes binding)
+  (define bt (binding-table-add-bulk (scope-binding-table max-sc) scopes bulk-binding))
+  (set-scope-binding-table! max-sc bt)
   (clear-resolve-cache!))
 
 (define (syntax-any-macro-scopes? s)
@@ -681,23 +614,8 @@
      [else
       (define candidates
         (for*/list ([sc (in-set scopes)]
-                    [bindings (in-value
-                               (let ([bindings (hash-ref (scope-bindings sc) sym #hash())])
-                                 ;; Check bulk bindings; if a symbol match is found,
-                                 ;; synthesize a non-bulk binding table, as long as the
-                                 ;; same set of scopes is not already mapped
-                                 (for*/fold ([bindings bindings])
-                                            ([bulk-at (in-list (scope-bulk-bindings sc))]
-                                             [bulk (in-value (bulk-binding-at-bulk bulk-at))]
-                                             [syms (in-value (bulk-binding-symbols bulk s extra-shifts))]
-                                             [b-info (in-value (hash-ref syms sym #f))]
-                                             #:when (and b-info
-                                                         (not (hash-ref bindings (bulk-binding-at-scopes bulk-at) #f))))
-                                   (hash-set bindings
-                                             (bulk-binding-at-scopes bulk-at)
-                                             ((bulk-binding-create bulk) bulk b-info sym)))))]
-                    [(b-scopes binding) (in-immutable-hash bindings)]
-                    #:when (subset? b-scopes scopes))
+                    [(b-scopes binding) (in-binding-table sym (scope-binding-table sc) s extra-shifts)]
+                    #:when (and b-scopes binding (subset? b-scopes scopes)))
           (cons b-scopes binding)))
       (define max-candidate
         (and (pair? candidates)
@@ -726,76 +644,8 @@
 
 ;; ----------------------------------------
 
-;; The bindings of `bulk at `scopes` should shadow any existing
-;; mappings in `sym-bindings`
-(define (remove-matching-bindings! sc scopes bulk)
-  (define bulk-symbols (bulk-binding-symbols bulk #f null))
-  (define bindings (scope-bindings sc))
-  (define new-bindings
-    (cond
-     [((hash-count bindings) . < . (hash-count bulk-symbols))
-      ;; Faster to consider each sym in `sym-binding`
-      (for/fold ([bindings bindings]) ([(sym sym-bindings) (in-immutable-hash bindings)])
-        (if (hash-ref bulk-symbols sym #f)
-            (hash-set bindings sym (hash-remove sym-bindings scopes))
-            bindings))]
-     [else
-      ;; Faster to consider each sym in `bulk-symbols`
-      (for/fold ([bindings bindings]) ([sym (in-immutable-hash-keys bulk-symbols)])
-        (define sym-bindings (hash-ref bindings sym #f))
-        (if sym-bindings
-            (hash-set bindings sym (hash-remove sym-bindings scopes))
-            bindings))]))
-  (set-scope-bindings! sc new-bindings))
-
-;; ----------------------------------------
-
 (define (bound-identifier=? a b phase)
   (and (eq? (syntax-e a)
             (syntax-e b))
        (equal? (syntax-scope-set a phase)
                (syntax-scope-set b phase))))
-
-;; ----------------------------------------
-
-(define (prune-bindings-to-reachable bindings state)
-  (or (hash-ref (serialize-state-bindings-intern state) bindings #f)
-      (let ([reachable-scopes (serialize-state-reachable-scopes state)])
-        (define new-bindings
-          (for*/hasheq ([(sym bindings-for-sym) (in-immutable-hash bindings)]
-                        [new-bindings-for-sym
-                         (in-value
-                          (for/hash ([(scopes binding) (in-immutable-hash bindings-for-sym)]
-                                     #:when (subset? scopes reachable-scopes))
-                            (values (intern-scopes scopes state) binding)))]
-                        #:unless (zero? (hash-count new-bindings-for-sym)))
-            (values sym new-bindings-for-sym)))
-        (hash-set! (serialize-state-bindings-intern state) bindings new-bindings)
-        new-bindings)))
-
-(define (prune-bulk-bindings-to-reachable bulk-bindings state)
-  (and bulk-bindings
-       (or (hash-ref (serialize-state-bulk-bindings-intern state) bulk-bindings #f)
-           (let ([reachable-scopes (serialize-state-reachable-scopes state)])
-             (define new-bulk-bindings
-               (for/list ([bba (in-list bulk-bindings)]
-                          #:when (subset? (bulk-binding-at-scopes bba) reachable-scopes))
-                 (struct-copy bulk-binding-at bba
-                              [scopes (intern-scopes (bulk-binding-at-scopes bba) state)])))
-             (hash-set! (serialize-state-bulk-bindings-intern state) bulk-bindings new-bulk-bindings)
-             (and (pair? new-bulk-bindings)
-                  new-bulk-bindings)))))
-
-(define (register-bindings-reachable bindings reachable-scopes reach register-trigger)
-  (for* ([(sym bindings-for-sym) (in-immutable-hash bindings)]
-         [(scopes binding) (in-immutable-hash bindings-for-sym)])
-    (define v (and (binding-reach-scopes? binding)
-                   ((binding-reach-scopes-ref binding) binding)))
-    (when v
-      (cond
-       [(subset? scopes reachable-scopes)
-        (reach v)]
-       [else
-        (for ([sc (in-set scopes)]
-              #:unless (set-member? reachable-scopes sc))
-          (register-trigger sc v))]))))

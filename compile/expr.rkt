@@ -215,7 +215,7 @@
 (define (local-id->symbol id phase)
   (define b (resolve id phase))
   (unless (local-binding? b)
-    (error "bad binding:" id phase))
+    (error "bad binding:" id phase b))
   (local-key->symbol (local-binding-key b)))
 
 
