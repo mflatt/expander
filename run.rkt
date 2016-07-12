@@ -160,10 +160,7 @@
                         (define synth-mod-path
                           ;; Pick a module path that won't conflict with anything
                           ;; in the host system
-                          (if (and (pair? mod-path)
-                                   (eq? 'submod (car mod-path)))
-                              `(submod ,(cadr mod-path) synthesized-reader)
-                              `(submod ,mod-path synthesized-reader)))
+                          `',(string->symbol (format "~s" mod-path)))
                         (when (module-declared? mod-path #t)
                           (define rs (dynamic-require mod-path 'read-syntax))
                           (synthesize-reader-bridge-module mod-path synth-mod-path rs))

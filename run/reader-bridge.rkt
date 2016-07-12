@@ -24,11 +24,10 @@
                    [current-compile orig-compile]
                    [current-module-name-resolver orig-resolver])
       (eval `(,(namespace-module-identifier) mod '#%kernel
-              (module* synthesized-reader #f
-                (define-values (read-syntax)
-                  ,(if (procedure-arity-includes? reader 6)
-                       (lambda (name in modname line col pos)
-                         (syntax->reader-syntax (reader name in (host-syntax->syntax modname) line col pos)))
-                       (lambda (name in)
-                         (syntax->reader-syntax (reader name in)))))
-                (#%provide read-syntax)))))))
+              (define-values (read-syntax)
+                ,(if (procedure-arity-includes? reader 6)
+                     (lambda (name in modname line col pos)
+                       (syntax->reader-syntax (reader name in (host-syntax->syntax modname) line col pos)))
+                     (lambda (name in)
+                       (syntax->reader-syntax (reader name in)))))
+              (#%provide read-syntax))))))
