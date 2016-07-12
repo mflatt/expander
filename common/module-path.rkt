@@ -107,7 +107,7 @@
 
 ;; ----------------------------------------
 
-(struct module-path-index (path base [resolved #:mutable] shift-cache)
+(struct module-path-index (path base [resolved #:mutable] [shift-cache #:mutable])
         #:property prop:equal+hash
         (list (lambda (a b eql?)
                 (and (eql? (module-path-index-path a)
@@ -205,7 +205,7 @@
        [(and (pair? mod-path) (eq? 'quote (car mod-path))) #f]
        [(symbol? mod-path) #f]
        [else base]))
-    (module-path-index mod-path keep-base #f (make-shift-cache))]))
+    (module-path-index mod-path keep-base #f #f)]))
 
 (define (module-path-index-resolve/maybe base load?)
   (if (module-path-index? base)
@@ -228,7 +228,7 @@
 
 (define make-self-module-path-index
   (case-lambda
-    [(name) (module-path-index #f #f name (make-shift-cache))]
+    [(name) (module-path-index #f #f name #f)]
     [(name enclosing)
      (make-self-module-path-index (build-module-name name
                                                      (and enclosing
@@ -248,7 +248,7 @@
              (module-path-index-resolved self)))
   (or (let ([e (hash-ref generic-self-mpis r #f)])
         (and e (ephemeron-value e)))
-      (let ([mpi (module-path-index #f #f r (make-shift-cache))])
+      (let ([mpi (module-path-index #f #f r #f)])
         (hash-set! generic-self-mpis r (make-ephemeron r mpi))
         mpi)))
 
@@ -283,18 +283,18 @@
        [(shift-cache-ref (module-path-index-shift-cache shifted-base) mpi)]
        [else
         (define shifted-mpi
-          (module-path-index (module-path-index-path mpi)
-                             shifted-base
-                             #f
-                             (make-shift-cache)))
-        (shift-cache-set! (module-path-index-shift-cache shifted-base) mpi shifted-mpi)
+          (module-path-index (module-path-index-path mpi) shifted-base #f #f))
+        (shift-cache-set! (module-path-index-shift-cache! shifted-base) mpi shifted-mpi)
         shifted-mpi])])]))
 
-(define (make-shift-cache)
-  (make-weak-hasheq))
+(define (module-path-index-shift-cache! mpi)
+  (or (module-path-index-shift-cache mpi)
+      (let ([cache (make-weak-hasheq)])
+        (set-module-path-index-shift-cache! mpi cache)
+        cache)))
 
 (define (shift-cache-ref cache v)
-  (hash-ref cache v #f))
+  (and cache (hash-ref cache v #f)))
 
 (define (shift-cache-set! cache v r)
   (hash-set! cache v r))
