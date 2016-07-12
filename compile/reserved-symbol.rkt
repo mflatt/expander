@@ -11,7 +11,8 @@
          get-syntax-literal!-id
          bulk-binding-registry-id
          inspector-id
-         deserialized-syntax-id
+         deserialize-syntax-id
+         deserialized-syntax-vector-id
          set-transformer!-id
          top-level-bind!-id
          top-level-require!-id)
@@ -24,7 +25,8 @@
 (define get-syntax-literal!-id (make-built-in-symbol! 'get-syntax-literal!))
 (define bulk-binding-registry-id (make-built-in-symbol! 'bulk-binding-registry))
 (define inspector-id (make-built-in-symbol! 'inspector))
-(define deserialized-syntax-id (make-built-in-symbol! 'deserialized-syntax))
+(define deserialize-syntax-id (make-built-in-symbol! 'deserialize-syntax))
+(define deserialized-syntax-vector-id (make-built-in-symbol! 'deserialized-syntax-vector))
 (define set-transformer!-id (make-built-in-symbol! 'set-transformer!))
 (define top-level-bind!-id (make-built-in-symbol! 'top-level-bind!))
 (define top-level-require!-id (make-built-in-symbol! 'top-level-require!))

@@ -16,6 +16,7 @@
          generate-eager-syntax-literals!
          generate-eager-syntax-literal-lookup
          generate-lazy-syntax-literals!
+         generate-lazy-syntax-literals-data!
          generate-lazy-syntax-literal-lookup
          syntax-literals-as-vectors
          empty-syntax-literals
@@ -79,57 +80,60 @@
 (define (header-empty-syntax-literals? header)
   (null? (unbox (header-syntax-literals header))))
 
-;; Generate on-demand deserialization (shared across instances) and
-;; shifting (not shared); the result defines `syntax-literals-id` and
+;; Generate on-demand shifting (not shared among module instances)
+;; using `deserialize-syntax-literal-data` (shared among module
+;; instances); the result defines `syntax-literals-id` and
 ;; `get-syntax-literal!-id`
 (define (generate-lazy-syntax-literals! syntax-literals-boxes mpis self
                                         #:skip-deserialize? [skip-deserialize? #f])
+  (define syntax-literalss (map unbox syntax-literals-boxes))
+  `((define-values (,syntax-literalss-id)
+      (vector ,@(for/list ([syntax-literals (in-list syntax-literalss)])
+                  `(make-vector ,(length syntax-literals) #f))))
+    (define-values (,get-syntax-literal!-id)
+      (lambda (phase pos)
+        (begin
+          ,@(if skip-deserialize?
+                null
+                `((if (vector-ref ,deserialized-syntax-vector-id phase)
+                      (void)
+                      (,deserialize-syntax-id))))
+          (let-values ([(stx)
+                        (syntax-module-path-index-shift
+                         (syntax-shift-phase-level
+                          (vector-ref (vector-ref ,deserialized-syntax-vector-id phase) pos)
+                          ,phase-shift-id)
+                         ,(add-module-path-index! mpis self)
+                         ,self-id)])
+            (begin
+              (vector-set! (vector-ref ,syntax-literalss-id phase) pos stx)
+              stx)))))))
+
+;; Generate on-demand deserialization (shared across instances); the
+;; result defines `deserialize-syntax-id`
+(define (generate-lazy-syntax-literals-data! syntax-literals-boxes mpis)
   (define syntax-literalss (map unbox syntax-literals-boxes))
   (cond
    [(andmap null? syntax-literalss)
     null]
    [else
-    `((define-values (,syntax-literalss-id)
-        (vector ,@(for/list ([syntax-literals (in-list syntax-literalss)])
-                    `(make-vector ,(length syntax-literals) #f))))
-      ,@(if skip-deserialize?
-            null
-            ;; Put deserialization under a `lmabda` so that it's loaded
-            ;; from bytecode on demand, and in a separate function
-            ;; that can be discarded after deserialization
-            `((define-values (deserialize-syntax-literals)
-                (lambda ()
-                  ,(generate-deserialize (vector->immutable-vector
-                                          (list->vector
-                                           (map
-                                            vector->immutable-vector
-                                            (map list->vector
-                                                 (map reverse syntax-literalss)))))
-                                         mpis)))))
-      (define-values (,get-syntax-literal!-id)
-        (lambda (phase pos)
+    `((define-values (,deserialize-syntax-id)
+        ;; Put deserialization under a `lambda` so that it's loaded
+        ;; from bytecode on demand, and in a separate function
+        ;; that can be discarded via `set!` after deserialization
+        (lambda ()
           (begin
-            ,@(if skip-deserialize?
-                  null
-                  `((if (vector-ref ,deserialized-syntax-id phase)
-                        (void)
-                        (begin
-                          (vector-copy! ,deserialized-syntax-id
-                                        '0
-                                        (deserialize-syntax-literals))
-                          ;; Discard deserialization function, so the
-                          ;; code with a large literal can be GCed:
-                          (set! deserialize-syntax-literals #f)))))
-            (let-values ([(stx)
-                          (syntax-module-path-index-shift
-                           (syntax-shift-phase-level
-                            (vector-ref (vector-ref ,deserialized-syntax-id phase) pos)
-                            ,phase-shift-id)
-                           ,(add-module-path-index! mpis self)
-                           ,self-id)])
-              (begin
-                (vector-set! (vector-ref ,syntax-literalss-id phase) pos stx)
-                stx))))))]))
+            (vector-copy!
+             ,deserialized-syntax-vector-id
+             '0
+             ,(generate-deserialize (vector->immutable-vector
+                                     (list->vector
+                                      (map
+                                       vector->immutable-vector
+                                       (map list->vector
+                                            (map reverse syntax-literalss)))))
+                                    mpis))
+            (set! ,deserialize-syntax-id #f)))))]))
 
 (define (generate-lazy-syntax-literal-lookup phase pos)
   `(let-values ([(stx) ,(generate-eager-syntax-literal-lookup phase pos)])

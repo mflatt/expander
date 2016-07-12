@@ -35,10 +35,10 @@
 ;;
 ;; * Modules are compiled to a slightly different protocol. Like the
 ;;   top-level protocol, the resulting set of linklets includes on
-;;   linklet per phase plus two linklets for housing potentially
+;;   linklet per phase plus three linklets for housing potentially
 ;;   marshaled data. An additional linklet reports metadata about the
 ;;   modules, such as its requires and provides. An individual module
-;;   is reprsented by a linklet bundle, and a module is compiled with
+;;   is represented by a linklet bundle, and a module is compiled with
 ;;   submodules through nested linklet directories.
 ;;
 ;;   Besides the extra metadata module, the handling of syntax-object

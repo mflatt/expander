@@ -28,6 +28,14 @@
                      #:supermodule-name [supermodule-name #f]) ; for submodules declared with module
   (define-values (dh h data-instance declaration-instance)
     (compiled-module->dh+h+data-instance+declaration-instance c))
+
+  (define syntax-literals-data-instance
+    (if (compiled-in-memory? c)
+        (make-syntax-literal-data-instance-from-compiled-in-memory c)
+        (instantiate-linklet (eval-linklet (hash-ref h 'stx-data))
+                             (list deserialize-instance
+                                   data-instance
+                                   (make-declaration-context-instance ns)))))
   
   (define (decl key)
     (instance-variable-value declaration-instance key))
@@ -90,7 +98,7 @@
                          (lambda (data-box ns phase-shift self bulk-binding-registry insp)
                            (unless (unbox data-box)
                              (init-syntax-literals! data-box ns
-                                                    syntax-literals-linklet data-instance
+                                                    syntax-literals-linklet data-instance syntax-literals-data-instance
                                                     phase-shift original-self self bulk-binding-registry insp
                                                     create-root-expand-context-from-module)))
                          #:instantiate-phase-callback
@@ -161,7 +169,7 @@
 ;; ----------------------------------------
 
 (define (init-syntax-literals! data-box ns
-                               syntax-literals-linklet data-instance
+                               syntax-literals-linklet data-instance syntax-literals-data-instance
                                phase-shift original-self self bulk-binding-registry insp
                                create-root-expand-context-from-module)
   (define inst
@@ -177,6 +185,7 @@
     (instantiate-linklet syntax-literals-linklet
                          (list deserialize-instance
                                data-instance
+                               syntax-literals-data-instance
                                inst)))
   
   (set-box! data-box root-ctx-instance)
@@ -259,6 +268,20 @@
   (instance-set-variable-value! data-instance 'deserialized-syntax
                                 (compiled-in-memory-syntax-literalss cim))
   data-instance)
+
+(define (make-syntax-literal-data-instance-from-compiled-in-memory cim)
+  (define syntax-literal-data-instance (make-instance 'data))
+  (instance-set-variable-value! syntax-literal-data-instance 'deserialized-syntax-vector
+                                (compiled-in-memory-syntax-literalss cim))
+  syntax-literal-data-instance)
+
+(define (make-declaration-context-instance ns)
+  (define declaration-context-instance (make-instance 'data))
+  (instance-set-variable-value! declaration-context-instance 'inspector
+                                (current-code-inspector))
+  (instance-set-variable-value! declaration-context-instance 'bulk-binding-registry
+                                (namespace-bulk-binding-registry ns))
+  declaration-context-instance)
 
 ;; ----------------------------------------
 

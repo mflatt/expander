@@ -12,7 +12,6 @@
   `([namespace ,ns-id]
     [phase-shift ,phase-shift-id]
     [self ,self-id]
-    [bulk-binding-registry ,bulk-binding-registry-id]
     [inspector ,inspector-id]
     [set-transformer! ,set-transformer!-id]))
 
@@ -27,7 +26,6 @@
   (instance-set-variable-value! i 'namespace ns)
   (instance-set-variable-value! i 'phase-shift phase-shift)
   (instance-set-variable-value! i 'self self)
-  (instance-set-variable-value! i 'bulk-binding-registry bulk-binding-registry)
   (instance-set-variable-value! i 'inspector inspector)
   (instance-set-variable-value! i 'set-transformer! set-transformer!)
   (when record-root-context!

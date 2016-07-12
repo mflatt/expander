@@ -160,7 +160,7 @@
        (define-values (,inspector-id) (current-code-inspector))
        ,@declaration-body)))
   
-  ;; Assemble a linklet that deserializes syntax objects on demand.
+  ;; Assemble a linklet that shifts syntax objects on demand.
   ;; Include an encoding of the root expand context, if any, so that
   ;; `module->namespace` can have the same scopes as literal syntax
   ;; objects in the module.
@@ -169,8 +169,11 @@
      `(linklet
        ;; imports
        (,deserialize-imports
-        [(mpi-vector ,mpi-vector-id)
-         (deserialized-syntax ,deserialized-syntax-id)]
+        [(mpi-vector ,mpi-vector-id)]
+        [(deserialized-syntax-vector ,deserialized-syntax-vector-id)
+         ,@(if serializable?
+               `((deserialize-syntax ,deserialize-syntax-id))
+               '())]
         ,instance-imports)
        ;; exports
        ([,syntax-literalss-id syntax-literalss]
@@ -188,11 +191,33 @@
             `'empty]
            [else
             `'#f])))))
+  
+  ;; Assemble a linklet that deserializes unshifted syntax objects on
+  ;; demand. An instance of this linklet is shared for all
+  ;; instantiations of the module, like the data linklet. It's
+  ;; separate from the data linklet so that the data linklet can be
+  ;; instantiated for information that just depends on module path
+  ;; indexes, such as required modules.
+  (define syntax-literals-data-linklet
+    (and serializable?
+         ((if to-source? values compile-linklet)
+          `(linklet
+            ;; imports
+            (,deserialize-imports
+             [(mpi-vector ,mpi-vector-id)]
+             [(inspector ,inspector-id)
+              (bulk-binding-registry ,bulk-binding-registry-id)])
+            ;; exports
+            ([,deserialized-syntax-vector-id deserialized-syntax-vector]
+             [,deserialize-syntax-id deserialize-syntax])
+            ;; body
+            (define-values (,deserialized-syntax-vector-id)
+              (make-vector ,(+ 2 max-phase) #f))
+            ,@(generate-lazy-syntax-literals-data! all-syntax-literalss mpis)))))
 
   ;; The data linklet houses deserialized data for use by the
-  ;; declaration and module-body linklets. In the case of syntax
-  ;; objects, it provides a shared vector for all instances, while
-  ;; the unmarshaling of data is left to each body.
+  ;; declaration and module-body linklets. Its instance is shared
+  ;; across module instances.
   (define data-linklet
     (and serializable?
          ((if to-source? values compile-linklet)
@@ -200,14 +225,11 @@
             ;; imports
             (,deserialize-imports)
             ;; exports
-            ([,mpi-vector-id mpi-vector]
-             deserialized-syntax)
+            ([,mpi-vector-id mpi-vector])
             ;; body
             (define-values (,inspector-id) (current-code-inspector))
             (define-values (,mpi-vector-id)
-              ,(generate-module-path-index-deserialize mpis))
-            (define-values (deserialized-syntax)
-              (make-vector ,(+ 2 max-phase) #f))))))
+              ,(generate-module-path-index-deserialize mpis))))))
   
   (define bundle
     (let* ([linklets (hash-set body-linklets 'decl declaration-linklet)]
@@ -215,6 +237,9 @@
                          (hash-set linklets 'data data-linklet)
                          linklets)]
            [linklets (hash-set linklets 'stx syntax-literals-linklet)]
+           [linklets (if syntax-literals-data-linklet
+                         (hash-set linklets 'stx-data syntax-literals-data-linklet)
+                         linklets)]
            [linklets (hash-set linklets 'pre (map car pre-submodules))]
            [linklets (hash-set linklets 'post (map car post-submodules))]
            [linklets (hash-set linklets 'name full-module-name)])
