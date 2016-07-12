@@ -6,6 +6,7 @@
          intern-scopes
          intern-shifted-multi-scopes
          intern-mpi-shifts
+         intern-context-triple
          intern-properties)
 
 ;; A `serialize-state` record is threaded through the construction of
@@ -17,6 +18,7 @@
                          scopes                 ; interned scope sets
                          shifted-multi-scopes   ; interned shifted multi-scope lists
                          mpi-shifts             ; interned module path index shifts
+                         context-triples        ; combinations of the previous three
                          props                  ; map full props to previously calculated
                          interned-props))       ; intern filtered props
 
@@ -27,6 +29,7 @@
                    (make-hash)     ; scopes
                    (make-hash)     ; shifted-multi-scopes
                    (make-hasheq)   ; mpi-shifts
+                   (make-hasheq)   ; context-triples
                    (make-hasheq)   ; props
                    (make-hash)))   ; interned-props
 
@@ -55,6 +58,20 @@
         (let ([v (cons (car mpi-shifts) tail)])
           (hash-set! tail-table (car mpi-shifts) v)
           v))]))
+
+(define (intern-context-triple scs sms mpi-shifts state)
+  (define scs-ht (or (hash-ref (serialize-state-context-triples state) scs #f)
+                     (let ([ht (make-hasheq)])
+                       (hash-set! (serialize-state-context-triples state) scs ht)
+                       ht)))
+  (define sms-ht (or (hash-ref scs-ht sms #f)
+                     (let ([ht (make-hasheq)])
+                       (hash-set! scs-ht sms ht)
+                       ht)))
+  (or (hash-ref sms-ht mpi-shifts #f)
+      (let ([vec (vector-immutable scs sms mpi-shifts)])
+        (hash-set! sms-ht mpi-shifts vec)
+        vec)))
 
 (define (intern-properties all-props get-preserved-props state)
   (define v (hash-ref (serialize-state-props state) all-props 'no))

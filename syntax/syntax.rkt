@@ -45,25 +45,39 @@
         #:property prop:serialize
         (lambda (s ser state)
           (define prop (syntax-scope-propagations s))
-          ;; The result here looks like an expression, but it's
-          ;; treated as data and interpreted for deserialization
-          `(deserialize-syntax
-            ,(ser (if prop
-                      ((propagation-ref prop) s)
-                      (syntax-content s)))
-            ,(ser (intern-scopes (syntax-scopes s) state))
-            ,(ser (intern-shifted-multi-scopes (syntax-shifted-multi-scopes s) state))
-            ,(ser (intern-mpi-shifts (syntax-mpi-shifts s) state))
-            ,(ser (syntax-srcloc s))
-            ,(ser (intern-properties
-                   (syntax-props s)
-                   (lambda ()
-                     (for/hasheq ([(k v) (in-hash (syntax-props s))]
-                                  #:when (preserved-property-value? v))
-                       (values k (check-value-to-preserve (plain-property-value v) syntax?))))
-                   state))
-            #:inspector
-            ,(ser (serialize-tamper (syntax-tamper s)))))
+          (define content
+            (if prop
+                ((propagation-ref prop) s)
+                (syntax-content s)))
+          (define properties
+            (intern-properties
+             (syntax-props s)
+             (lambda ()
+               (for/hasheq ([(k v) (in-hash (syntax-props s))]
+                            #:when (preserved-property-value? v))
+                 (values k (check-value-to-preserve (plain-property-value v) syntax?))))
+             state))
+          (define tamper
+            (serialize-tamper (syntax-tamper s)))
+          (define context-triple
+            (intern-context-triple (intern-scopes (syntax-scopes s) state)
+                                   (intern-shifted-multi-scopes (syntax-shifted-multi-scopes s) state)
+                                   (intern-mpi-shifts (syntax-mpi-shifts s) state)
+                                   state))
+          ;; Value that is interpreted for deserialization --- based
+          ;; on the length of the vector, so make sure changes don't
+          ;; create an ambiguity!
+          (cond
+           [(or properties tamper)
+            `#(,(ser content)
+               ,(ser context-triple #t)
+               ,(ser (syntax-srcloc s) #t)
+               ,(ser properties)
+               ,(ser tamper))]
+           [else
+            `#(,(ser content)
+               ,(ser context-triple #t)
+               ,(ser (syntax-srcloc s) #t))]))
         #:property prop:reach-scopes
         (lambda (s reach)
           (define prop (syntax-scope-propagations s))
@@ -172,10 +186,14 @@
 ;; ----------------------------------------
 
 ;; Called by the deserializer
-(define (deserialize-syntax content scopes shifted-multi-scopes mpi-shifts srcloc props inspector tamper)
+(define (deserialize-syntax content context-triple srcloc props tamper inspector)
   (syntax content
-          scopes shifted-multi-scopes #f
-          mpi-shifts #f srcloc
+          (vector-ref context-triple 0)
+          (vector-ref context-triple 1)
+          #f
+          (vector-ref context-triple 2)
+          #f
+          srcloc
           (if props
               (for/hasheq ([(k v) (in-immutable-hash props)])
                 (values k (preserved-property-value v)))

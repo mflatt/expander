@@ -219,7 +219,7 @@
           (hash-set! mutables v (hash-count mutables))
           ((serialize-fill!-ref v) v add-frontier! state)]
          [(serialize? v)
-          ((serialize-ref v) v loop state)]
+          ((serialize-ref v) v (lambda (v [ref? #f]) (loop v)) state)]
          [(pair? v)
           (loop (car v))
           (loop (cdr v))]
@@ -277,12 +277,17 @@
 
   ;; Handle a reference to an object that may be shared
   ;; or mutable
-  (define (ser v)
+  (define (ser v [reference? #f])
     (cond
      [(hash-ref shares v #f)
-      (box-immutable (hash-ref share-step-positions (hash-ref objs v)))]
+      (define n (hash-ref share-step-positions (hash-ref objs v)))
+      (if reference?
+          n
+          (box-immutable n))]
      [(hash-ref mutables v #f)
-      => (lambda (n) (box-immutable n))]
+      => (lambda (n) (if reference?
+                    n
+                    (box-immutable n)))]
      [else
       (do-ser v)]))
   
@@ -301,11 +306,23 @@
         (quoted v)]
        [(and (pair? d)
              (eq? 'list (car d)))
-        (list* 'list a (cdr d))]
+        (if (symbol? a)
+            (list* 'list a (cdr d))
+            ;; Non-symbol => 'list
+            (cons a (cdr d)))]
+       [(and (pair? d)
+             (not (symbol? (car d))))
+        ;; Non-symbol => 'list
+        (if (symbol? a)
+            (list* 'list a d)
+            (cons a d))]
        [(and (pair? d)
              (eq? 'quote (car d))
              (eq? '() (cdr d)))
-        `(list ,a)]
+        (if (symbol? a)
+            (list 'list a)
+            ;; Non-symbol => 'list
+            (list a))]
        [else
         `(cons ,a ,d)])]
      [(null? v) (quoted '())]
@@ -343,9 +360,13 @@
                (quoted v)
                `(make-prefab-struct ,k ,@content)))]
      [(srcloc? v)
-      ;; srcloc is encoded as a plain vector
-      (for/vector ([e (in-vector (struct->vector v) 1)])
-        (ser e))]
+      ;; This version length must be distinct from other things
+      ;; represented by a vector
+      (for/vector #:length 6 ([e (in-vector (struct->vector v))]
+                              [i (in-naturals)])
+                  (if (zero? i)
+                      #t ; filler, to make the vector length distinct
+                      (ser e)))]
      [else (quoted v)]))
   
   ;; Generate the shell of a mutable value --- uses a different
@@ -471,6 +492,10 @@
                                              [i (in-naturals 1)])
                                     i)])
            #`(constr (decode (list-ref d pos)) ...))]))
+    (define (decode-reference v)
+      (if (number? v)
+          (vector-ref shared v)
+          (decode v)))
     (cond
       [(eq? d '#:inspector) inspector]
       [(eq? d '#:bulk-binding-registry) bulk-binding-registry]
@@ -479,11 +504,29 @@
       [(box? d) (vector-ref shared (unbox d))]
       [(symbol? d) d]
       [(vector? d)
-       (srcloc (decode (vector-ref d 0))
-               (decode (vector-ref d 1))
-               (decode (vector-ref d 2))
-               (decode (vector-ref d 3))
-               (decode (vector-ref d 4)))]
+       (case (vector-length d)
+         [(3)
+          (deserialize-syntax (decode (vector-ref d 0))
+                              (decode-reference (vector-ref d 1))
+                              (decode-reference (vector-ref d 2))
+                              #f
+                              #f
+                              inspector)]
+         [(5)
+          (deserialize-syntax (decode (vector-ref d 0))
+                              (decode-reference (vector-ref d 1))
+                              (decode-reference (vector-ref d 2))
+                              (decode (vector-ref d 3))
+                              (decode (vector-ref d 4))
+                              inspector)]
+         [(6)
+          (srcloc (decode (vector-ref d 1))
+                  (decode (vector-ref d 2))
+                  (decode (vector-ref d 3))
+                  (decode (vector-ref d 4))
+                  (decode (vector-ref d 5)))]
+         [(else)
+          (error 'deserialize "bad encoding: ~e" d)])]
       [else
        (case (car d)
          [(quote) (cdr d)]
@@ -515,8 +558,6 @@
                  (cadr d)
                  (for/list ([d (in-list (cddr d))])
                    (decode d)))]
-         [(deserialize-syntax)
-          (decode* deserialize-syntax content scopes shifted-multi-scopes mpi-shifts srcloc props inspector tamper)]
          [(deserialize-scope)
           (if (null? (cdr d))
               (deserialize-scope)
@@ -547,31 +588,35 @@
          [(deserialize-bulk-binding)
           (decode* deserialize-bulk-binding mpi provide-phase-level phase-shift bulk-binding-registry)]
          [else
-          (error 'deserialize "bad encoding: ~v" d)])])))
+          (if (not (symbol? (car d)))
+              ;; Non-symbol start => list
+              (for/list ([d (in-list d)])
+                (decode d))
+              (error 'deserialize "bad encoding: ~v" d))])])))
 
 ;; Decode the filling of mutable values, which has its own encoding
 ;; variant
 (define (decode-fill! v d mpis inspector bulk-binding-registry shared)
-  (case (car d)
-    [(set-box!) (set-box! v (decode (cadr d) mpis inspector bulk-binding-registry shared))]
-    [(set-vector!) (for ([vv (in-vector (cdr d))]
-                         [i (in-naturals)])
-                     (vector-set! v i (decode vv mpis inspector bulk-binding-registry shared)))]
-    [(hash-set!) (for ([hk (in-vector (cadr d))]
-                       [hv (in-vector (caddr d))])
-                   (hash-set! v
-                              (decode hk mpis inspector bulk-binding-registry shared)
-                              (decode hv mpis inspector bulk-binding-registry shared)))]
-    [(void) (void)]
-    [(deserialize-scope-fill!)
-     (deserialize-scope-fill! v
-                              (decode (cadr d) mpis inspector bulk-binding-registry shared))]
-    [(deserialize-representative-scope-fill!)
-     (deserialize-representative-scope-fill! v
-                                             (decode (cadr d) mpis inspector bulk-binding-registry shared)
-                                             (decode (caddr d) mpis inspector bulk-binding-registry shared))]
-    [else
-     (error 'deserialize "bad fill encoding: ~v" d)]))
+  (when d
+    (case (car d)
+      [(set-box!) (set-box! v (decode (cadr d) mpis inspector bulk-binding-registry shared))]
+      [(set-vector!) (for ([vv (in-vector (cdr d))]
+                           [i (in-naturals)])
+                       (vector-set! v i (decode vv mpis inspector bulk-binding-registry shared)))]
+      [(hash-set!) (for ([hk (in-vector (cadr d))]
+                         [hv (in-vector (caddr d))])
+                     (hash-set! v
+                                (decode hk mpis inspector bulk-binding-registry shared)
+                                (decode hv mpis inspector bulk-binding-registry shared)))]
+      [(deserialize-scope-fill!)
+       (deserialize-scope-fill! v
+                                (decode (cadr d) mpis inspector bulk-binding-registry shared))]
+      [(deserialize-representative-scope-fill!)
+       (deserialize-representative-scope-fill! v
+                                               (decode (cadr d) mpis inspector bulk-binding-registry shared)
+                                               (decode (caddr d) mpis inspector bulk-binding-registry shared))]
+      [else
+       (error 'deserialize "bad fill encoding: ~v" d)])))
  
 ;; ----------------------------------------
 ;; For pruning unreachable scopes in serialization

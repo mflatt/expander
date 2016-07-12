@@ -87,7 +87,7 @@
           ;; Like the main serialization result, this result
           ;; is data that is interpreted
           (if (binding-table-empty? (scope-binding-table s))
-              `(void)
+              #f
               `(deserialize-scope-fill!
                 ,(ser (binding-table-prune-to-reachable (scope-binding-table s) state)))))
         #:property prop:reach-scopes
