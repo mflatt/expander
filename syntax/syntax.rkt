@@ -23,8 +23,8 @@
 
 (struct syntax ([content #:mutable] ; datum and nested syntax objects; mutated for lazy propagation
                 scopes  ; scopes that apply at all phases
-                [scope-propagations #:mutable] ; lazy propogation info
                 shifted-multi-scopes ; scopes with a distinct identity at each phase; maybe a fallback search
+                [scope-propagations #:mutable] ; lazy propogation info
                 mpi-shifts ; chain of module-path-index substitutions
                 bulk-binding-registry ; for resolving bulk bindings on unmarshal
                 srcloc  ; source location
@@ -92,8 +92,8 @@
 (define empty-syntax
   (syntax #f
           empty-scopes
-          #f   ; scope-propogations
           empty-shifted-multi-scopes
+          #f   ; scope-propogations
           empty-mpi-shifts
           #f   ; bulk-binding-registry
           #f   ; srcloc
@@ -113,10 +113,10 @@
             (if stx-c
                 (syntax-scopes stx-c)
                 empty-scopes)
-            #f
             (if stx-c
                 (syntax-shifted-multi-scopes stx-c)
                 empty-shifted-multi-scopes)
+            #f
             (if stx-c
                 (syntax-mpi-shifts stx-c)
                 empty-mpi-shifts)
@@ -174,7 +174,7 @@
 ;; Called by the deserializer
 (define (deserialize-syntax content scopes shifted-multi-scopes mpi-shifts srcloc props inspector tamper)
   (syntax content
-          scopes #f shifted-multi-scopes
+          scopes shifted-multi-scopes #f
           mpi-shifts #f srcloc
           (if props
               (for/hasheq ([(k v) (in-immutable-hash props)])
