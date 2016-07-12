@@ -103,8 +103,10 @@
                         [#,(if (and (eq? '...+ (cadr pattern)) (not already-checked?)) #'(null? flat-s) #'#f)
                          (rt-raise-syntax-error #f "bad syntax" orig-s)]
                         [else
-                         (for/lists (pattern-id ...) ([s (in-list flat-s)])
-                                    #,(compile-pattern (car pattern) already-checked?))])))]
+                         #,(if (symbol? (car pattern))
+                               #`flat-s
+                               #`(for/lists (pattern-id ...) ([s (in-list flat-s)])
+                                            #,(compile-pattern (car pattern) already-checked?)))])))]
                 [(pair? pattern)
                  (with-syntax ([(a-pattern-id ...) (generate-temporaries (extract-pattern-ids (car pattern)))]
                                [(d-pattern-id ...) (generate-temporaries (extract-pattern-ids (cdr pattern)))])
@@ -150,8 +152,10 @@
                        (cond
                         [(not flat-s) #f]
                         [#,(if (eq? '...+ (cadr pattern)) #'(null? flat-s) #'#f) #f]
-                        [else (for/and ([s (in-list flat-s)])
-                                #,(compile-pattern-check (cadr pattern)))])))]
+                        [else (if (symbol? (car pattern))
+                                  #t
+                                  #`(for/and ([s (in-list flat-s)])
+                                      #,(compile-pattern-check (car pattern))))])))]
                 [(pair? pattern)
                  (with-syntax ([(a-pattern-id ...) (extract-pattern-ids (car pattern))]
                                [(d-pattern-id ...) (extract-pattern-ids (cdr pattern))])
@@ -214,6 +218,5 @@
                     (syntax-rules (quote pattern-id ...)
                       [(m) ok?]
                       [(m (quote pattern-id))
-                       #;(if ok? pattern-result-id (error "misuse " 'pattern-id))
                        pattern-result-id]
                       ...)))))])))))
