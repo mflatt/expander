@@ -19,10 +19,12 @@
 (define empty-free-id-set (free-id-set 0 null))
 
 (define (free-id-set-member? fs phase given-id)
-  (for/or ([id (in-list (hash-ref fs
-                                  (identifier-binding-symbol given-id phase)
-                                  null))])
-    (free-identifier=? id given-id phase phase)))
+  (if (zero? (hash-count fs))
+      #f
+      (for/or ([id (in-list (hash-ref fs
+                                      (identifier-binding-symbol given-id phase)
+                                      null))])
+        (free-identifier=? id given-id phase phase))))
 
 (define (free-id-set-empty? fs)
   (zero? (hash-count fs)))

@@ -28,6 +28,7 @@
          [else (hash-set prev-seen s #t)])]
        [else prev-seen]))
     (cond
+     [(null? s) (f tail? s)]
      [(pair? s)
       (f tail? (cons (loop #f (car s) depth seen)
                      (loop #t (cdr s) depth seen)))]
@@ -58,7 +59,6 @@
         (f #f
            (for/hash ([(k v) (in-hash s)])
              (values k (loop #f v depth seen))))])]
-     [(null? s) (f tail? s)]
      [else (f #f s)])))
 
 (define (datum-has-elements? d)
