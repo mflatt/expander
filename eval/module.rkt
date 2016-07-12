@@ -265,12 +265,12 @@
   (define data-instance (make-instance 'data))
   (instance-set-variable-value! data-instance 'mpi-vector
                                 (compiled-in-memory-mpis cim))
-  (instance-set-variable-value! data-instance 'deserialized-syntax
-                                (compiled-in-memory-syntax-literalss cim))
   data-instance)
 
 (define (make-syntax-literal-data-instance-from-compiled-in-memory cim)
   (define syntax-literal-data-instance (make-instance 'data))
+  (instance-set-variable-value! syntax-literal-data-instance 'deserialize-syntax
+                                void)
   (instance-set-variable-value! syntax-literal-data-instance 'deserialized-syntax-vector
                                 (compiled-in-memory-syntax-literalss cim))
   syntax-literal-data-instance)
