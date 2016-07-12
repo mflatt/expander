@@ -75,7 +75,7 @@
            (define-match m body '(begin-for-syntax e ...))
            (loop! (m 'e) (add1 phase) (find-or-create-header! (add1 phase)))]))))
   
-  ;; Provided for callbacks to detect reuiqred references:
+  ;; Provided for callbacks to detect required references:
   (define ((as-required? header) sym)
     (registered-as-required? header sym))
 

@@ -24,7 +24,7 @@ Running:
    Use the "bootstrap-demo.rkt" when running in an older version of
    Racket that is not built with this expander (but that version of
    Racket must be new enough to provide a primitive '#%linket module
-   as a bootstrapping hook.)
+   as a bootstrapping hook).
 
  % racket run.rkt -c <dir>
  or
