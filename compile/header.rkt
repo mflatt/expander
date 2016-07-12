@@ -92,6 +92,20 @@
     `((define-values (,syntax-literalss-id)
         (vector ,@(for/list ([syntax-literals (in-list syntax-literalss)])
                     `(make-vector ,(length syntax-literals) #f))))
+      ,@(if skip-deserialize?
+            null
+            ;; Put deserialization under a `lmabda` so that it's loaded
+            ;; from bytecode on demand, and in a separate function
+            ;; that can be discarded after deserialization
+            `((define-values (deserialize-syntax-literals)
+                (lambda ()
+                  ,(generate-deserialize (vector->immutable-vector
+                                          (list->vector
+                                           (map
+                                            vector->immutable-vector
+                                            (map list->vector
+                                                 (map reverse syntax-literalss)))))
+                                         mpis)))))
       (define-values (,get-syntax-literal!-id)
         (lambda (phase pos)
           (begin
@@ -99,15 +113,13 @@
                   null
                   `((if (vector-ref ,deserialized-syntax-id phase)
                         (void)
-                        (vector-copy! ,deserialized-syntax-id
-                                      '0
-                                      ,(generate-deserialize (vector->immutable-vector
-                                                              (list->vector
-                                                               (map
-                                                                vector->immutable-vector
-                                                                (map list->vector
-                                                                     (map reverse syntax-literalss)))))
-                                                             mpis)))))
+                        (begin
+                          (vector-copy! ,deserialized-syntax-id
+                                        '0
+                                        (deserialize-syntax-literals))
+                          ;; Discard deserialization function, so the
+                          ;; code with a large literal can be GCed:
+                          (set! deserialize-syntax-literals #f)))))
             (let-values ([(stx)
                           (syntax-module-path-index-shift
                            (syntax-shift-phase-level

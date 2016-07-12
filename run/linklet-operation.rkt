@@ -15,7 +15,9 @@
               
               linklet?
               compile-linklet             ; result is serializable
-              instantiate-linklet         ; fills in an instance given argument instances
+              recompile-linklet
+              eval-linklet                ; optional; result is not serializable
+              instantiate-linklet         ; fills in an instance given linket an argument instances
               
               linklet-import-variables
               linklet-export-variables

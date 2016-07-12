@@ -283,8 +283,17 @@
                (marshal (extract-import-variables-from-expression c #:pairs? #f))
                (marshal (extract-export-variables-from-expression c #:pairs? #f))))]))
 
-;; Convert serializable form to instantitable form
-(define (eval-linklet cl)
+;; For re-optimizing:
+(define (recompile-linklet c)
+  c)
+
+;; Intended for JIT preparation
+;; (and we could compile to a function here)
+(define (eval-linklet c)
+  c)
+
+;; Convert linklet to a procedure
+(define (really-eval-linklet cl)
   (parameterize ([current-namespace cu-namespace]
                  [current-eval orig-eval]
                  [current-compile orig-compile])
@@ -312,7 +321,7 @@
      target-instance]
     [(linklet import-instances target-instance)
      ;; 3-argument case: return results via tail call
-     (apply (eval-linklet linklet) target-instance import-instances)]))
+     (apply (really-eval-linklet linklet) target-instance import-instances)]))
 
 ;; ----------------------------------------
 
