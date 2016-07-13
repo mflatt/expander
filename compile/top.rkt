@@ -92,7 +92,7 @@
              ;; exports
              (,mpi-vector-id
               ,deserialized-syntax-vector-id
-              phase-to-link-modules-id
+              phase-to-link-modules
               ,syntax-literalss-id)
              (define-values (,mpi-vector-id)
                ,(generate-module-path-index-deserialize mpis))

@@ -20,6 +20,7 @@
          list->set
          for/set
          for/seteq
+         for/seteqv
          for*/set
          in-set)
 
@@ -89,6 +90,12 @@
                         (let ()
                           body ...)
                         #t)))
+
+(define-syntax-rule (for/seteqv bindings body ...)
+  (for/hasheqv bindings (values
+                         (let ()
+                           body ...)
+                         #t)))
 
 (define-syntax-rule (for*/set bindings body ...)
   (for*/hash bindings (values

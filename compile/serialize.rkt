@@ -116,30 +116,48 @@
         (when base
           (loop base))
         (hash-set! gen-order mpi (hash-count gen-order)))))
-  (define (mpi-id i)
-    (string->symbol (format "mpi~a" i)))
   (define rev-gen-order
     (for/hasheqv ([(k v) (in-hash gen-order)])
       (values v k)))
   (define gens
-    (for/list ([i (in-range (hash-count gen-order))])
+    (for/vector #:length (hash-count gen-order) ([i (in-range (hash-count gen-order))])
       (define mpi (hash-ref rev-gen-order i))
       (define-values (path base) (module-path-index-split mpi))
-      `[(,(mpi-id i))
-        ,(cond
-          [(top-level-module-path-index? mpi)
-           `(deserialize-module-path-index)]
-          [(not path)
-           `(deserialize-module-path-index ',(or (resolved-module-path-name
-                                                  (module-path-index-resolved mpi))
-                                                 'self))]
-          [else
-           `(deserialize-module-path-index ',path ,(and base
-                                                        (mpi-id (hash-ref gen-order base))))])]))
-  (make-let*
-   gens
-   `(vector ,@(for/list ([i (in-range (hash-count rev-mpis))])
-                (mpi-id (hash-ref gen-order (hash-ref rev-mpis i)))))))
+      (cond
+       [(top-level-module-path-index? mpi)
+        'top]
+       [(not path)
+        (box (or (resolved-module-path-name
+                  (module-path-index-resolved mpi))
+                 'self))]
+       [(not base)
+        (vector path)]
+       [base
+        (vector path (hash-ref gen-order base))])))
+  `(deserialize-module-path-indexes
+    ;; Vector of deserialization instructions, where earlier
+    ;; must be constructed first:
+    ',gens
+    ;; Vector of reordering to match reference order:
+    ',(for/vector ([i (in-range (hash-count rev-mpis))])
+        (hash-ref gen-order (hash-ref rev-mpis i)))))
+
+(define (deserialize-module-path-indexes gen-vec order-vec)
+  (define gen (make-vector (vector-length gen-vec) #f))
+  (for ([d (in-vector gen-vec)]
+        [i (in-naturals)])
+    (vector-set!
+     gen
+     i
+     (cond
+      [(eq? d 'top) (deserialize-module-path-index)]
+      [(box? d) (deserialize-module-path-index (unbox d))]
+      [else
+       (deserialize-module-path-index (vector-ref d 0)
+                                      (and ((vector-length d) . > . 1)
+                                           (vector-ref gen (vector-ref d 1))))])))
+  (for/vector #:length (vector-length order-vec) ([p (in-vector order-vec)])
+              (vector-ref gen p)))
 
 (define (mpis-as-vector mpis)
   (define vec (make-vector (hash-count mpis) #f))
@@ -342,15 +360,24 @@
                           (ser k)))
       (define v-content (for/list ([v (in-hash-values v)])
                           (ser v)))
-      (if (and (andmap quoted? k-content)
-               (andmap quoted? v-content))
-          (quoted v)
-          `(,(cond
-              [(hash-eq? v) 'hasheq]
-              [(hash-eqv? v) 'hasheqv]
-              [else 'hash])
-            ,(list->vector k-content)
-            ,(list->vector v-content)))]
+      (cond
+       [(and (andmap quoted? k-content)
+             (andmap quoted? v-content))
+        (quoted v)]
+       [(for/and ([v (in-list v-content)])
+          (eq? v #t))
+        `(,(cond
+            [(hash-eq? v) 'seteq]
+            [(hash-eqv? v) 'seteqv]
+            [else 'set])
+          . ,(list->vector k-content))]
+       [else
+        `(,(cond
+            [(hash-eq? v) 'hasheq]
+            [(hash-eqv? v) 'hasheqv]
+            [else 'hash])
+          ,(list->vector k-content)
+          ,(list->vector v-content))])]
      [(prefab-struct-key v)
       => (lambda (k)
            (define content
@@ -553,6 +580,15 @@
           (for/hasheqv ([k (in-vector (cadr d))]
                         [v (in-vector (caddr d))])
             (values (decode k) (decode v)))]
+         [(set)
+          (for/set ([k (in-vector (cdr d))])
+            (decode k))]
+         [(seteq)
+          (for/seteq ([k (in-vector (cdr d))])
+            (decode k))]
+         [(seteqv)
+          (for/seteqv ([k (in-vector (cdr d))])
+                      (decode k))]
          [(make-prefab-struct)
           (apply make-prefab-struct
                  (cadr d)
@@ -688,7 +724,7 @@
   (set! deserialize-imports
         (cons sym deserialize-imports))
   (register-built-in-symbol! sym))
-(add! 'deserialize-module-path-index deserialize-module-path-index)
+(add! 'deserialize-module-path-indexes deserialize-module-path-indexes)
 (add! 'syntax-module-path-index-shift syntax-module-path-index-shift)
 (add! 'syntax-shift-phase-level syntax-shift-phase-level)
 (add! 'module-use module-use)
