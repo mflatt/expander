@@ -5,8 +5,10 @@
          "../eval/main.rkt"
          "../eval/dynamic-require.rkt"
          "../host/linklet.rkt"
+         "../namespace/namespace.rkt"
          "../namespace/api.rkt"
          "../eval/module-read.rkt"
+         "../eval/module-cache.rkt"
          "../eval/reflect.rkt")
 
 (provide default-load-handler)
@@ -42,15 +44,16 @@
                        (cond
                         [b-pos
                          (file-position i b-pos)
-                         (define v (read i))
-                         (if (compiled-module-expression? v)
-                             (lambda () ((current-eval) v))
-                             (error 'default-load-handler
-                                    (string-append "expected a compiled module\n"
-                                                   "  in: ~e\n"
-                                                   "  found: ~e")
-                                    (object-name i)
-                                    v))]
+                         (or (cached-bundle i)
+                             (let ([v (read i)])
+                               (if (compiled-module-expression? v)
+                                   (lambda () ((current-eval) v))
+                                   (error 'default-load-handler
+                                          (string-append "expected a compiled module\n"
+                                                         "  in: ~e\n"
+                                                         "  found: ~e")
+                                          (object-name i)
+                                          v))))]
                         [(and (pair? expected-mod))
                          ;; Cannot load submodule, so do nothing
                          void]
@@ -59,6 +62,8 @@
                                 (string-append "could not find main module\n"
                                                "  in: ~e")
                                 (object-name i))]))]
+                 [(cached-bundle i)
+                  => (lambda (thunk) thunk)]
                  [(and (pair? expected-mod) (not (car expected-mod)))
                   ;; Cannot load submodule independently, so do nothing
                   void]
@@ -105,18 +110,43 @@
                  (lambda args
                    (apply abort-current-continuation (default-continuation-prompt-tag) args))))))))])))
 
-(define (linklet-directory-start i)
+(define (linklet-bundle-or-directory-start i tag)
   (define version-length (string-length (version)))
   (and (equal? (peek-byte i) (char->integer #\#))
        (equal? (peek-byte i 1) (char->integer #\~))
        (equal? (peek-byte i 2) version-length)
        (equal? (peek-bytes version-length 3 i) (string->bytes/utf-8 (version)))
-       (equal? (peek-byte i (+ 3 version-length)) (char->integer #\D))
+       (equal? (peek-byte i (+ 3 version-length)) (char->integer tag))
        (+ version-length
-          ;; "#~D" and length byte:
-          4
-          ;; Bundle count:
+          ;; "#~" and tag and length byte:
           4)))
+
+(define (linklet-directory-start i)
+  (define pos (linklet-bundle-or-directory-start i #\D))
+  (and pos (+ pos
+              ;; Bundle count:
+              4)))
+
+(define (linklet-bundle-hash-code i)
+  (define pos (linklet-bundle-or-directory-start i #\B))
+  (define hash-code (and pos (peek-bytes 20 pos i)))
+  (and (bytes? hash-code)
+       (= 20 (bytes-length hash-code))
+       (for/or ([c (in-bytes hash-code)])
+         (not (eq? c 0)))
+       hash-code))
+
+(define (cached-bundle i)
+  (cond
+   [(module-cache-ref (make-module-cache-key (linklet-bundle-hash-code i)))
+    => (lambda (declare-module)
+         ;; The `declare-module` function has registered in the cace by
+         ;; `eval-module` in "eval/module.rkt"; we can call the function
+         ;; instead of loading from scratch and `eval`ing;
+         ;; FIXME: go though `current-eval`
+         (lambda ()
+           (declare-module #:namespace (current-namespace))))]
+   [else #f]))
 
 (define (read-number i)
   (define (read-byte/not-eof i)

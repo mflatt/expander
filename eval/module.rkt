@@ -14,7 +14,8 @@
          "../expand/context.rkt"
          "../expand/root-expand-context.rkt"
          "root-context.rkt"
-         "protect.rkt")
+         "protect.rkt"
+         "module-cache.rkt")
 
 ;; Run a representation of top-level code as produced by `compile-module`;
 ;; see "compile/main.rkt" and "compile/module.rkt"
@@ -41,25 +42,17 @@
   (define (decl key)
     (instance-variable-value declaration-instance key))
   
-  (define (declare-submodules names pre?)
-    (when dh
-      (if (compiled-in-memory? c)
-          (for ([c (in-list (if pre?
-                                (compiled-in-memory-pre-compiled-in-memorys c)
-                                (compiled-in-memory-post-compiled-in-memorys c)))])
-            (eval-module c #:namespace ns #:supermodule-name declare-name))
-          (for ([name (in-list names)])
-            (define sm-cd (hash-ref dh name #f))
-            (unless sm-cd (error "missing submodule declaration:" name))
-            (eval-module sm-cd #:namespace ns #:supermodule-name declare-name)))))
-  
   (define pre-submodule-names (hash-ref h 'pre null))
   (define post-submodule-names (hash-ref h 'post null))
   (define default-name (hash-ref h 'name 'module))
   
-  (define original-self (decl 'self-mpi))
-
-  (define phase-to-link-modules (decl 'phase-to-link-modules))
+  (define cache-key (make-module-cache-key
+                     (and
+                      ;; We expect a hash code only for a module
+                      ;; loaded independently from its submodules:
+                      (null? pre-submodule-names)
+                      (null? post-submodule-names)
+                      (hash-ref h 'hash-code #f))))
 
   (define min-phase (decl 'min-phase))
   (define max-phase (decl 'max-phase))
@@ -72,108 +65,141 @@
                      (values phase-level (eval-linklet v))))
   (define syntax-literals-linklet (eval-linklet (hash-ref h 'stx)))
   
-  (define requires (decl 'requires))
-  (define provides (decl 'provides))
-
   (define extra-inspector (and (compiled-in-memory? c)
                                (compiled-in-memory-compile-time-inspector c)))
   (define phase-to-link-extra-inspectorsss
     (if (compiled-in-memory? c)
         (compiled-in-memory-phase-to-link-extra-inspectorsss c)
         #hasheqv()))
-  
+
+  (define requires (decl 'requires))
+  (define provides (decl 'provides))
+  (define original-self (decl 'self-mpi))
+  (define phase-to-link-modules (decl 'phase-to-link-modules))
+
   (define create-root-expand-context-from-module ; might be used to create root-expand-context
     (make-create-root-expand-context-from-module requires phases-h))
   
-  (define m (make-module #:self original-self
-                         #:requires requires
-                         #:provides provides
-                         #:language-info (decl 'language-info)
-                         #:min-phase-level min-phase
-                         #:max-phase-level max-phase
-                         #:cross-phase-persistent? (decl 'cross-phase-persistent?)
-                         #:submodule-names (append pre-submodule-names post-submodule-names)
-                         #:supermodule-name supermodule-name
-                         #:get-all-variables (lambda () (get-all-variables phases-h))
-                         #:prepare-instance-callback
-                         (lambda (data-box ns phase-shift self bulk-binding-registry insp)
-                           (unless (unbox data-box)
-                             (init-syntax-literals! data-box ns
-                                                    syntax-literals-linklet data-instance syntax-literals-data-instance
-                                                    phase-shift original-self self bulk-binding-registry insp
-                                                    create-root-expand-context-from-module)))
-                         #:instantiate-phase-callback
-                         (lambda (data-box ns phase-shift phase-level self bulk-binding-registry insp)
-                           (define syntax-literals-instance (unbox data-box))
-                           (define phase-linklet (hash-ref phases-h phase-level #f))
-                           
-                           (when phase-linklet
-                             (define module-uses (hash-ref phase-to-link-modules phase-level))
-                             (define-values (import-module-instances import-instances)
-                               (for/lists (mis is) ([mu (in-list module-uses)])
-                                 (namespace-module-use->module+linklet-instances
-                                  ns mu
-                                  #:shift-from original-self
-                                  #:shift-to self
-                                  #:phase-shift
-                                  (phase+ (phase- phase-level (module-use-phase mu))
-                                          phase-shift))))
+  (define (declare-submodules names declare-name pre?)
+    (when dh
+      (if (compiled-in-memory? c)
+          (for ([c (in-list (if pre?
+                                (compiled-in-memory-pre-compiled-in-memorys c)
+                                (compiled-in-memory-post-compiled-in-memorys c)))])
+            (eval-module c #:namespace ns #:supermodule-name declare-name))
+          (for ([name (in-list names)])
+            (define sm-cd (hash-ref dh name #f))
+            (unless sm-cd (error "missing submodule declaration:" name))
+            (eval-module sm-cd #:namespace ns #:supermodule-name declare-name)))))
 
-                             (check-require-access phase-linklet #:skip-imports 2
-                                                   module-uses import-module-instances insp
-                                                   extra-inspector
-                                                   (hash-ref phase-to-link-extra-inspectorsss phase-level #f))
+  ;; At this point, we've prepared everything anout the module that we
+  ;; can while staying independent of a specific declaration or
+  ;; specific instance. If we have a hash key for this module, we can
+  ;; stash `declare-this-module` for potential reuse later.
+  (define declare-this-module
+    (lambda (#:namespace ns) ; namespace for declaration
+      (define m (make-module #:self original-self
+                             #:requires requires
+                             #:provides provides
+                             #:language-info (decl 'language-info)
+                             #:min-phase-level min-phase
+                             #:max-phase-level max-phase
+                             #:cross-phase-persistent? (decl 'cross-phase-persistent?)
+                             #:submodule-names (append pre-submodule-names post-submodule-names)
+                             #:supermodule-name supermodule-name
+                             #:get-all-variables (lambda () (get-all-variables phases-h))
+                             #:prepare-instance-callback
+                             (lambda (data-box ns phase-shift self bulk-binding-registry insp)
+                               (unless (unbox data-box)
+                                 (init-instance-data! data-box cache-key ns
+                                                      syntax-literals-linklet data-instance syntax-literals-data-instance
+                                                      phase-shift original-self self bulk-binding-registry insp
+                                                      create-root-expand-context-from-module)))
+                             #:instantiate-phase-callback
+                             (lambda (data-box ns phase-shift phase-level self bulk-binding-registry insp)
+                               (define syntax-literals-instance (instance-data-syntax-literals-instance
+                                                                 (unbox data-box)))
+                               (define phase-linklet (hash-ref phases-h phase-level #f))
+                               
+                               (when phase-linklet
+                                 (define module-uses (hash-ref phase-to-link-modules phase-level))
+                                 (define-values (import-module-instances import-instances)
+                                   (for/lists (mis is) ([mu (in-list module-uses)])
+                                              (namespace-module-use->module+linklet-instances
+                                               ns mu
+                                               #:shift-from original-self
+                                               #:shift-to self
+                                               #:phase-shift
+                                               (phase+ (phase- phase-level (module-use-phase mu))
+                                                       phase-shift))))
 
-                             (define module-body-instance-instance
-                               (make-module-body-instance-instance
-                                #:set-transformer! (lambda (name val)
-                                                     (namespace-set-transformer! ns (sub1 phase-level) name val))))
+                                 (check-require-access phase-linklet #:skip-imports 2
+                                                       module-uses import-module-instances insp
+                                                       extra-inspector
+                                                       (hash-ref phase-to-link-extra-inspectorsss phase-level #f))
 
-                             (define (instantiate-body)
-                               (instantiate-linklet phase-linklet
-                                                    (list* syntax-literals-instance
-                                                           module-body-instance-instance
-                                                           import-instances)
-                                                    (namespace->instance ns phase-level)))
+                                 (define module-body-instance-instance
+                                   (make-module-body-instance-instance
+                                    #:set-transformer! (lambda (name val)
+                                                         (namespace-set-transformer! ns (sub1 phase-level) name val))))
 
-                             (cond
-                              [(zero-phase? phase-level)
-                               (cond
-                                [(zero-phase? phase-shift)
-                                 (instantiate-body)]
-                                [else
-                                 ;; Need to set the current namespace so that it has the
-                                 ;; right phase
-                                 (parameterize ([current-namespace ns])
-                                   (instantiate-body))])]
-                              [else
-                               ;; For phase level 1 and up, set the expansion context
-                               ;; to point back to the module's info:
-                               (define ns-1 (namespace->namespace-at-phase ns (phase+ phase-shift (sub1 phase-level))))
-                               (parameterize ([current-expand-context (delay (make-expand-context ns-1))]
-                                              [current-namespace ns]
-                                              [current-module-code-inspector insp])
-                                 (instantiate-body))])))))
+                                 (define (instantiate-body)
+                                   (instantiate-linklet phase-linklet
+                                                        (list* syntax-literals-instance
+                                                               module-body-instance-instance
+                                                               import-instances)
+                                                        (namespace->instance ns phase-level)))
+
+                                 (cond
+                                  [(zero-phase? phase-level)
+                                   (cond
+                                    [(zero-phase? phase-shift)
+                                     (instantiate-body)]
+                                    [else
+                                     ;; Need to set the current namespace so that it has the
+                                     ;; right phase
+                                     (parameterize ([current-namespace ns])
+                                       (instantiate-body))])]
+                                  [else
+                                   ;; For phase level 1 and up, set the expansion context
+                                   ;; to point back to the module's info:
+                                   (define ns-1 (namespace->namespace-at-phase ns (phase+ phase-shift (sub1 phase-level))))
+                                   (parameterize ([current-expand-context (delay (make-expand-context ns-1))]
+                                                  [current-namespace ns]
+                                                  [current-module-code-inspector insp])
+                                     (instantiate-body))])))))
+      
+      (define declare-name (substitute-module-declare-name default-name))
+      
+      (unless as-submodule?
+        (declare-submodules pre-submodule-names declare-name #t))
+      
+      (declare-module! ns
+                       m
+                       declare-name
+                       #:as-submodule? as-submodule?)
+
+      (unless as-submodule?
+        (declare-submodules post-submodule-names declare-name #f))))
   
-  (define declare-name (substitute-module-declare-name default-name))
+  ;; ----------------------------------------
   
-  (unless as-submodule?
-    (declare-submodules pre-submodule-names #t))
- 
-  (declare-module! ns
-                   m
-                   declare-name
-                   #:as-submodule? as-submodule?)
-
-  (unless as-submodule?
-    (declare-submodules post-submodule-names #f)))
+  ;; If we have a hash code, save the prepare module in the cache
+  ;; so it can be found by that hash code:
+  (when cache-key
+    (module-cache-set! cache-key declare-this-module))
+  
+  (declare-this-module #:namespace ns))
 
 ;; ----------------------------------------
 
-(define (init-syntax-literals! data-box ns
-                               syntax-literals-linklet data-instance syntax-literals-data-instance
-                               phase-shift original-self self bulk-binding-registry insp
-                               create-root-expand-context-from-module)
+;; Value in a declaration's `data-box`:
+(struct instance-data (syntax-literals-instance cache-key))
+
+(define (init-instance-data! data-box cache-key ns
+                             syntax-literals-linklet data-instance syntax-literals-data-instance
+                             phase-shift original-self self bulk-binding-registry insp
+                             create-root-expand-context-from-module)
   (define inst
     (make-instance-instance
      #:namespace ns
@@ -183,17 +209,17 @@
      #:inspector insp
      #:set-transformer! (lambda (name val) (error "shouldn't get here for the root-ctx linklet"))))
   
-  (define root-ctx-instance
+  (define syntax-literals-instance
     (instantiate-linklet syntax-literals-linklet
                          (list deserialize-instance
                                data-instance
                                syntax-literals-data-instance
                                inst)))
-  
-  (set-box! data-box root-ctx-instance)
 
+  (set-box! data-box (instance-data syntax-literals-instance cache-key))
+  
   (define get-encoded-root-expand-ctx
-    (instance-variable-value root-ctx-instance 'get-encoded-root-expand-ctx))
+    (instance-variable-value syntax-literals-instance 'get-encoded-root-expand-ctx))
   
   (cond
    [(eq? get-encoded-root-expand-ctx 'empty)

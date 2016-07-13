@@ -366,16 +366,19 @@
     (when (hash-ref seen mi #f)
       (error 'require "import cycle detected during module instantiation"))
     
-    ;; If we haven't shifted required mpi's already, do that:
+    ;; If we haven't shifted required mpi's already, do that; ensure that
+    ;; each (potentially) shifted module path index is unresolved, so
+    ;; that resoling will trigger module loads
     (unless (module-instance-shifted-requires mi)
       (set-module-instance-shifted-requires!
        mi
        (for/list ([phase+mpis (in-list (module-requires m))])
          (cons (car phase+mpis)
                (for/list ([req-mpi (in-list (cdr phase+mpis))])
-                 (module-path-index-shift req-mpi
-                                          (module-self m)
-                                          mpi))))))
+                 (module-path-index-unresolve
+                  (module-path-index-shift req-mpi
+                                           (module-self m)
+                                           mpi)))))))
     
     ;; Recur for required modules:
     (for ([phase+mpis (in-list (module-instance-shifted-requires mi))])
