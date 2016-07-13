@@ -85,6 +85,7 @@
             (define already-m-ns (and already-m
                                       (namespace->module-namespace dest-namespace mod-name phase)))
             (when (and already-m-ns
+                       (not (eq? m-ns already-m-ns))
                        (not (namespace-same-instance? m-ns already-m-ns)))
               (raise-arguments-error who
                                      "a different instance is already in the destination namespace"

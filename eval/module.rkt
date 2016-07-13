@@ -138,7 +138,14 @@
 
                              (cond
                               [(zero-phase? phase-level)
-                               (instantiate-body)]
+                               (cond
+                                [(zero-phase? phase-shift)
+                                 (instantiate-body)]
+                                [else
+                                 ;; Need to set the current namespace so that it has the
+                                 ;; right phase
+                                 (parameterize ([current-namespace ns])
+                                   (instantiate-body))])]
                               [else
                                ;; For phase level 1 and up, set the expansion context
                                ;; to point back to the module's info:
