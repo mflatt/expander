@@ -54,6 +54,7 @@
   ;; each primitive import. Start by checking which names are
   ;; currently used.
   (define variable-locals (make-hash)) ; variable -> set-of-symbol
+  (define all-variables null) ; domain of `variable-locals` in an order
   (define otherwise-used-symbols (seteq))
   
   (for ([lnk (in-list needed-linklets-in-order)])
@@ -67,8 +68,11 @@
       (all-used-symbols (bootstrap:s-expr-linklet-body linklet)))
     
     (define (record! lnk external+local)
+      (define var (variable lnk (car external+local)))
+      (unless (hash-ref variable-locals var #f)
+        (set! all-variables (cons var all-variables)))
       (hash-update! variable-locals
-                    (variable lnk (car external+local))
+                    var
                     (lambda (s) (set-add s (cdr external+local)))
                     (seteq)))
     
@@ -96,7 +100,8 @@
   ;; (If a variable was given an alternative name for all imports or
   ;; exports, probably using the obvious symbol would cause a
   ;; collision.)
-  (for/hash ([(var current-syms) (in-hash variable-locals)])
+  (for/hash ([var (in-list (reverse all-variables))])
+    (define current-syms (hash-ref variable-locals var))
     (define sym
       (cond
        [(and (= 1 (set-count current-syms))

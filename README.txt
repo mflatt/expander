@@ -57,12 +57,18 @@ Running:
 
  % racket run.rkt -c <dir> -x
 
-   Converts (or checks possibility of converting) a module to a
-   stand-alone linklet with no imports, used mainly to extract the
-   expander itself. Use `-s` to store source linklets in the cache
-   <dir> so that a flattened linklet can be generated; otherwise,
-   "run.rkt" will just check that flattening is possible. Use `-o` to
-   write the linklet to a file.
+   Checks possibility of converting a module to a stand-alone linklet
+   with no imports, used mainly to extract the expander itself.
+
+ % racket bootstrap-run.rkt -s -c <dir> -x -C \
+       -o <checkout-dir>/racket/src/racket/src/startup.inc
+
+   Compiles the expander to source files in <dir> --- note that
+   "bootstrap-run.rkt" must be used to get source compiles --- and
+   writes the flattened linklet to "startup.inc" in a Git checkout of
+   a linklet-based Racket. Be sure to increment the target Racket
+   version if you change the serialization of syntax objects or the
+   linklet protocol.
 
 ----------------------------------------
 
