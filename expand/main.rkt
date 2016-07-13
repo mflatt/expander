@@ -842,7 +842,7 @@
                         (parameterize ([current-expand-context ctx]
                                        [current-namespace ns]
                                        [eval-jit-enabled #f])
-                          (eval-top compiled ns)))
+                          (eval-single-top compiled ns)))
       list))
   (unless (= (length vals) (length ids))
     (error "wrong number of results (" (length vals) "vs." (length ids) ")"

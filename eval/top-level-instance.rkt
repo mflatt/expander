@@ -5,6 +5,7 @@
          "../common/phase.rkt"
          "../namespace/namespace.rkt"
          "../expand/root-expand-context.rkt"
+         "../compile/reserved-symbol.rkt"
          "../syntax/module-binding.rkt"
          "../host/linklet.rkt"
          "../expand/env.rkt"
@@ -18,7 +19,7 @@
 
 (instance-set-variable-value!
  top-level-instance
- 'top-level-bind!
+ top-level-bind!-id
  (lambda (id mpi orig-phase phase-shift ns sym trans-val)
    (define phase (phase+ orig-phase phase-shift))
    (define b (make-module-binding mpi phase sym
@@ -30,7 +31,7 @@
 
 (instance-set-variable-value!
  top-level-instance
- 'top-level-require!
+ top-level-require!-id
  (lambda (stx ns)
    (define reqs (cdr (syntax->list stx)))
    (parse-and-perform-requires! #:run? #t

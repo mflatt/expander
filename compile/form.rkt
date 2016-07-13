@@ -27,6 +27,7 @@
 ;; Compiles a module body or sequence of top-level forms, returning a
 ;; linklet directory to cover all phases covered by the forms
 (define (compile-forms bodys cctx mpis
+                       #:body-imports body-imports
                        #:encoded-root-expand-ctx-box [encoded-root-expand-ctx-box #f] ; encoded root context, if any
                        #:root-ctx-only-if-syntax? [root-ctx-only-if-syntax? #f]
                        #:compiled-expression-callback [compiled-expression-callback void]
@@ -225,15 +226,7 @@
        ((if to-source? values compile-linklet)
         `(linklet
           ;; imports
-          (,@(if (compile-context-module-self cctx)
-                 `([(mpi-vector ,mpi-vector-id)]
-                   [(syntax-literalss ,syntax-literalss-id)
-                    (get-syntax-literal! ,get-syntax-literal!-id)])
-                 `([(top-level-bind! ,top-level-bind!-id)
-                    (top-level-require! ,top-level-require!-id)]
-                   [(mpi-vector ,mpi-vector-id)
-                    (syntax-literalss ,syntax-literalss-id)]))
-           ,instance-imports
+          (,@body-imports
            ,@(link-info-imports li))
           ;; exports
           (,@(link-info-def-decls li)

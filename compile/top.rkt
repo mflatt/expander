@@ -5,6 +5,7 @@
          "../syntax/scope.rkt"
          "../namespace/namespace.rkt"
          "../expand/root-expand-context.rkt"
+         "../compile/reserved-symbol.rkt"
          "compiled-in-memory.rkt"
          "context.rkt"
          "header.rkt"
@@ -21,7 +22,9 @@
 ;; Compile a stand-alone expression, such as the right-hand side of a
 ;; `define-syntaxes` in a module
 (define (compile-single s cctx)
-  (compile-top s cctx #:serializable? #f))
+  (compile-top s cctx
+               #:serializable? #f
+               #:single-expression? #t))
 
 ;; Compile a single form, which can be a `define-values` form, a
 ;; `define-synatxes` form, or an expression (where `begin` is treated
@@ -32,6 +35,7 @@
 ;; compiled linklets.
 (define (compile-top s cctx
                      #:serializable? [serializable? #t]
+                     #:single-expression? [single-expression? #f]
                      #:to-source? [to-source? #f])
   (define phase (compile-context-phase cctx))
 
@@ -47,49 +51,60 @@
                   syntax-literalss
                   no-root-context-syntax-literals)
     (compile-forms (list s) cctx mpis
+                   #:body-imports (if single-expression?
+                                      `([]
+                                        [,syntax-literalss-id]
+                                        [])
+                                      `([,top-level-bind!-id
+                                         ,top-level-require!-id]
+                                        [,mpi-vector-id
+                                         ,syntax-literalss-id]
+                                        ,instance-imports))
                    #:to-source? to-source?
                    #:other-form-callback compile-top-level-require))
 
+  (define (add-metadata ht)
+    (let* ([ht (hash-set ht 'original-phase phase)]
+           [ht (hash-set ht 'max-phase max-phase)])
+      ht))
+  
   (define bundle
     ((if to-source? values hash->linklet-bundle)
-     (cond
-      [serializable?
-       ;; To support seialization, construct a linklet that will
-       ;; deserialize module path indexes, syntax objects, etc.
-       (define syntax-literalss-expr
-         (generate-eager-syntax-literals! 
-          syntax-literalss
-          mpis
-          phase
-          (compile-context-self cctx)
-          (compile-context-namespace cctx)))
+     (add-metadata
+      (cond
+       [serializable?
+        ;; To support seialization, construct a linklet that will
+        ;; deserialize module path indexes, syntax objects, etc.
+        (define syntax-literalss-expr
+          (generate-eager-syntax-literals! 
+           syntax-literalss
+           mpis
+           phase
+           (compile-context-self cctx)
+           (compile-context-namespace cctx)))
 
-       (define link-linklet
-         ((if to-source? values compile-linklet)
-          `(linklet
-            ;; imports
-            (,deserialize-imports
-             ,eager-instance-imports)
-            ;; exports
-            ([,mpi-vector-id mpi-vector]
-             deserialized-syntax
-             original-phase
-             max-phase
-             phase-to-link-modules
-             syntax-literalss)
-            (define-values (,mpi-vector-id)
-              ,(generate-module-path-index-deserialize mpis))
-            (define-values (deserialized-syntax) 
-              (make-vector ,(add1 phase) #f))
-            (define-values (original-phase) ,phase)
-            (define-values (max-phase) ,max-phase)
-            (define-values (phase-to-link-modules) ,phase-to-link-module-uses-expr)
-            (define-values (syntax-literalss) ,syntax-literalss-expr))))
-       
-       (hash-set body-linklets 'link link-linklet)]
-      [else
-       ;; Will combine the linking unit with non-serialized link info
-       body-linklets])))
+        (define link-linklet
+          ((if to-source? values compile-linklet)
+           `(linklet
+             ;; imports
+             (,deserialize-imports
+              ,eager-instance-imports)
+             ;; exports
+             (,mpi-vector-id
+              ,deserialized-syntax-vector-id
+              phase-to-link-modules-id
+              ,syntax-literalss-id)
+             (define-values (,mpi-vector-id)
+               ,(generate-module-path-index-deserialize mpis))
+             (define-values (,deserialized-syntax-vector-id) 
+               (make-vector ,(add1 phase) #f))
+             (define-values (phase-to-link-modules) ,phase-to-link-module-uses-expr)
+             (define-values (,syntax-literalss-id) ,syntax-literalss-expr))))
+        
+        (hash-set body-linklets 'link link-linklet)]
+       [else
+        ;; Will combine the linking unit with non-serialized link info
+        body-linklets]))))
   
   (cond
    [to-source?

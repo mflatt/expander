@@ -266,7 +266,10 @@
      (for/list ([vu (in-list (header-require-vars-in-order header))]
                 #:when (equal? mu (variable-use-module-use vu)))
        (define var-sym (hash-ref (header-require-var-to-import-sym header) vu))
-       `[,(variable-use-sym vu) ,var-sym]))
+       (define ex-sym (variable-use-sym vu))
+       (if (eq? var-sym ex-sym)
+           var-sym
+           `[,ex-sym ,var-sym])))
    ;; Extra inspectors, in parallel to imports
    (for/list ([mu (in-list link-mod-uses)])
      (define extra-inspectorss
@@ -281,7 +284,10 @@
               #:when (eq? (module-use-module (variable-use-module-use vu))
                           (compile-context-self cctx)))
      (define var-sym (hash-ref (header-require-var-to-import-sym header) vu))
-     `(,var-sym ,(variable-use-sym vu)))))
+     (define ex-sym (variable-use-sym vu))
+     (if (eq? var-sym ex-sym)
+         var-sym
+         `(,var-sym ,ex-sym)))))
 
 ;; Get a reasonably nice name from a module-path-index
 (define (extract-name mpi)

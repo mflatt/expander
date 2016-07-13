@@ -988,7 +988,7 @@
        ;; an expression
        (parameterize ([current-expand-context ctx]
                       [current-namespace m-ns])
-         (eval-top
+         (eval-single-top
           (compile-single body (make-compile-context
                                 #:namespace m-ns
                                 #:phase phase))

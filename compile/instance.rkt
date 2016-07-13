@@ -6,28 +6,31 @@
 ;; receive instantiation information: a namspace, its phase, etc.
 
 (provide instance-imports
-         make-instance-instance)
+         make-instance-instance
+         make-module-body-instance-instance)
 
 (define instance-imports
-  `([namespace ,ns-id]
-    [phase-shift ,phase-shift-id]
-    [self ,self-id]
-    [inspector ,inspector-id]
-    [set-transformer! ,set-transformer!-id]))
+  `(,ns-id
+    ,phase-shift-id
+    ,self-id
+    ,inspector-id
+    ,set-transformer!-id))
 
 (define (make-instance-instance #:namespace ns
                                 #:phase-shift phase-shift
                                 #:self self 
                                 #:bulk-binding-registry bulk-binding-registry
                                 #:inspector inspector
-                                #:set-transformer! set-transformer!
-                                #:record-root-context! [record-root-context! #f])
+                                #:set-transformer! set-transformer!)
   (define i (make-instance 'instance))
-  (instance-set-variable-value! i 'namespace ns)
-  (instance-set-variable-value! i 'phase-shift phase-shift)
-  (instance-set-variable-value! i 'self self)
-  (instance-set-variable-value! i 'inspector inspector)
-  (instance-set-variable-value! i 'set-transformer! set-transformer!)
-  (when record-root-context!
-    (instance-set-variable-value! i 'record-root-context! record-root-context!))
+  (instance-set-variable-value! i ns-id ns)
+  (instance-set-variable-value! i phase-shift-id phase-shift)
+  (instance-set-variable-value! i self-id self)
+  (instance-set-variable-value! i inspector-id inspector)
+  (instance-set-variable-value! i set-transformer!-id set-transformer!)
+  i)
+
+(define (make-module-body-instance-instance #:set-transformer! set-transformer!)
+  (define i (make-instance 'instance))
+  (instance-set-variable-value! i set-transformer!-id set-transformer!)
   i)

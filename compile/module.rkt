@@ -88,6 +88,9 @@
                   syntax-literalss
                   root-ctx-syntax-literals)
     (compile-forms bodys body-cctx mpis
+                   #:body-imports `([,syntax-literalss-id
+                                     ,get-syntax-literal!-id]
+                                    [,set-transformer!-id])
                    #:encoded-root-expand-ctx-box encoded-root-expand-ctx-box
                    #:root-ctx-only-if-syntax? body-context-simple?
                    #:compiled-expression-callback check-side-effects!
@@ -144,7 +147,7 @@
      `(linklet
        ;; imports
        (,deserialize-imports
-        [(mpi-vector ,mpi-vector-id)])
+        [,mpi-vector-id])
        ;; exports
        (self-mpi
         requires
@@ -169,15 +172,15 @@
      `(linklet
        ;; imports
        (,deserialize-imports
-        [(mpi-vector ,mpi-vector-id)]
-        [(deserialized-syntax-vector ,deserialized-syntax-vector-id)
+        [,mpi-vector-id]
+        [,deserialized-syntax-vector-id
          ,@(if serializable?
-               `((deserialize-syntax ,deserialize-syntax-id))
+               `(,deserialize-syntax-id)
                '())]
         ,instance-imports)
        ;; exports
-       ([,syntax-literalss-id syntax-literalss]
-        [,get-syntax-literal!-id get-syntax-literal!]
+       (,syntax-literalss-id
+        ,get-syntax-literal!-id
         get-encoded-root-expand-ctx)
        ;; body
        ,@(generate-lazy-syntax-literals! all-syntax-literalss mpis self
@@ -204,12 +207,12 @@
           `(linklet
             ;; imports
             (,deserialize-imports
-             [(mpi-vector ,mpi-vector-id)]
-             [(inspector ,inspector-id)
-              (bulk-binding-registry ,bulk-binding-registry-id)])
+             [,mpi-vector-id]
+             [,inspector-id
+              ,bulk-binding-registry-id])
             ;; exports
-            ([,deserialized-syntax-vector-id deserialized-syntax-vector]
-             [,deserialize-syntax-id deserialize-syntax])
+            (,deserialized-syntax-vector-id
+             ,deserialize-syntax-id)
             ;; body
             (define-values (,deserialized-syntax-vector-id)
               (make-vector ,(+ 2 max-phase) #f))
@@ -225,7 +228,7 @@
             ;; imports
             (,deserialize-imports)
             ;; exports
-            ([,mpi-vector-id mpi-vector])
+            (,mpi-vector-id)
             ;; body
             (define-values (,inspector-id) (current-code-inspector))
             (define-values (,mpi-vector-id)

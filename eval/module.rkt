@@ -5,6 +5,7 @@
          "../namespace/inspector.rkt"
          "../common/phase.rkt"
          "../compile/module-use.rkt"
+         "../compile/reserved-symbol.rkt"
          "../common/module-path.rkt"
          "../compile/serialize.rkt"
          "../host/linklet.rkt"
@@ -118,26 +119,20 @@
                                   (phase+ (phase- phase-level (module-use-phase mu))
                                           phase-shift))))
 
-                             (check-require-access phase-linklet #:skip-imports 3
+                             (check-require-access phase-linklet #:skip-imports 2
                                                    module-uses import-module-instances insp
                                                    extra-inspector
                                                    (hash-ref phase-to-link-extra-inspectorsss phase-level #f))
 
-                             (define instance-instance
-                               (make-instance-instance
-                                #:namespace ns
-                                #:phase-shift phase-shift
-                                #:self self 
-                                #:bulk-binding-registry bulk-binding-registry
-                                #:inspector insp
+                             (define module-body-instance-instance
+                               (make-module-body-instance-instance
                                 #:set-transformer! (lambda (name val)
                                                      (namespace-set-transformer! ns (sub1 phase-level) name val))))
 
                              (define (instantiate-body)
                                (instantiate-linklet phase-linklet
-                                                    (list* data-instance
-                                                           syntax-literals-instance
-                                                           instance-instance
+                                                    (list* syntax-literals-instance
+                                                           module-body-instance-instance
                                                            import-instances)
                                                     (namespace->instance ns phase-level)))
 
@@ -263,23 +258,23 @@
 
 (define (make-data-instance-from-compiled-in-memory cim)
   (define data-instance (make-instance 'data))
-  (instance-set-variable-value! data-instance 'mpi-vector
+  (instance-set-variable-value! data-instance mpi-vector-id
                                 (compiled-in-memory-mpis cim))
   data-instance)
 
 (define (make-syntax-literal-data-instance-from-compiled-in-memory cim)
-  (define syntax-literal-data-instance (make-instance 'data))
-  (instance-set-variable-value! syntax-literal-data-instance 'deserialize-syntax
+  (define syntax-literal-data-instance (make-instance 'syntax-literal-data))
+  (instance-set-variable-value! syntax-literal-data-instance deserialize-syntax-id
                                 void)
-  (instance-set-variable-value! syntax-literal-data-instance 'deserialized-syntax-vector
+  (instance-set-variable-value! syntax-literal-data-instance deserialized-syntax-vector-id
                                 (compiled-in-memory-syntax-literalss cim))
   syntax-literal-data-instance)
 
 (define (make-declaration-context-instance ns)
-  (define declaration-context-instance (make-instance 'data))
-  (instance-set-variable-value! declaration-context-instance 'inspector
+  (define declaration-context-instance (make-instance 'declaration-context))
+  (instance-set-variable-value! declaration-context-instance inspector-id
                                 (current-code-inspector))
-  (instance-set-variable-value! declaration-context-instance 'bulk-binding-registry
+  (instance-set-variable-value! declaration-context-instance bulk-binding-registry-id
                                 (namespace-bulk-binding-registry ns))
   declaration-context-instance)
 

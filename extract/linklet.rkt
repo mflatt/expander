@@ -6,9 +6,9 @@
 (provide skip-abi-imports
          linklets-are-source-mode?)
 
-;; Skip over data, syntax literals, and instance:
+;; Skip over syntax literals and instance:
 (define (skip-abi-imports l)
-  (list-tail l 3))
+  (list-tail l 2))
 
 ;; Detect source mode, which enables final assembly
 (define (linklets-are-source-mode? linklets)
