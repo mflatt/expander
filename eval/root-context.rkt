@@ -8,6 +8,7 @@
          "../syntax/binding.rkt"
          "../syntax/module-binding.rkt"
          "../common/module-path.rkt"
+         "../common/phase.rkt"
          "../host/linklet.rkt")
 
 (provide make-create-root-expand-context-from-module)
@@ -31,7 +32,7 @@
         (define mpi (module-path-index-shift req original-self self))
         (perform-require! mpi s self
                           s ns
-                          #:phase-shift phase-shift
+                          #:phase-shift (phase+ phase phase-shift)
                           #:run-phase phase-shift)))
     
     ;; Add bindings for `define`s, including registering symbols used
