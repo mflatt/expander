@@ -17,7 +17,8 @@
   (and hash-code (list hash-code)))
 
 (define (module-cache-set! key proc)
-  (hash-set! module-cache key proc))
+  (hash-set! module-cache key (make-ephemeron key proc)))
 
 (define (module-cache-ref key)
-  (hash-ref module-cache key #f))
+  (define e (hash-ref module-cache key #f))
+  (and e (ephemeron-value e)))
