@@ -51,7 +51,8 @@
 
 ;; ----------------------------------------
 
-(struct module (self            ; module path index used for a self reference
+(struct module (source-name     ; #f, symbol, or complete path
+                self            ; module path index used for a self reference
                 requires        ; list of (cons phase list-of-module-path-index)
                 provides        ; phase-level -> sym -> binding or (provided binding bool bool)
                 [access #:mutable] ; phase-level -> sym -> 'provided or 'protected; computed on demand from `provides`
@@ -69,7 +70,8 @@
                 supermodule-name ; associated supermodule (i.e, when declared together)
                 get-all-variables)) ; for `module->indirect-exports`
 
-(define (make-module #:self self
+(define (make-module #:source-name [source-name #f]
+                     #:self self
                      #:requires [requires null]
                      #:provides provides
                      #:min-phase-level [min-phase-level 0]
@@ -84,7 +86,10 @@
                      #:submodule-names [submodule-names null]
                      #:supermodule-name [supermodule-name #f]
                      #:get-all-variables [get-all-variables (lambda () null)]) ; ok to omit exported
-  (module self requires provides
+  (module source-name
+          self
+          requires
+          provides
           #f ; access
           language-info
           min-phase-level max-phase-level
@@ -131,6 +136,7 @@
                                           #:root-expand-ctx root-expand-ctx
                                           #:register? #f)
                  [mpi name-mpi]
+                 [source-name (resolved-module-path-root-name name)]
                  [phase phase]
                  [0-phase phase]
                  [submodule-declarations (if for-submodule?
@@ -230,6 +236,7 @@
 (define (namespace-install-module-namespace! ns name 0-phase m existing-m-ns)
   (define m-ns (struct-copy namespace ns
                             [mpi (namespace-mpi existing-m-ns)]
+                            [source-name (namespace-source-name existing-m-ns)]
                             [root-expand-ctx (namespace-root-expand-ctx existing-m-ns)]
                             [phase (namespace-phase existing-m-ns)]
                             [0-phase (namespace-0-phase existing-m-ns)]
@@ -262,6 +269,9 @@
 (define (namespace-create-module-instance! ns name 0-phase m mpi)
   (define m-ns (struct-copy namespace ns
                             [mpi mpi]
+                            [source-name (or (module-source-name m)
+                                             (resolved-module-path-root-name
+                                              (module-path-index-resolve mpi)))]
                             [root-expand-ctx (box #f)] ; maybe set to non-#f by running
                             [phase 0-phase]
                             [0-phase 0-phase]

@@ -3,7 +3,6 @@ This is a work-in-progress reimplementation of Racket's macro expander.
 See "demo.rkt" for examples.
 
 TODO:
- module sources and `current-module-path-for-load`
  bug fix for local definition contexts (MB's example)
 
 ----------------------------------------

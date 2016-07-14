@@ -21,6 +21,7 @@
          namespace->namespace-at-phase
          namespace->module
          namespace-mpi
+         namespace-source-name
          namespace-bulk-binding-registry
          
          namespace-set-variable!
@@ -43,6 +44,7 @@
            namespace->definitions))
 
 (struct namespace (mpi                 ; module path index (that's already resolved); instance-specific for a module
+                   source-name         ; #f (top-level) or symbol or complete path; user-facing alternative to the mpi
                    root-expand-ctx     ; delay of box of context for top-level expansion; set by module instantiation
                    phase               ; phase (not phase level!) of this namespace
                    0-phase             ; phase of module instance's phase-level 0
@@ -61,9 +63,9 @@
         #:property prop:custom-write
         (lambda (ns port mode)
           (write-string "#<namespace" port)
-          (define n (namespace-mpi ns))
-          (unless (top-level-module-path-index? n)
-            (fprintf port ":~a" (module-path-index-resolve n)))
+          (define n (namespace-source-name ns))
+          (when n
+            (fprintf port ":~a" (namespace->name ns)))
           (define phase (namespace-phase ns))
           (unless (zero-phase? phase)
             (fprintf port ":~s" phase))
@@ -83,6 +85,7 @@
                     0))
   (define ns
     (namespace top-level-module-path-index
+               #f
                (box root-expand-ctx)
                phase
                phase
@@ -129,8 +132,12 @@
         (hash-set! (namespace-phase-to-namespace ns) phase p-ns)
         p-ns)))
 
-(define (namespace->name p-ns)
-  (format "~a" (module-path-index-resolve (namespace-mpi p-ns))))
+(define (namespace->name ns)
+  (define n (namespace-source-name ns))
+  (cond
+   [(not n) 'top-level]
+   [(symbol? n) (format "'~s" n)]
+   [else (string-append "\"" (path->string n) "\"")]))
   
 (define (namespace->definitions ns phase-level)
   (define d (hash-ref (namespace-phase-level-to-definitions ns) phase-level #f))

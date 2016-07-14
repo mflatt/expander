@@ -98,7 +98,8 @@
   ;; stash `declare-this-module` for potential reuse later.
   (define declare-this-module
     (lambda (#:namespace ns) ; namespace for declaration
-      (define m (make-module #:self original-self
+      (define m (make-module #:source-name (current-module-declare-source)
+                             #:self original-self
                              #:requires requires
                              #:provides provides
                              #:language-info (decl 'language-info)

@@ -38,8 +38,8 @@
 
 (define (variable-reference->module-source vr)
   (check 'variable-reference->module-source variable-reference? vr)
-  (define r (variable-reference->resolved-module-path vr))
-  (and r (resolved-module-path-root-name r)))
+  (define ns (variable-reference->namespace vr))
+  (namespace-source-name ns))
 
 (define (variable-reference->phase vr)
  (check 'variable-reference->phase variable-reference? vr)
