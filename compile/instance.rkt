@@ -19,18 +19,15 @@
 (define (make-instance-instance #:namespace ns
                                 #:phase-shift phase-shift
                                 #:self self 
-                                #:bulk-binding-registry bulk-binding-registry
                                 #:inspector inspector
                                 #:set-transformer! set-transformer!)
-  (define i (make-instance 'instance))
-  (instance-set-variable-value! i ns-id ns)
-  (instance-set-variable-value! i phase-shift-id phase-shift)
-  (instance-set-variable-value! i self-id self)
-  (instance-set-variable-value! i inspector-id inspector)
-  (instance-set-variable-value! i set-transformer!-id set-transformer!)
-  i)
+  (make-instance 'instance #f
+                 ns-id ns
+                 phase-shift-id phase-shift
+                 self-id self
+                 inspector-id inspector
+                 set-transformer!-id set-transformer!))
 
 (define (make-module-body-instance-instance #:set-transformer! set-transformer!)
-  (define i (make-instance 'instance))
-  (instance-set-variable-value! i set-transformer!-id set-transformer!)
-  i)
+  (make-instance 'body-instance #f
+                 set-transformer!-id set-transformer!))

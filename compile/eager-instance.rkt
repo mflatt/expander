@@ -11,11 +11,11 @@
          make-eager-instance-instance)
 
 (define eager-instance-imports
-  `([namespace ,ns-id]
-    [dest-phase ,dest-phase-id]
-    [self ,self-id]
-    [bulk-binding-registry ,bulk-binding-registry-id]
-    [inspector ,inspector-id]
+  `(,ns-id
+    ,dest-phase-id
+    ,self-id
+    ,bulk-binding-registry-id
+    ,inspector-id
     swap-top-level-scopes))
 
 (define (make-eager-instance-instance #:namespace ns
@@ -23,11 +23,10 @@
                                       #:self self 
                                       #:bulk-binding-registry bulk-binding-registry
                                       #:inspector inspector)
-  (define i (make-instance 'instance))
-  (instance-set-variable-value! i 'namespace ns)
-  (instance-set-variable-value! i 'dest-phase dest-phase)
-  (instance-set-variable-value! i 'self self)
-  (instance-set-variable-value! i 'bulk-binding-registry bulk-binding-registry)
-  (instance-set-variable-value! i 'inspector inspector)
-  (instance-set-variable-value! i 'swap-top-level-scopes swap-top-level-scopes)
-  i)
+  (make-instance 'instance #f
+                 ns-id ns
+                 dest-phase-id dest-phase
+                 self-id self
+                 bulk-binding-registry-id bulk-binding-registry
+                 inspector-id inspector
+                 'swap-top-level-scopes swap-top-level-scopes))

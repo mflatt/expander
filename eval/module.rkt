@@ -205,7 +205,6 @@
      #:namespace ns
      #:phase-shift phase-shift
      #:self self 
-     #:bulk-binding-registry bulk-binding-registry
      #:inspector insp
      #:set-transformer! (lambda (name val) (error "shouldn't get here for the root-ctx linklet"))))
   
@@ -290,26 +289,18 @@
 ;; ----------------------------------------
 
 (define (make-data-instance-from-compiled-in-memory cim)
-  (define data-instance (make-instance 'data))
-  (instance-set-variable-value! data-instance mpi-vector-id
-                                (compiled-in-memory-mpis cim))
-  data-instance)
+  (make-instance 'data #f
+                 mpi-vector-id (compiled-in-memory-mpis cim)))
 
 (define (make-syntax-literal-data-instance-from-compiled-in-memory cim)
-  (define syntax-literal-data-instance (make-instance 'syntax-literal-data))
-  (instance-set-variable-value! syntax-literal-data-instance deserialize-syntax-id
-                                void)
-  (instance-set-variable-value! syntax-literal-data-instance deserialized-syntax-vector-id
-                                (compiled-in-memory-syntax-literalss cim))
-  syntax-literal-data-instance)
+  (make-instance 'syntax-literal-data #f
+                 deserialize-syntax-id void
+                 deserialized-syntax-vector-id (compiled-in-memory-syntax-literalss cim)))
 
 (define (make-declaration-context-instance ns)
-  (define declaration-context-instance (make-instance 'declaration-context))
-  (instance-set-variable-value! declaration-context-instance inspector-id
-                                (current-code-inspector))
-  (instance-set-variable-value! declaration-context-instance bulk-binding-registry-id
-                                (namespace-bulk-binding-registry ns))
-  declaration-context-instance)
+  (make-instance 'declaration-context #f
+                 inspector-id (current-code-inspector)
+                 bulk-binding-registry-id (namespace-bulk-binding-registry ns)))
 
 ;; ----------------------------------------
 

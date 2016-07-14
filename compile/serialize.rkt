@@ -716,16 +716,17 @@
 ;; ----------------------------------------
 ;; Set up the instance to import into deserializing linklets
 
-(define deserialize-instance (make-instance 'deserialize))
-(define deserialize-imports null)
-
-(define (add! sym val)
-  (instance-set-variable-value! deserialize-instance sym val)
-  (set! deserialize-imports
-        (cons sym deserialize-imports))
-  (register-built-in-symbol! sym))
-(add! 'deserialize-module-path-indexes deserialize-module-path-indexes)
-(add! 'syntax-module-path-index-shift syntax-module-path-index-shift)
-(add! 'syntax-shift-phase-level syntax-shift-phase-level)
-(add! 'module-use module-use)
-(add! 'deserialize deserialize)
+(define deserialize-imports
+  '(deserialize-module-path-indexes
+    syntax-module-path-index-shift
+    syntax-shift-phase-level
+    module-use
+    deserialize))
+    
+(define deserialize-instance
+  (make-instance 'deserialize #f
+                 'deserialize-module-path-indexes deserialize-module-path-indexes
+                 'syntax-module-path-index-shift syntax-module-path-index-shift
+                 'syntax-shift-phase-level syntax-shift-phase-level
+                 'module-use module-use
+                 'deserialize deserialize))

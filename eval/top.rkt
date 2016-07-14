@@ -107,7 +107,6 @@
                        #:namespace phase-ns
                        #:phase-shift phase-shift
                        #:self (namespace-mpi ns)
-                       #:bulk-binding-registry (namespace-bulk-binding-registry ns)
                        #:inspector (namespace-inspector ns)
                        #:set-transformer! (lambda (name val)
                                             (namespace-set-transformer! ns
@@ -144,9 +143,6 @@
       [else void]))))
 
 (define (link-instance-from-compiled-in-memory cim)
-  (define link-instance (make-instance 'link))
-  (instance-set-variable-value! link-instance mpi-vector-id
-                                (compiled-in-memory-mpis cim))
-  (instance-set-variable-value! link-instance syntax-literalss-id
-                                (compiled-in-memory-syntax-literalss cim))
-  link-instance)
+  (make-instance 'link #f
+                 mpi-vector-id (compiled-in-memory-mpis cim)
+                 syntax-literalss-id (compiled-in-memory-syntax-literalss cim)))

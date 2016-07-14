@@ -15,29 +15,27 @@
 ;; Run-time support for evaluating top-level forms
 (provide top-level-instance)
 
-(define top-level-instance (make-instance 'top-level))
-
-(instance-set-variable-value!
- top-level-instance
- top-level-bind!-id
- (lambda (id mpi orig-phase phase-shift ns sym trans-val)
-   (define phase (phase+ orig-phase phase-shift))
-   (define b (make-module-binding mpi phase sym
-                                  #:frame-id (root-expand-context-frame-id
-                                              (namespace-get-root-expand-ctx ns))))
-   (add-binding! id b phase)
-   (when trans-val
-     (maybe-install-free=id! trans-val id phase))))
-
-(instance-set-variable-value!
- top-level-instance
- top-level-require!-id
- (lambda (stx ns)
-   (define reqs (cdr (syntax->list stx)))
-   (parse-and-perform-requires! #:run? #t
-                                #:visit? #f
-                                reqs
-                                #f ; no syntax errors should happen
-                                ns
-                                (namespace-phase ns)
-                                (make-requires+provides #f))))
+(define top-level-instance
+  (make-instance
+   'top-level #f
+   
+   top-level-bind!-id
+   (lambda (id mpi orig-phase phase-shift ns sym trans-val)
+     (define phase (phase+ orig-phase phase-shift))
+     (define b (make-module-binding mpi phase sym
+                                    #:frame-id (root-expand-context-frame-id
+                                                (namespace-get-root-expand-ctx ns))))
+     (add-binding! id b phase)
+     (when trans-val
+       (maybe-install-free=id! trans-val id phase)))
+   
+   top-level-require!-id
+   (lambda (stx ns)
+     (define reqs (cdr (syntax->list stx)))
+     (parse-and-perform-requires! #:run? #t
+                                  #:visit? #f
+                                  reqs
+                                  #f ; no syntax errors should happen
+                                  ns
+                                  (namespace-phase ns)
+                                  (make-requires+provides #f)))))
