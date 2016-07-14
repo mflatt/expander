@@ -10,9 +10,10 @@
          "main.rkt")
 
 (provide dynamic-require
-         dynamic-require-for-syntax)
+         dynamic-require-for-syntax
+         default-dynamic-require-fail-thunk)
 
-(define (do-dynamic-require who mod-path sym [fail-k default-fail-thunk])
+(define (do-dynamic-require who mod-path sym [fail-k default-dynamic-require-fail-thunk])
   (unless (or (module-path? mod-path)
               (module-path-index? mod-path)
               (resolved-module-path? mod-path))
@@ -55,7 +56,7 @@
                                 #f))
     (cond
      [(not binding/p)
-      (if (eq? fail-k default-fail-thunk)
+      (if (eq? fail-k default-dynamic-require-fail-thunk)
           (raise-arguments-error 'dynamic-require
                                  "name is not provided"
                                  "name" sym
@@ -87,7 +88,7 @@
                                "name" sym
                                "module" mod-name))
       (define (fail)
-        (if (eq? fail-k default-fail-thunk)
+        (if (eq? fail-k default-dynamic-require-fail-thunk)
             (raise-arguments-error 'dynamic-require
                                    "name's binding is missing"
                                    "name" sym
@@ -112,13 +113,13 @@
 
 ;; The `dynamic-require` function cheats by recognizing this failure
 ;; thunk and substituting a more specific error:
-(define (default-fail-thunk)
+(define (default-dynamic-require-fail-thunk)
   (error "failed"))
 
-(define (dynamic-require mod-path sym [fail-k default-fail-thunk])
+(define (dynamic-require mod-path sym [fail-k default-dynamic-require-fail-thunk])
   (do-dynamic-require 'dynamic-require mod-path sym fail-k))
 
-(define (dynamic-require-for-syntax mod-path sym [fail-k default-fail-thunk])
+(define (dynamic-require-for-syntax mod-path sym [fail-k default-dynamic-require-fail-thunk])
   (parameterize ([current-namespace
                   (let ([ns current-namespace])
                     (namespace->namespace-at-phase ns (add1 (namespace-phase ns))))])

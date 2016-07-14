@@ -5,16 +5,17 @@
 
 (provide dynamic-require-reader)
 
-(define (dynamic-require-reader mod-path sym)
+(define (dynamic-require-reader mod-path sym [fail-thunk default-dynamic-require-fail-thunk])
   (define root-ns (namespace-root-namespace (current-namespace)))
   (define proc (if root-ns
                    ;; Switch to the root namespace:
                    (parameterize ([current-namespace root-ns])
-                     (dynamic-require mod-path sym))
+                     (dynamic-require mod-path sym fail-thunk))
                    ;; Current namespace is a root namespace:
-                   (dynamic-require mod-path sym)))
+                   (dynamic-require mod-path sym fail-thunk)))
   (cond
    [(and (eq? sym 'read-syntax)
+         (procedure? proc)
          (procedure-arity-includes? proc 6))
     ;; Need to convert syntax object for module name
     (lambda (name input mod-s line column position)
