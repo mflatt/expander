@@ -102,14 +102,19 @@
                               (root-expand-context-module-scopes
                                (namespace-get-root-expand-ctx ns))))
   (cond
-   [(module-path-index? req)
-    (perform-require! req #f #f
+   [(or (module-path-index? req)
+        (module-path? req))
+    (perform-require! (if (module-path-index? req)
+                          req
+                          (module-path-index-join req #f))
+                      #f #f
                       ctx-stx ns
                       #:run? run?
                       #:visit? visit?
-                      #:phase-shift 0
+                      #:phase-shift (namespace-phase ns)
                       #:run-phase (namespace-phase ns))]
    [else
+    ;; Slow way -- to allow renaming, check for conflicts, etc.
     (parse-and-perform-requires! #:run? run?
                                  #:visit? visit?
                                  (list (datum->syntax ctx-stx req))

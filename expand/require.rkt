@@ -212,7 +212,7 @@
   (define bind-in-stx (if (adjust-rename? adjust)
                           (adjust-rename-to-id adjust)
                           in-stx))
-  (define done-syms (make-hash))
+  (define done-syms (and adjust (make-hash)))
   (define m (namespace->module m-ns module-name))
   (unless m (raise-unknown-module-error 'require module-name))
   (define interned-mpi
@@ -236,47 +236,49 @@
            [(adjust-rename? adjust) (list (adjust-rename-from-sym adjust))]
            [else #f])
    #:can-bulk? (not adjust)
-   #:filter (lambda (binding as-transformer?)
-              (define sym (module-binding-nominal-sym binding))
-              (define provide-phase (module-binding-nominal-phase binding))
-              (define adjusted-sym
-                (cond
-                 [(and (not (eq? just-meta 'all))
-                       (not (equal? provide-phase just-meta)))
-                  #f]
-                 [(not adjust) sym]
-                 [(adjust-only? adjust)
-                  (and (set-member? (adjust-only-syms adjust) sym)
-                       (hash-set! done-syms sym #t)
-                       sym)]
-                 [(adjust-prefix? adjust)
-                  (string->symbol
-                   (format "~a~a" (adjust-prefix-sym adjust) sym))]
-                 [(adjust-all-except? adjust)
-                  (and (not (and (set-member? (adjust-all-except-syms adjust) sym)
-                                 (hash-set! done-syms sym #t)))
-                       (string->symbol
-                        (format "~a~a" (adjust-all-except-prefix-sym adjust) sym)))]
-                 [(adjust-rename? adjust)
-                  (and (eq? sym (adjust-rename-from-sym adjust))
-                       (hash-set! done-syms sym #t)
-                       (adjust-rename-to-id adjust))]))
-              (when adjusted-sym
-                (define s (datum->syntax bind-in-stx adjusted-sym))
-                (define bind-phase (phase+ phase-shift provide-phase))
-                (when requires+provides
-                  (unless initial-require?
-                    (check-not-defined #:check-not-required? #t
-                                       requires+provides
-                                       s bind-phase
-                                       #:unless-matches binding
-                                       #:in in-stx)
-                    (remove-required-id! requires+provides s bind-phase #:unless-matches binding))
-                  (add-defined-or-required-id! requires+provides
-                                               s bind-phase binding
-                                               #:can-be-shadowed? can-be-shadowed?
-                                               #:as-transformer? as-transformer?)))
-              adjusted-sym))
+   #:filter (and
+             (or adjust requires+provides)
+             (lambda (binding as-transformer?)
+               (define sym (module-binding-nominal-sym binding))
+               (define provide-phase (module-binding-nominal-phase binding))
+               (define adjusted-sym
+                 (cond
+                  [(and (not (eq? just-meta 'all))
+                        (not (equal? provide-phase just-meta)))
+                   #f]
+                  [(not adjust) sym]
+                  [(adjust-only? adjust)
+                   (and (set-member? (adjust-only-syms adjust) sym)
+                        (hash-set! done-syms sym #t)
+                        sym)]
+                  [(adjust-prefix? adjust)
+                   (string->symbol
+                    (format "~a~a" (adjust-prefix-sym adjust) sym))]
+                  [(adjust-all-except? adjust)
+                   (and (not (and (set-member? (adjust-all-except-syms adjust) sym)
+                                  (hash-set! done-syms sym #t)))
+                        (string->symbol
+                         (format "~a~a" (adjust-all-except-prefix-sym adjust) sym)))]
+                  [(adjust-rename? adjust)
+                   (and (eq? sym (adjust-rename-from-sym adjust))
+                        (hash-set! done-syms sym #t)
+                        (adjust-rename-to-id adjust))]))
+               (when (and adjusted-sym
+                          requires+provides)
+                 (define s (datum->syntax bind-in-stx adjusted-sym))
+                 (define bind-phase (phase+ phase-shift provide-phase))
+                 (unless initial-require?
+                   (check-not-defined #:check-not-required? #t
+                                      requires+provides
+                                      s bind-phase
+                                      #:unless-matches binding
+                                      #:in in-stx)
+                   (remove-required-id! requires+provides s bind-phase #:unless-matches binding))
+                 (add-defined-or-required-id! requires+provides
+                                              s bind-phase binding
+                                              #:can-be-shadowed? can-be-shadowed?
+                                              #:as-transformer? as-transformer?))
+               adjusted-sym)))
   ;; check that we covered all expected ids:
   (define need-syms (cond
                     [(adjust-only? adjust)
@@ -302,19 +304,20 @@
   (define self (module-self m))
   (for ([(provide-phase-level provides) (in-hash (module-provides m))])
     (define phase (phase+ phase-shift provide-phase-level))
-    (for ([sym (in-list (or only-syms (hash-keys provides)))])
-      (define binding/p (hash-ref provides sym #f))
-      (when binding/p
-        (define b (provide-binding-to-require-binding binding/p sym
-                                                      #:self self
-                                                      #:mpi mpi
-                                                      #:provide-phase-level provide-phase-level
-                                                      #:phase-shift phase-shift))
-        (let-values ([(sym) (filter b (provided-as-transformer? binding/p))])
-          (when (and sym
-                     (not can-bulk?)) ;; bulk binding added later
-            ;; Add a non-bulk binding, since `filter` has checked/adjusted it
-            (add-binding! (datum->syntax in-stx sym) b phase)))))
+    (when filter
+      (for ([sym (in-list (or only-syms (hash-keys provides)))])
+        (define binding/p (hash-ref provides sym #f))
+        (when binding/p
+          (define b (provide-binding-to-require-binding binding/p sym
+                                                        #:self self
+                                                        #:mpi mpi
+                                                        #:provide-phase-level provide-phase-level
+                                                        #:phase-shift phase-shift))
+          (let-values ([(sym) (filter b (provided-as-transformer? binding/p))])
+            (when (and sym
+                       (not can-bulk?)) ;; bulk binding added later
+              ;; Add a non-bulk binding, since `filter` has checked/adjusted it
+              (add-binding! (datum->syntax in-stx sym) b phase))))))
     ;; Add bulk binding after all filtering
     (when can-bulk?
       (add-bulk-binding! in-stx
