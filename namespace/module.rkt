@@ -219,7 +219,7 @@
     (or (hash-ref (hash-ref (namespace-module-instances ns) 0-phase #hasheq())
                   name
                   #f)
-        (let ([c-ns (or (namespace-cross-phase-persistent-namespace ns) ns)])
+        (let ([c-ns (or (namespace-root-namespace ns) ns)])
           (hash-ref (namespace-module-instances c-ns) name #f))
         (and complain-on-failure?
              (error "no module instance found:" name 0-phase))))
@@ -243,7 +243,7 @@
   (cond
    [(module-cross-phase-persistent? m)
     (hash-set! (namespace-phase-to-namespace m-ns) 0 m-ns)
-    (hash-set! (namespace-module-instances (or (namespace-cross-phase-persistent-namespace ns) ns))
+    (hash-set! (namespace-module-instances (or (namespace-root-namespace ns) ns))
                name
                mi)
     (hash-set! (module-instance-phase-level-to-state mi) 0 'started)]
@@ -326,7 +326,7 @@
   ;; at phase 0 and registered in `ns` as phaseless; otherwise
   (cond
    [(module-cross-phase-persistent? m)
-    (instantiate! 0 0 (or (namespace-cross-phase-persistent-namespace ns) ns))]
+    (instantiate! 0 0 (or (namespace-root-namespace ns) ns))]
    [else
     (instantiate! instance-phase run-phase ns)]))
 

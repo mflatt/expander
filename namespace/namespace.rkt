@@ -15,6 +15,7 @@
          namespace-module-registry
          namespace-phase
          namespace-0-phase
+         namespace-root-namespace
          namespace-get-root-expand-ctx
          namespace-set-root-expand-ctx!
          namespace->namespace-at-phase
@@ -50,7 +51,7 @@
                    module-registry     ; module-registry of (resolved-module-path -> module) [shared among modules]
                    bulk-binding-registry ; (resolved-module-path -> bulk-provide) for resolving bulk bindings on unmarshal
                    submodule-declarations ; resolved-module-path -> module [shared during a module compilation]
-                   cross-phase-persistent-namespace ; #f or namespace for persistent instances [shared among modules]
+                   root-namespace      ; #f or namespace for #lang, #reader, and persistent instances [shared among modules]
                    declaration-inspector ; declaration-time inspector
                    [inspector #:mutable] ; instantiation-time inspector
                    available-module-instances  ; phase -> list of module-instance [shared among modules]
@@ -95,7 +96,7 @@
                    (make-bulk-binding-registry))
                (make-hasheq)     ; submodule-declarations
                (and share-from-ns
-                    (or (namespace-cross-phase-persistent-namespace share-from-ns)
+                    (or (namespace-root-namespace share-from-ns)
                         share-from-ns))
                #f ; no declaration-time inspector for a top-level namespace
                (make-inspector (current-code-inspector))

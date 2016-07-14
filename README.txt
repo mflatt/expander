@@ -3,7 +3,6 @@ This is a work-in-progress reimplementation of Racket's macro expander.
 See "demo.rkt" for examples.
 
 TODO:
- root namespace for reader `dynamc-require`
  module sources and `current-module-path-for-load`
  bug fix for local definition contexts (MB's example)
 
