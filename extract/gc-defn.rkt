@@ -53,9 +53,10 @@
             0
             (length (defn-syms e)))]
        [else 0])))
-  (log-status "Can remove ~s of ~s defined names"
+  (log-status "Can remove ~s of ~s defined names, keeping ~s"
               can-remove-count
-              (hash-count sym-to-rhs))
+              (hash-count sym-to-rhs)
+              (- (hash-count sym-to-rhs) can-remove-count))
   
   (define new-body
     (for/list ([e (in-list body)]

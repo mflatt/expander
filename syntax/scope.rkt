@@ -493,9 +493,9 @@
           (fallback-map
            smss
            (lambda (smss)
-             (for*/set ([sms (in-set smss)]
-                        [new-sms (in-value (shift-multi-scope sms phase))]
-                        #:when new-sms)
+             (for*/seteq ([sms (in-set smss)]
+                          [new-sms (in-value (shift-multi-scope sms phase))]
+                          #:when new-sms)
                new-sms))))
         (syntax-map s
                     (lambda (tail? d) d)

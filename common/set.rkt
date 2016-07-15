@@ -23,6 +23,7 @@
          for/seteq
          for/seteqv
          for*/set
+         for*/seteq
          in-set)
 
 (define set
@@ -107,3 +108,9 @@
                        (let ()
                          body ...)
                        #t)))
+
+(define-syntax-rule (for*/seteq bindings body ...)
+  (for*/hasheq bindings (values
+                         (let ()
+                           body ...)
+                         #t)))
