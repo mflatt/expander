@@ -130,21 +130,21 @@
     (define disarmed-s (syntax-disarm s))
     (define-match stx-m disarmed-s #:when syntaxes?
       '(letrec-syntaxes+values
-        ([(trans-id ...) trans-rhs] ...)
-        ([(val-id ...) val-rhs] ...)
+        ([(id:trans ...) trans-rhs] ...)
+        ([(id:val ...) val-rhs] ...)
         body ...+))
     (define-match val-m disarmed-s #:unless syntaxes?
-      '(let-values ([(val-id ...) val-rhs] ...)
+      '(let-values ([(id:val ...) val-rhs] ...)
         body ...+))
    (define sc (new-scope 'local))
    (define phase (expand-context-phase ctx))
    (define frame-id (and split-by-reference?
                          (make-reference-record))) ; accumulates info on referenced variables
    ;; Add the new scope to each binding identifier:
-   (define trans-idss (for/list ([ids (in-list (if syntaxes? (stx-m 'trans-id) null))])
+   (define trans-idss (for/list ([ids (in-list (if syntaxes? (stx-m 'id:trans) null))])
                         (for/list ([id (in-list ids)])
                           (add-scope id sc))))
-   (define val-idss (for/list ([ids (in-list (if syntaxes? (stx-m 'val-id) (val-m 'val-id)))])
+   (define val-idss (for/list ([ids (in-list (if syntaxes? (stx-m 'id:val) (val-m 'id:val)))])
                       (for/list ([id (in-list ids)])
                         (add-scope id sc))))
    (check-no-duplicate-ids (list trans-idss val-idss) phase s)

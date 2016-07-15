@@ -76,10 +76,13 @@
      ;; patterns, because it keeps recomputing the set of pattern
      ;; variables, but we're only going to use it on simple patterns
      
+     (define-for-syntax (identifier-pattern? pattern)
+       (regexp-match? #rx"^id(:|$)" (symbol->string pattern)))
+     
      (define-for-syntax (compile-pattern pattern already-checked?)
        (cond
         [(symbol? pattern)
-         (if (regexp-match? #rx"^id(:|$)" (symbol->string pattern))
+         (if (identifier-pattern? pattern)
              (if already-checked?
                  #'s
                  #`(if (or (and (rt-syntax? s)
@@ -103,7 +106,8 @@
                         [#,(if (and (eq? '...+ (cadr pattern)) (not already-checked?)) #'(null? flat-s) #'#f)
                          (rt-raise-syntax-error #f "bad syntax" orig-s)]
                         [else
-                         #,(if (symbol? (car pattern))
+                         #,(if (and (symbol? (car pattern))
+                                    (not (identifier-pattern? (car pattern))))
                                #`flat-s
                                #`(for/lists (pattern-id ...) ([s (in-list flat-s)])
                                             #,(compile-pattern (car pattern) already-checked?)))])))]
@@ -136,7 +140,7 @@
      (define-for-syntax (compile-pattern-check pattern)
        (cond
         [(symbol? pattern)
-         (if (regexp-match? #rx"^id(:|$)" (symbol->string pattern))
+         (if (identifier-pattern? pattern)
              #`(or (and (rt-syntax? s)
                         (symbol? (rt-syntax-e s))))
              #'#t)]
@@ -152,7 +156,8 @@
                        (cond
                         [(not flat-s) #f]
                         [#,(if (eq? '...+ (cadr pattern)) #'(null? flat-s) #'#f) #f]
-                        [else (if (symbol? (car pattern))
+                        [else (if (and (symbol? (car pattern))
+                                       (not (identifier-pattern? (car pattern))))
                                   #t
                                   #`(for/and ([s (in-list flat-s)])
                                       #,(compile-pattern-check (car pattern))))])))]
