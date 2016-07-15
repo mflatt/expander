@@ -636,8 +636,12 @@
           (current-namespace)
           (let ([c (current-compile)])
             (lambda (e ns)
-              ;; `ns` is `(current-namespace)`
-              (c e #t))))))
+              ;; `ns` is `(current-namespace)`, but possibly
+              ;; phase-shifted
+              (if (eq? ns (current-namespace))
+                  (c e #t)
+                  (parameterize ([current-namespace ns])
+                    (c e #t))))))))
 
 (define default-compile-handler
   ;; Constrained to a single argument:

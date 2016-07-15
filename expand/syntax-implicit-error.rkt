@@ -26,5 +26,7 @@
                                 [(0) ""]
                                 [(1) " in the transformer phase"]
                                 [else (format " at phase ~a" phase)]))
-                      (and unbound? trigger-id) (and (not unbound?) s) null
+                      (and unbound? trigger-id)
+                      (and (not (eq? (syntax-e s) (syntax-e trigger-id))) s)
+                      null
                       (if unbound? (syntax-debug-info-string trigger-id ctx) "")))
