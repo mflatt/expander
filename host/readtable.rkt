@@ -1,5 +1,5 @@
 #lang racket/base
-(require (only-in racket/base
+(require (only-in "reader-syntax.rkt"
                   [make-readtable host:make-readtable])
          "../syntax/syntax.rkt"
          "syntax-to-reader-syntax.rkt")

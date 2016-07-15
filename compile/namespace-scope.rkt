@@ -29,8 +29,8 @@
 (define (extract-namespace-scopes ns)
   (define root-ctx (namespace-get-root-expand-ctx ns))
   (define post-expansion-sc (root-expand-context-post-expansion-scope root-ctx))
-  (values (set post-expansion-sc)
-          (set-remove (list->set (root-expand-context-module-scopes root-ctx))
+  (values (seteq post-expansion-sc)
+          (set-remove (list->seteq (root-expand-context-module-scopes root-ctx))
                       post-expansion-sc)))
 
 ;; Extract namespace scopes to a syntax object, used at compile time:

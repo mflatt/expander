@@ -18,6 +18,7 @@
          set-partition
          set->list
          list->set
+         list->seteq
          for/set
          for/seteq
          for/seteqv
@@ -77,6 +78,10 @@
 
 (define (list->set l)
   (for/set ([k (in-list l)])
+    k))
+
+(define (list->seteq l)
+  (for/seteq ([k (in-list l)])
     k))
 
 (define-syntax-rule (for/set bindings body ...)
