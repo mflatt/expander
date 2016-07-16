@@ -258,7 +258,9 @@
 (define (apply-scope s sc op prop-op)
   (if (shifted-multi-scope? sc)
       (struct-copy syntax s
-                   [shifted-multi-scopes (op (syntax-shifted-multi-scopes s) sc)]
+                   [shifted-multi-scopes (fallback-update-first (syntax-shifted-multi-scopes s)
+                                                                (lambda (smss)
+                                                                  (op (fallback-first smss) sc)))]
                    [scope-propagations (and (datum-has-elements? (syntax-content s))
                                             (prop-op (syntax-scope-propagations s)
                                                      sc
@@ -423,10 +425,13 @@
    [else
     (for/fold ([smss smss]) ([(sms op) (in-immutable-hash (propagation-scope-ops prop))]
                              #:when (shifted-multi-scope? sms))
-      (case op
-       [(add) (set-add smss sms)]
-       [(remove) (set-remove smss sms)]
-       [else (set-flip smss sms)]))]))
+      (fallback-update-first
+       smss
+       (lambda (smss)
+         (case op
+           [(add) (set-add smss sms)]
+           [(remove) (set-remove smss sms)]
+           [else (set-flip smss sms)]))))]))
 
 (define (propagation-merge prop base-prop prev-scs prev-smss)
   (cond

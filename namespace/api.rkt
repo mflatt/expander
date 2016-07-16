@@ -1,15 +1,17 @@
 #lang racket/base
 (require (only-in "../syntax/syntax.rkt" syntax-mpi-shifts empty-syntax)
+         (only-in "../syntax/scope.rkt" add-scopes push-scope syntax-scope-set)
+         (only-in "../syntax/fallback.rkt" fallback-first)
          (only-in "../syntax/binding.rkt" resolve+shift syntax-transfer-shifts)
          "../syntax/inspector.rkt"
          "../syntax/module-binding.rkt"
          "../syntax/api.rkt"
          "../syntax/error.rkt"
-         (only-in "../syntax/scope.rkt" add-scopes push-scope)
          "namespace.rkt"
          "module.rkt"
          "attach.rkt"
          "core.rkt"
+         "../common/set.rkt"
          "../common/phase.rkt"
          "../expand/require+provide.rkt"
          "../expand/context.rkt"
@@ -54,13 +56,16 @@
   (check 'namespace-syntax-introduce namespace? ns)
   (define root-ctx (namespace-get-root-expand-ctx ns))
   (define post-scope (root-expand-context-post-expansion-scope root-ctx))
-  (define other-namespace-scopes (for/list ([sc (in-list (root-expand-context-module-scopes root-ctx))]
+  (define other-namespace-scopes (for/list ([sc (in-set
+                                                 ;; `all-scopes-stx` corresponds to the initial import
+                                                 (syntax-scope-set (root-expand-context-all-scopes-stx root-ctx)
+                                                                   (namespace-phase ns)))]
                                             #:unless (equal? sc post-scope))
                                    sc))
   (define (add-ns-scopes s)
     (syntax-set-inspector
-     (syntax-transfer-shifts (push-scope (add-scopes s other-namespace-scopes)
-                                         post-scope)
+     (syntax-transfer-shifts (add-scopes (push-scope s post-scope)
+                                         other-namespace-scopes)
                              (root-expand-context-all-scopes-stx root-ctx))
      (or (namespace-declaration-inspector ns)
          (current-code-inspector))))
