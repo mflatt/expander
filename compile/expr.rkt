@@ -5,6 +5,7 @@
          "../common/phase.rkt"
          "../syntax/scope.rkt"
          "../syntax/taint.rkt"
+         "../syntax/property.rkt"
          "../namespace/namespace.rkt"
          "../namespace/module.rkt"
          "../syntax/binding.rkt"
@@ -33,8 +34,8 @@
 ;; not be used in the result, so we can avoid serializing them; a value
 ;; of `#f` for `result-used?` means that the expression can be replaced
 ;; by a boolean-equivalent value if it has no side effect.
-(define (compile in-s cctx [result-used? #t])
-  (let ([compile (lambda (s result-used?) (compile s cctx result-used?))])
+(define (compile in-s cctx [name #f] [result-used? #t])
+  (let ([compile (lambda (s name result-used?) (compile s cctx name result-used?))])
     (define s (syntax-disarm in-s))
     (cond
      [(pair? (syntax-e s))
@@ -49,15 +50,21 @@
          (cond
           [result-used?
            (define-match m s '(lambda formals body))
-           (correlate* s `(lambda ,@(compile-lambda (m 'formals) (m 'body) cctx)))]
+           (add-lambda-properties
+            (correlate* s `(lambda ,@(compile-lambda (m 'formals) (m 'body) cctx)))
+            name
+            s)]
           [else (correlate* s `(quote ,(syntax->datum s)))])]
         [(case-lambda)
          (cond
           [result-used?
            (define-match m s '(case-lambda [formals body] ...))
-           (correlate* s `(case-lambda ,@(for/list ([formals (in-list (m 'formals))]
-                                               [body (in-list (m 'body))])
-                                      (compile-lambda formals body cctx))))]
+           (add-lambda-properties
+            (correlate* s `(case-lambda ,@(for/list ([formals (in-list (m 'formals))]
+                                                [body (in-list (m 'body))])
+                                       (compile-lambda formals body cctx))))
+            name
+            s)]
           [else (correlate* s `(quote ,(syntax->datum s)))])]
         [(#%app)
          (define-match m s '(#%app . rest))
@@ -66,19 +73,19 @@
                           (syntax->list (syntax-disarm es))
                           es)))
          (for/list ([s (in-list es)])
-           (compile s #t))]
+           (compile s #f #t))]
         [(if)
          (define-match m s '(if tst thn els))
          (correlate* s `(if
-                         ,(compile (m 'tst) #f)
-                         ,(compile (m 'thn) result-used?)
-                         ,(compile (m 'els) result-used?)))]
+                         ,(compile (m 'tst) #f #f)
+                         ,(compile (m 'thn) name result-used?)
+                         ,(compile (m 'els) name result-used?)))]
         [(with-continuation-mark)
          (define-match m s '(if key val body))
          (correlate* s `(with-continuation-mark
-                         ,(compile (m 'key) #t)
-                         ,(compile (m 'val) #t)
-                         ,(compile (m 'body) result-used?)))]
+                         ,(compile (m 'key) #f #t)
+                         ,(compile (m 'val) #f #t)
+                         ,(compile (m 'body) name result-used?)))]
         [(begin begin0)
          (define-match m s '(begin e ...+))
          (define used-pos (case core-sym
@@ -86,16 +93,17 @@
                             [else (sub1 (length (m 'e)))]))
          (correlate* s `(,core-sym ,@(for/list ([e (in-list (m 'e))]
                                                 [i (in-naturals)])
-                                       (compile e (= i used-pos)))))]
+                                       (define used? (= i used-pos))
+                                       (compile e (and used? name) used?))))]
         [(set!)
          (define-match m s '(set! id rhs))
          (correlate* s `(,@(compile-identifier (m 'id) cctx
-                                               #:set-to (compile (m 'rhs) #t))))]
+                                               #:set-to (compile (m 'rhs) (m 'id) #t))))]
         [(let-values letrec-values)
-         (compile-let core-sym s cctx result-used?)]
+         (compile-let core-sym s cctx name result-used?)]
         [(#%expression)
          (define-match m s '(#%expression e))
-         (compile (m 'e) result-used?)]
+         (compile (m 'e) name result-used?)]
         [(quote)
          (define-match m s '(quote datum))
          (define datum (syntax->datum (m 'datum)))
@@ -140,9 +148,22 @@
        [(pair? formals) (cons (loop (car formals))
                               (loop (cdr formals)))]
        [else null])))
-  `(,gen-formals ,(compile body cctx)))
+  `(,gen-formals ,(compile body cctx #f)))
 
-(define (compile-let core-sym s cctx result-used?)
+(define (add-lambda-properties s inferred-name orig-s)
+  (define name (or inferred-name
+                   (syntax-property orig-s inferred-name)))
+  (define named-s (if name
+                      (correlated-property s
+                                           'inferred-name
+                                           (if (syntax? name) (syntax-e name) name))
+                      s))
+  (define as-method (syntax-property orig-s 'method-arity-error))
+  (if as-method
+      (correlated-property s 'method-arity-error as-method)
+      s))
+
+(define (compile-let core-sym s cctx name result-used?)
   (define rec? (eq? core-sym 'letrec-values))
   (define-match m s '(let-values ([(id ...) rhs] ...) body))
   (define phase (compile-context-phase cctx))
@@ -152,9 +173,12 @@
                     (local-id->symbol id phase))))
   (correlate* s
               `(,core-sym ,(for/list ([syms (in-list symss)]
+                                      [ids (in-list idss)]
                                       [rhs (in-list (m 'rhs))])
-                             `[,syms ,(compile rhs cctx)])
-                ,(compile (m 'body) cctx result-used?))))
+                             `[,syms ,(compile rhs
+                                               cctx
+                                               (and (= 1 (length ids)) (car ids)))])
+                ,(compile (m 'body) cctx name result-used?))))
 
 (define (compile-identifier s cctx #:set-to [rhs #f] #:top? [top? #f])
   (define phase (compile-context-phase cctx))

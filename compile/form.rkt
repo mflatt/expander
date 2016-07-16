@@ -110,7 +110,8 @@
          (define rhs (compile (m 'rhs)
                               (struct-copy compile-context cctx
                                            [phase phase]
-                                           [header header])))
+                                           [header header])
+                              (and (= (length ids) 1) (car ids))))
          (compiled-expression-callback rhs (length def-syms) phase (as-required? header))
          ;; Generate a definition:
          (add-body! phase `(define-values ,def-syms ,rhs))
@@ -179,6 +180,7 @@
                             (struct-copy compile-context cctx
                                          [phase phase]
                                          [header header])
+                            #f
                             (= i last-i)))
          (compiled-expression-callback e #f phase (as-required? header))
          (add-body! phase e)])))
