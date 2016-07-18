@@ -23,7 +23,9 @@
 (define (make-create-root-expand-context-from-module requires evaled-ld-h)
   (lambda (ns phase-shift original-self self)
     (define root-ctx (make-root-expand-context))
-    (define s (add-scopes empty-syntax (root-expand-context-module-scopes root-ctx)))
+    (define s (syntax-shift-phase-level
+               (add-scopes empty-syntax (root-expand-context-module-scopes root-ctx))
+               phase-shift))
 
     ;; Add bindings for `require`s
     (for ([(phase+reqs) (in-list requires)])
@@ -44,7 +46,7 @@
         ;; the binding should be unreachable, but we need to reserve
         ;; the symbol to avoid conflicts
         (define id (datum->syntax s sym))
-        (add-binding! id (make-module-binding self phase sym) phase)
+        (add-binding! id (make-module-binding self phase sym) (phase+ phase phase-shift))
         (add-defined-sym! defined-syms phase sym id)))
     
     root-ctx))
