@@ -99,8 +99,10 @@
          (define-match m s '(set! id rhs))
          (correlate* s `(,@(compile-identifier (m 'id) cctx
                                                #:set-to (compile (m 'rhs) (m 'id) #t))))]
-        [(let-values letrec-values)
-         (compile-let core-sym s cctx name result-used?)]
+        [(let-values)
+         (compile-let core-sym s cctx name #:rec? #f result-used?)]
+        [(letrec-values)
+         (compile-let core-sym s cctx name #:rec? #f result-used?)]
         [(#%expression)
          (define-match m s '(#%expression e))
          (compile (m 'e) name result-used?)]
@@ -163,14 +165,17 @@
       (correlated-property s 'method-arity-error as-method)
       s))
 
-(define (compile-let core-sym s cctx name result-used?)
+(define (compile-let core-sym s cctx name #:rec? rec? result-used?)
   (define rec? (eq? core-sym 'letrec-values))
   (define-match m s '(let-values ([(id ...) rhs] ...) body))
   (define phase (compile-context-phase cctx))
   (define idss (m 'id))
   (define symss (for/list ([ids (in-list idss)])
                   (for/list ([id (in-list ids)])
-                    (local-id->symbol id phase))))
+                    (define sym (local-id->symbol id phase))
+                    (if rec?
+                        (add-undefined-error-name-property sym id)
+                        sym))))
   (correlate* s
               `(,core-sym ,(for/list ([syms (in-list symss)]
                                       [ids (in-list idss)]
@@ -179,6 +184,12 @@
                                                cctx
                                                (and (= 1 (length ids)) (car ids)))])
                 ,(compile (m 'body) cctx name result-used?))))
+
+(define (add-undefined-error-name-property sym orig-id)
+  (define id (correlate* orig-id sym))
+  (correlated-property id 'undefined-error-name
+                       (or (syntax-property orig-id 'undefined-error-name)
+                           (syntax-e orig-id))))
 
 (define (compile-identifier s cctx #:set-to [rhs #f] #:top? [top? #f])
   (define phase (compile-context-phase cctx))
