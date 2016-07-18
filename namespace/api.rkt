@@ -56,10 +56,7 @@
   (check 'namespace-syntax-introduce namespace? ns)
   (define root-ctx (namespace-get-root-expand-ctx ns))
   (define post-scope (root-expand-context-post-expansion-scope root-ctx))
-  (define other-namespace-scopes (for/list ([sc (in-set
-                                                 ;; `all-scopes-stx` corresponds to the initial import
-                                                 (syntax-scope-set (root-expand-context-all-scopes-stx root-ctx)
-                                                                   (namespace-phase ns)))]
+  (define other-namespace-scopes (for/list ([sc (in-list (root-expand-context-module-scopes root-ctx))]
                                             #:unless (equal? sc post-scope))
                                    sc))
   (define (add-ns-scopes s)
