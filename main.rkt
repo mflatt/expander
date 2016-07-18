@@ -43,6 +43,7 @@
          datum->syntax syntax->datum
          identifier-binding
          datum->kernel-syntax
+         maybe-syntax->datum ; for reader callbacks via a readtable, etc.
          
          make-namespace
          current-namespace

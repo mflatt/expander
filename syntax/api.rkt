@@ -38,6 +38,7 @@
          syntax-property-symbol-keys
          syntax-original?
          syntax->datum
+         maybe-syntax->datum
          datum->syntax
          syntax->list
          identifier?
@@ -65,6 +66,11 @@
 (define (syntax->datum s)
   (check 'syntax->datum syntax? s)
   (raw:syntax->datum s))
+
+(define (maybe-syntax->datum s)
+  (if (syntax? s)
+      (raw:syntax->datum s)
+      s))
 
 (define (datum->syntax stx-c s [stx-l #f] [stx-p #f] [ignored #f])
   (unless (or (not stx-c) (syntax? stx-c))

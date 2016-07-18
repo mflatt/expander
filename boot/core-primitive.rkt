@@ -24,8 +24,7 @@
          "../common/module-path.rkt"
          "../namespace/variable-reference.rkt"
          "../expand/allowed-context.rkt"
-         "../expand/missing-module.rkt"
-         "../host/readtable.rkt")
+         "../expand/missing-module.rkt")
 
 (provide primitive-ids)
 
@@ -101,7 +100,6 @@
                       
                       read-syntax
                       read-syntax/recursive
-                      make-readtable
                       
                       syntax-transforming?
                       syntax-transforming-with-lifts?
