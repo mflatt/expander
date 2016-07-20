@@ -26,7 +26,7 @@
 
 (define (eval-module c
                      #:namespace [ns (current-namespace)]
-                     #:as-submodule? [as-submodule? #f]
+                     #:with-submodules? [with-submodules? #t]
                      #:supermodule-name [supermodule-name #f]) ; for submodules declared with module
   (define-values (dh h data-instance declaration-instance)
     (compiled-module->dh+h+data-instance+declaration-instance c))
@@ -172,15 +172,15 @@
       
       (define declare-name (substitute-module-declare-name default-name))
       
-      (unless as-submodule?
+      (when with-submodules?
         (declare-submodules pre-submodule-names declare-name #t))
       
       (declare-module! ns
                        m
                        declare-name
-                       #:as-submodule? as-submodule?)
+                       #:with-submodules? with-submodules?)
 
-      (unless as-submodule?
+      (when with-submodules?
         (declare-submodules post-submodule-names declare-name #f))))
   
   ;; ----------------------------------------

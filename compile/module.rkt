@@ -27,8 +27,9 @@
 ;; linklets if `to-source?` is true.
 (define (compile-module s cctx
                         #:self [given-self #f]
+                        #:with-submodules? [with-submodules? #t]
                         #:as-submodule? [as-submodule? #f]
-                        #:serializable? [serializable? (not as-submodule?)]
+                        #:serializable? [serializable? with-submodules?]
                         #:to-source? [to-source? #f])
   ;; Some information about a module is commuicated here through syntax
   ;; propertoes, such as 'module-requires
@@ -116,13 +117,13 @@
   ;; Compile submodules; each list is (cons linklet-directory-key compiled-in-memory)
   (define pre-submodules (compile-submodules 'module
                                              #:bodys bodys
-                                             #:as-submodule? as-submodule?
+                                             #:with-submodules? with-submodules?
                                              #:serializable? serializable?
                                              #:to-source? to-source?
                                              #:cctx body-cctx))
   (define post-submodules (compile-submodules 'module*
                                               #:bodys bodys
-                                              #:as-submodule? as-submodule?
+                                              #:with-submodules? with-submodules?
                                               #:serializable? serializable?
                                               #:to-source? to-source?
                                               #:cctx body-cctx))
@@ -250,12 +251,19 @@
 
   ;; Combine with submodules in a linklet directory
   (define ld
-    ((if to-source? values hash->linklet-directory)
-     (for/fold ([ht (hasheq #f bundle)]) ([sm (in-list (append pre-submodules post-submodules))])
-       (hash-set ht
-                 (car sm)
-                 ((if to-source? values compiled-in-memory-linklet-directory)
-                  (cdr sm))))))
+    (cond
+     [(and (null? pre-submodules)
+           (null? post-submodules)
+           (not as-submodule?))
+      ;; Just use the bundle representation directly:
+      bundle]
+     [else
+      ((if to-source? values hash->linklet-directory)
+       (for/fold ([ht (hasheq #f bundle)]) ([sm (in-list (append pre-submodules post-submodules))])
+         (hash-set ht
+                   (car sm)
+                   ((if to-source? values compiled-in-memory-linklet-directory)
+                    (cdr sm)))))]))
 
   (cond
    [to-source? ld]
@@ -278,12 +286,12 @@
 ;; declared with `form-name` (which is 'module or 'module*)
 (define (compile-submodules form-name
                             #:bodys bodys
-                            #:as-submodule? as-submodule?
+                            #:with-submodules? with-submodules?
                             #:serializable? serializable?
                             #:to-source? to-source?
                             #:cctx body-cctx)
   (cond
-   [as-submodule?
+   [(not with-submodules?)
     null]
    [else
     (let loop ([bodys bodys]
@@ -304,6 +312,7 @@
              [else body]))
           (cons (cons (syntax-e (sm-m 'name))
                       (compile-module s-shifted body-cctx
+                                      #:as-submodule? #t
                                       #:serializable? serializable?
                                       #:to-source? to-source?))
                 (loop (cdr bodys) phase))]

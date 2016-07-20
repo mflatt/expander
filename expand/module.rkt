@@ -887,8 +887,8 @@
                                            #:full-module-name (and enclosing-self
                                                                    (resolved-module-path-name module-name)))
                      #:self self
-                     #:as-submodule? #t)
-     #:as-submodule? #t)))
+                     #:with-submodules? #f)
+     #:with-submodules? #f)))
 
 (define (attach-root-expand-context-properties s root-ctx orig-self new-self)
   ;; For `module->namespace`
@@ -1046,8 +1046,8 @@
                      (make-compile-context #:namespace ns
                                            #:module-self self
                                            #:full-module-name (resolved-module-path-name module-name))
-                     #:as-submodule? #t)
-     #:as-submodule? #t))
+                     #:with-submodules? #f)
+     #:with-submodules? #f))
   
   (log-expand ctx 'exit-prim submod)
 

@@ -28,12 +28,16 @@
           (error "unavailable in cache:" name))
         ;; For submodules, recur into the compilation directory:
         (define h (let loop ([cd cd] [name name])
-                    (define h (linklet-directory->hash cd))
-                    (if (or (not (pair? name))
-                            (null? (cdr name)))
-                        (linklet-bundle->hash (hash-ref h #f))
-                        (loop (hash-ref h (cadr name))
-                              (cdr name)))))
+                    (cond
+                     [(linklet-bundle? cd)
+                      (linklet-bundle->hash cd)]
+                     [else
+                      (define h (linklet-directory->hash cd))
+                      (if (or (not (pair? name))
+                              (null? (cdr name)))
+                          (linklet-bundle->hash (hash-ref h #f))
+                          (loop (hash-ref h (cadr name))
+                                (cdr name)))])))
         ;; Instantiate the declaration linklet
         (define data-instance (instantiate-linklet (hash-ref h 'data)
                                                    (list deserialize-instance)))

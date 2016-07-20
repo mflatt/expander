@@ -155,8 +155,8 @@
 
 ;; ----------------------------------------
 
-(define (declare-module! ns m mod-name #:as-submodule? [as-submodule? #f])
-  (define prior-m (and (not as-submodule?)
+(define (declare-module! ns m mod-name #:with-submodules? [with-submodules? #t])
+  (define prior-m (and with-submodules?
                        (hash-ref (module-registry-declarations (namespace-module-registry ns))
                                  mod-name
                                  #f)))
@@ -165,12 +165,12 @@
                         (namespace->module-instance ns mod-name (namespace-phase ns))))
   (when (and prior-m (not (eq? m prior-m)))
     (check-redeclaration-ok prior-m prior-mi mod-name))
-  (hash-set! (if as-submodule?
-                 (namespace-submodule-declarations ns)
-                 (module-registry-declarations (namespace-module-registry ns)))
+  (hash-set! (if with-submodules?
+                 (module-registry-declarations (namespace-module-registry ns))
+                 (namespace-submodule-declarations ns))
              mod-name
              m)
-  (unless as-submodule?
+  (when with-submodules?
     ;; Register this module's exports for use in resolving bulk
     ;; bindings, so that bulk bindings can be shared among other
     ;; modules when unmarshaling:

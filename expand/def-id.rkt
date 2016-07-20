@@ -58,7 +58,8 @@
                 (loop (add1 pos))
                 s))))
     (hash-set! defined-syms-at-phase defined-sym id)
-    (define b (make-module-binding self phase defined-sym #:frame-id frame-id))
+    (define b (make-module-binding self phase defined-sym #:frame-id frame-id
+                                   #:nominal-sym sym))
     (when requires+provides
       (remove-required-id! requires+provides id phase #:unless-matches b))
     (add-binding! id b phase #:in orig-s)

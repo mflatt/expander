@@ -42,7 +42,8 @@
              (and b (hash-ref (linklet-bundle->hash b) 'decl #f)))
            #t)
       (and (linklet-bundle? ld)
-           (hash-ref (linklet-bundle->hash ld) 'decl #f))))
+           (hash-ref (linklet-bundle->hash ld) 'decl #f)
+           #t)))
 
 (define module-compiled-name
   (case-lambda

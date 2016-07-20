@@ -42,11 +42,13 @@
                                                     (compile s ns #f))])
   (cond
    [(or (compiled-in-memory? s)
-        (linklet-directory? s))
+        (linklet-directory? s)
+        (linklet-bundle? s))
     (eval-compiled s ns)]
    [(and (syntax? s)
          (or (compiled-in-memory? (syntax-e s))
-             (linklet-directory? (syntax-e s))))
+             (linklet-directory? (syntax-e s))
+             (linklet-bundle? (syntax-e s))))
     (eval-compiled (syntax->datum s) ns)]
    [else
     (per-top-level s ns 
