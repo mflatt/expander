@@ -22,15 +22,15 @@
 (define (eval-single-top c ns)
   (eval-one-top c ns #:single-expression? #t))
 
-(define (eval-top c ns [eval-compiled eval-top])
+(define (eval-top c ns [eval-compiled eval-top] #:as-tail? [as-tail? #t])
   (define ld (if (compiled-in-memory? c)
                  (compiled-in-memory-linklet-directory c)
                  c))
   (if (hash-ref (linklet-directory->hash ld) #f #f)
-      (eval-one-top c ns)
-      (eval-multiple-tops c ns eval-compiled)))
+      (eval-one-top c ns #:as-tail? as-tail?)
+      (eval-multiple-tops c ns eval-compiled #:as-tail? as-tail?)))
 
-(define (eval-multiple-tops c ns eval-compiled)
+(define (eval-multiple-tops c ns eval-compiled #:as-tail? as-tail?)
   (cond
    [(compiled-in-memory? c)
     (let loop ([cims (compiled-in-memory-pre-compiled-in-memorys c)])
@@ -38,9 +38,9 @@
        [(null? cims) void]
        [(null? (cdr cims))
         ;; Tail call:
-        (eval-compiled (car cims) ns)]
+        (eval-compiled (car cims) ns #:as-tail? as-tail?)]
        [else
-        (eval-compiled (car cims) ns)
+        (eval-compiled (car cims) ns #:as-tail? #f)
         (loop (cdr cims))]))]
    [else
     (let loop ([lds (compiled-top->compiled-tops c)])
@@ -48,12 +48,14 @@
        [(null? lds) (void)]
        [(null? (cdr lds))
         ;; Tail call:
-        (eval-compiled (car lds) ns)]
+        (eval-compiled (car lds) ns #:as-tail? as-tail?)]
        [else
-        (eval-compiled (car lds) ns)
+        (eval-compiled (car lds) ns #:as-tail? #f)
         (loop (cdr lds))]))]))
 
-(define (eval-one-top c ns #:single-expression? [single-expression? #f])
+(define (eval-one-top c ns
+                      #:single-expression? [single-expression? #f]
+                      #:as-tail? [as-tail? #t])
   (define ld (if (compiled-in-memory? c)
                  (compiled-in-memory-linklet-directory c)
                  c))
@@ -86,61 +88,67 @@
         (compiled-in-memory-phase-to-link-module-uses c)
         (instance-variable-value link-instance 'phase-to-link-modules)))
 
-  ;; Call the last thunk in tail position:
-  ((for/fold ([prev-thunk void]) ([phase (in-range max-phase (sub1 orig-phase) -1)])
-     (prev-thunk) ;; call a not-last thunk before proceeding with the next phase
-     
-     (define module-uses (hash-ref phase-to-link-modules phase null))
-     (define-values (import-module-instances import-instances)
-       (for/lists (mis is) ([mu (in-list module-uses)])
-         (namespace-module-use->module+linklet-instances
-          ns mu #:phase-shift (phase- (phase+ phase phase-shift)
-                                      (module-use-phase mu)))))
+  ;; Get last thunk to call in tail position:
+  (define thunk
+    (for/fold ([prev-thunk void]) ([phase (in-range max-phase (sub1 orig-phase) -1)])
+      (prev-thunk #f) ;; call a not-last thunk before proceeding with the next phase
+      
+      (define module-uses (hash-ref phase-to-link-modules phase null))
+      (define-values (import-module-instances import-instances)
+        (for/lists (mis is) ([mu (in-list module-uses)])
+                   (namespace-module-use->module+linklet-instances
+                    ns mu #:phase-shift (phase- (phase+ phase phase-shift)
+                                                (module-use-phase mu)))))
 
-     (define phase-ns (namespace->namespace-at-phase ns (phase+ phase phase-shift)))
-     
-     (define inst (if single-expression?
-                      ;; Instance is ignored, so anything will do:
-                      link-instance
-                      ;; Instance is used:
-                      (make-instance-instance
-                       #:namespace phase-ns
-                       #:phase-shift phase-shift
-                       #:self (namespace-mpi ns)
-                       #:inspector (namespace-inspector ns)
-                       #:set-transformer! (lambda (name val)
-                                            (namespace-set-transformer! ns
-                                                                        (phase+ (sub1 phase) phase-shift)
-                                                                        name
-                                                                        val)))))
+      (define phase-ns (namespace->namespace-at-phase ns (phase+ phase phase-shift)))
+      
+      (define inst (if single-expression?
+                       ;; Instance is ignored, so anything will do:
+                       link-instance
+                       ;; Instance is used:
+                       (make-instance-instance
+                        #:namespace phase-ns
+                        #:phase-shift phase-shift
+                        #:self (namespace-mpi ns)
+                        #:inspector (namespace-inspector ns)
+                        #:set-transformer! (lambda (name val)
+                                             (namespace-set-transformer! ns
+                                                                         (phase+ (sub1 phase) phase-shift)
+                                                                         name
+                                                                         val)))))
 
-     (define linklet (hash-ref h phase #f))
+      (define linklet (hash-ref h phase #f))
 
-     (cond
-      [linklet
-       (check-require-access linklet #:skip-imports 3
-                             module-uses import-module-instances (current-code-inspector)
-                             extra-inspector
-                             (hash-ref phase-to-link-extra-inspectorsss phase #f))
-       (define (instantiate)
-         ;; Providing a target instance to `instantiate-linklet` means that we get
-         ;; the body's results instead of the instance as a result
-         (instantiate-linklet linklet
-                              (list* top-level-instance
-                                     link-instance
-                                     inst
-                                     import-instances)
-                              ;; Instantiation merges with the namespace's current instance:
-                              (namespace->instance ns (phase+ phase phase-shift))))
-       ;; Return `instantiate` as the next thunk
-       (cond
-        [(eqv? phase orig-phase)
-         (if (zero-phase? phase)
-             instantiate
-             (lambda () (parameterize ([current-namespace phase-ns])
-                     (instantiate))))]
-        [else instantiate])]
-      [else void]))))
+      (cond
+       [linklet
+        (check-require-access linklet #:skip-imports 3
+                              module-uses import-module-instances (current-code-inspector)
+                              extra-inspector
+                              (hash-ref phase-to-link-extra-inspectorsss phase #f))
+        (define (instantiate tail?)
+          ;; Providing a target instance to `instantiate-linklet` means that we get
+          ;; the body's results instead of the instance as a result
+          (instantiate-linklet linklet
+                               (list* top-level-instance
+                                      link-instance
+                                      inst
+                                      import-instances)
+                               ;; Instantiation merges with the namespace's current instance:
+                               (namespace->instance ns (phase+ phase phase-shift))
+                               ;; No prompt in tail position:
+                               (not tail?)))
+        ;; Return `instantiate` as the next thunk
+        (cond
+         [(eqv? phase orig-phase)
+          (if (zero-phase? phase)
+              instantiate
+              (lambda (tail?) (parameterize ([current-namespace phase-ns])
+                           (instantiate tail?))))]
+         [else instantiate])]
+       [else void])))
+  
+  ;; Call last thunk tail position --- maybe, since using a prompt if not `as-tail?`
+  (thunk as-tail?))
 
 (define (link-instance-from-compiled-in-memory cim)
   (make-instance 'link #f

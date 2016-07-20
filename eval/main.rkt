@@ -50,15 +50,15 @@
     (eval-compiled (syntax->datum s) ns)]
    [else
     (per-top-level s ns 
-                   #:single (lambda (s ns)
-                              (eval-compiled (compile s ns) ns)))]))
+                   #:single (lambda (s ns tail?)
+                              (eval-compiled (compile s ns) ns #:as-tail? tail?)))]))
 
-(define (eval-compiled c ns)
+(define (eval-compiled c ns #:as-tail? [as-tail? #t])
   (cond
    [(compiled-module-expression? c)
     (eval-module c #:namespace ns)]
    [else
-    (eval-top c ns eval-compiled)]))
+    (eval-top c ns eval-compiled #:as-tail? as-tail?)]))
 
 ;; This `compile` is suitable as a compile handler that will be called
 ;; by the `compile` and `compile-syntax` of '#%kernel
@@ -77,9 +77,10 @@
       (list (syntax-e s))]
      [else
       (per-top-level s ns
-                     #:single (lambda (s ns) (list (compile-single s ns expand
-                                                              serializable?
-                                                              to-source?)))
+                     #:single (lambda (s ns as-tail?)
+                                (list (compile-single s ns expand
+                                                      serializable?
+                                                      to-source?)))
                      #:combine append)]))
   (if (= 1 (length cs))
       (car cs)
@@ -120,7 +121,7 @@
 (define (expand s [ns (current-namespace)] [log-expand? #f])
   (when log-expand? (log-expand-start))
   (per-top-level s ns
-                 #:single expand-single
+                 #:single (lambda (s ns as-tail?) (expand-single s ns))
                  #:combine cons
                  #:wrap re-pair))
 
@@ -137,7 +138,7 @@
 
 (define (expand-once s [ns (current-namespace)])
   (per-top-level s ns
-                 #:single expand-single-once
+                 #:single (lambda (s ns as-tail?) (expand-single-once s ns))
                  #:combine cons
                  #:wrap re-pair
                  #:just-once? #t))
@@ -171,7 +172,7 @@
   (define s (maybe-intro given-s ns))
   (define ctx (make-expand-context ns))
   (define phase (namespace-phase ns))
-  (let loop ([s s] [phase phase] [ns ns])
+  (let loop ([s s] [phase phase] [ns ns] [as-tail? #t])
     (define tl-ctx (struct-copy expand-context ctx
                                 [phase phase]
                                 [namespace ns]
@@ -190,7 +191,7 @@
                                          s phase))
       (if just-once?
           new-s
-          (loop new-s phase ns))]
+          (loop new-s phase ns as-tail?))]
      [(not single) exp-s]
      [(and just-once? (not (eq? exp-s s))) exp-s]
      [else
@@ -203,9 +204,9 @@
            (cond
             [(null? es) (if combine null (void))]
             [(and (not combine) (null? (cdr es)))
-             (loop (car es) phase ns)]
+             (loop (car es) phase ns as-tail?)]
             [else
-             (define a (loop (car es) phase ns))
+             (define a (loop (car es) phase ns #f))
              (if combine
                  (combine a (begin-loop (cdr es)))
                  (begin-loop (cdr es)))]))
@@ -219,13 +220,13 @@
          (namespace-visit-available-modules! next-ns) ; to match old behavior for empty body
          (define l
            (for/list ([s (in-list (m 'e))])
-             (loop s next-phase next-ns)))
+             (loop s next-phase next-ns #f)))
          (cond
           [wrap (wrap (m 'begin-for-syntax) exp-s l)]
           [combine l]
           [else (void)])]
         [else
-         (single exp-s ns)])])))
+         (single exp-s ns as-tail?)])])))
 
 ;; Add scopes to `s` if it's not syntax:
 (define (maybe-intro s ns)

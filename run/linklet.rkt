@@ -327,16 +327,16 @@
   (not (linklet? cl)))
 
 ;; Instantiate
-(define instantiate-linklet
-  (case-lambda
-    [(linklet import-instances)
-     ;; 2-argument case: return instance
-     (define target-instance (make-instance 'anonymous))
-     (instantiate-linklet linklet import-instances target-instance)
-     target-instance]
-    [(linklet import-instances target-instance)
-     ;; 3-argument case: return results via tail call
-     (apply (really-eval-linklet linklet) target-instance import-instances)]))
+(define (instantiate-linklet linklet import-instances [target-instance #f] [use-prompt? #t])
+  (cond
+   [(not target-instance)
+    ;; return newly created instance
+    (define target-instance (make-instance 'anonymous))
+    (instantiate-linklet linklet import-instances target-instance)
+    target-instance]
+   [else
+    ;; return results via tail call
+    (apply (really-eval-linklet linklet) target-instance import-instances)]))
 
 ;; ----------------------------------------
 
