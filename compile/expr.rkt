@@ -162,8 +162,8 @@
                       s))
   (define as-method (syntax-property orig-s 'method-arity-error))
   (if as-method
-      (correlated-property s 'method-arity-error as-method)
-      s))
+      (correlated-property named-s 'method-arity-error as-method)
+      named-s))
 
 (define (compile-let core-sym s cctx name #:rec? rec? result-used?)
   (define rec? (eq? core-sym 'letrec-values))

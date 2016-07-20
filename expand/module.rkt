@@ -72,12 +72,13 @@
 
 (define (expand-module s init-ctx enclosing-self
                        #:keep-enclosing-scope-at-phase [keep-enclosing-scope-at-phase #f]
+                       #:enclosing-all-scopes-stx [enclosing-all-scopes-stx #f]
                        #:enclosing-is-cross-phase-persistent? [enclosing-is-cross-phase-persistent? #f]
                        #:enclosing-requires+provides [enclosing-r+p #f]
                        #:mpis-for-enclosing-reset [mpis-for-enclosing-reset #f])
-  (log-expand init-ctx 'prim-module)
-  (define disarmed-s (syntax-disarm s))
-  (define-match m disarmed-s '(module id:module-name initial-require body ...))
+   (log-expand init-ctx 'prim-module)
+   (define disarmed-s (syntax-disarm s))
+   (define-match m disarmed-s '(module id:module-name initial-require body ...))
    
    (define initial-require (syntax->datum (m 'initial-require)))
    (unless (or keep-enclosing-scope-at-phase
@@ -107,6 +108,9 @@
                                self enclosing-self enclosing-mod))
 
    ;; Initial require name provides the module's base scopes
+   (define all-scopes-s (apply-module-scopes 
+                         (or enclosing-all-scopes-stx
+                             (m 'initial-require))))
    (define initial-require-s (apply-module-scopes (m 'initial-require)))
 
    (define root-ctx (make-root-expand-context
@@ -115,7 +119,7 @@
                                           null)
                      #:outside-scope outside-scope
                      #:post-expansion-scope inside-scope
-                     #:all-scopes-stx initial-require-s))
+                     #:all-scopes-stx all-scopes-s))
    
    ;; Extract combined scopes
    (define new-module-scopes (root-expand-context-module-scopes root-ctx))
@@ -155,7 +159,7 @@
       [(not keep-enclosing-scope-at-phase)
        ;; Install the initial require
        (perform-initial-require! initial-require self
-                                 initial-require-s
+                                 all-scopes-s
                                  m-ns
                                  requires+provides)]
       [else
@@ -233,7 +237,7 @@
                                                [declared-submodule-names declared-submodule-names]
                                                [lifts (make-lift-context
                                                        (make-wrap-as-definition self frame-id
-                                                                                inside-scope initial-require-s
+                                                                                inside-scope all-scopes-s
                                                                                 defined-syms requires+provides))]
                                                [module-lifts (make-module-lift-context phase #t)]
                                                [require-lifts (make-require-lift-context
@@ -256,7 +260,7 @@
                                    #:frame-id frame-id
                                    #:requires-and-provides requires+provides
                                    #:need-eventually-defined need-eventually-defined
-                                   #:all-scopes-stx initial-require-s
+                                   #:all-scopes-stx all-scopes-s
                                    #:defined-syms defined-syms
                                    #:declared-keywords declared-keywords
                                    #:declared-submodule-names declared-submodule-names
@@ -343,6 +347,7 @@
                                  #:self self
                                  #:requires-and-provides requires+provides
                                  #:enclosing-is-cross-phase-persistent? is-cross-phase-persistent?
+                                 #:all-scopes-s all-scopes-s
                                  #:mpis-to-reset mpis-to-reset
                                  #:declared-submodule-names declared-submodule-names
                                  #:ctx ctx)]))
@@ -371,7 +376,7 @@
    (define mb
      (ensure-module-begin bodys
                           #:module-name-sym module-name-sym
-                          #:initial-require-s initial-require-s
+                          #:all-scopes-s all-scopes-s
                           #:m-ns m-ns
                           #:ctx mb-ctx
                           #:phase phase
@@ -416,7 +421,7 @@
 ;; Add `#%module-begin` to `bodys`, if needed
 (define (ensure-module-begin bodys
                              #:module-name-sym module-name-sym
-                             #:initial-require-s initial-require-s
+                             #:all-scopes-s all-scopes-s
                              #:m-ns m-ns
                              #:ctx ctx 
                              #:phase phase
@@ -447,24 +452,24 @@
           partly-expanded-body]
          [else
           ;; No, it didn't expand to `#%module-begin`
-          (add-module-begin (list partly-expanded-body) s initial-require-s phase module-name-sym 
+          (add-module-begin (list partly-expanded-body) s all-scopes-s phase module-name-sym 
                             (make-mb-ctx)
                             #:log-rename-one? #f)])])]
      [else
       ;; Multiple body forms definitely need a `#%module-begin` wrapper
-      (add-module-begin bodys s initial-require-s phase module-name-sym
+      (add-module-begin bodys s all-scopes-s phase module-name-sym
                         (make-mb-ctx))]))
   (add-enclosing-name-property mb module-name-sym))
 
 ;; Add `#%module-begin`, because it's needed
-(define (add-module-begin bodys s initial-require-s phase module-name-sym mb-ctx
+(define (add-module-begin bodys s all-scopes-s phase module-name-sym mb-ctx
                           #:log-rename-one? [log-rename-one? #t])
-  (define disarmed-initial-require-s (syntax-disarm initial-require-s))
-  (define mb-id (datum->syntax disarmed-initial-require-s '#%module-begin))
+  (define disarmed-all-scopes-s (syntax-disarm all-scopes-s))
+  (define mb-id (datum->syntax disarmed-all-scopes-s '#%module-begin))
   ;; If `mb-id` is not bound, we'd like to give a clear error message
   (unless (resolve mb-id phase)
     (raise-syntax-error #f "no #%module-begin binding in the module's language" s))
-  (define mb (datum->syntax disarmed-initial-require-s `(,mb-id ,@bodys) s))
+  (define mb (datum->syntax disarmed-all-scopes-s `(,mb-id ,@bodys) s))
   (log-expand mb-ctx 'tag mb)
   (when log-rename-one?
     (log-expand mb-ctx 'rename-one mb))
@@ -902,6 +907,7 @@
                                 #:self self
                                 #:requires-and-provides requires+provides
                                 #:enclosing-is-cross-phase-persistent? enclosing-is-cross-phase-persistent?
+                                #:all-scopes-s all-scopes-s
                                 #:mpis-to-reset mpis-to-reset
                                 #:declared-submodule-names declared-submodule-names
                                 #:ctx submod-ctx)
@@ -926,6 +932,7 @@
                (expand-submodule shifted-s self submod-ctx
                                  #:is-star? #t
                                  #:keep-enclosing-scope-at-phase neg-phase
+                                 #:enclosing-all-scopes-stx all-scopes-s
                                  #:enclosing-requires+provides requires+provides
                                  #:enclosing-is-cross-phase-persistent? enclosing-is-cross-phase-persistent?
                                  #:mpis-to-reset mpis-to-reset
@@ -1001,6 +1008,7 @@
                           #:keep-enclosing-scope-at-phase [keep-enclosing-scope-at-phase #f]
                           #:enclosing-requires+provides [enclosing-r+p #f]
                           #:enclosing-is-cross-phase-persistent? [enclosing-is-cross-phase-persistent? #f]
+                          #:enclosing-all-scopes-stx [enclosing-all-scopes-stx #f]
                           #:mpis-to-reset mpis-to-reset
                           #:declared-submodule-names declared-submodule-names)
   (log-expand ctx 'enter-prim s)
@@ -1021,6 +1029,7 @@
                                 [post-expansion-scope #:parent root-expand-context #f])
                    self
                    #:keep-enclosing-scope-at-phase keep-enclosing-scope-at-phase
+                   #:enclosing-all-scopes-stx enclosing-all-scopes-stx
                    #:enclosing-requires+provides enclosing-r+p
                    #:enclosing-is-cross-phase-persistent? enclosing-is-cross-phase-persistent?
                    #:mpis-for-enclosing-reset mpis-to-reset))
