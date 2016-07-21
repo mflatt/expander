@@ -30,13 +30,13 @@
       (linklet-directory? c)
       (linklet-bundle? c)))
 
-(define (compiled->linklet-directory c)
+(define (compiled->linklet-directory-or-bundle c)
   (if (compiled-in-memory? c)
       (compiled-in-memory-linklet-directory c)
       c))
 
 (define (compiled-module-expression? c)
-  (define ld (compiled->linklet-directory c))
+  (define ld (compiled->linklet-directory-or-bundle c))
   (or (and (linklet-directory? ld)
            (let ([b (hash-ref (linklet-directory->hash ld) #f #f)])
              (and b (hash-ref (linklet-bundle->hash b) 'decl #f)))
@@ -49,9 +49,11 @@
   (case-lambda
     [(c)
      (check 'module-compiled-name compiled-module-expression? c)
-     (hash-ref (linklet-bundle->hash
-                (hash-ref (linklet-directory->hash (compiled->linklet-directory c)) #f))
-               'name)]
+     (define ld (compiled->linklet-directory-or-bundle c))
+     (define b (if (linklet-bundle? ld)
+                   ld
+                   (hash-ref (linklet-directory->hash ld) #f)))
+     (hash-ref (linklet-bundle->hash b) 'name)]
     [(c name)
      (check 'module-compiled-name compiled-module-expression? c)
      (unless (or (symbol? name)
@@ -77,19 +79,28 @@
            (compiled-in-memory-pre-compiled-in-memorys c)
            (compiled-in-memory-post-compiled-in-memorys c))]
       [else 
-       ;; We have a raw linklet directory, which is designed more for
-       ;; loading code than easy manipulation...
-       (define ht (linklet-directory->hash c))
-       (define bh (linklet-bundle->hash (hash-ref ht #f)))
-       (define names (hash-ref bh (if non-star? 'pre 'post) null))
-       (for/list ([name (in-list names)])
-         (hash-ref ht name))])]
+       ;; We have a raw linklet directory or bundle, which is designed
+       ;; more for loading code than easy manipulation...
+       (cond
+        [(linklet-directory? c)
+         (define ht (linklet-directory->hash c))
+         (define bh (linklet-bundle->hash (hash-ref ht #f)))
+         (define names (hash-ref bh (if non-star? 'pre 'post) null))
+         (for/list ([name (in-list names)])
+           (hash-ref ht name))]
+        [else
+         ;; a linklet bundle represents a module with no submodules
+         null])])]
     [(c non-star? submods)
      (check 'module-compiled-submodules compiled-module-expression? c)
      (unless (and (list? submods)
                   (andmap compiled-module-expression? submods))
        (raise-argument-error 'module-compiled-submodules "(listof compiled-module-expression?)" submods))
      (cond
+      [(and (null? submods)
+            (linklet-bundle? (compiled->linklet-directory-or-bundle c)))
+       ;; No change to a module without submodules
+       c]
       [(and (compiled-in-memory? c)
             (andmap compiled-in-memory? submods))
        ;; All compiled-in-memory structures, so preserve them
@@ -99,26 +110,28 @@
        (define post-compiled-in-memorys (if non-star?
                                             (compiled-in-memory-post-compiled-in-memorys c)
                                             submods))
+       (define n-c (normalize-to-linklet-directory c))
        (fixup-submodule-names
-        (struct-copy compiled-in-memory c
+        (struct-copy compiled-in-memory n-c
                      [pre-compiled-in-memorys pre-compiled-in-memorys]
                      [post-compiled-in-memorys post-compiled-in-memorys]
                      [linklet-directory (rebuild-linklet-directory
                                          (reset-submodule-names
-                                          (hash-ref (linklet-directory->hash (compiled->linklet-directory c)) #f)
+                                          (hash-ref (linklet-directory->hash (compiled->linklet-directory-or-bundle n-c)) #f)
                                           non-star?
                                           submods)
                                          (append pre-compiled-in-memorys
                                                  post-compiled-in-memorys))]))]
       [else
        ;; Not all compiled-in-memory structures, so forget whatever ones we have
+       (define n-c (normalize-to-linklet-directory c))
        (fixup-submodule-names
         (rebuild-linklet-directory
          (reset-submodule-names
-          (hash-ref (linklet-directory->hash (compiled->linklet-directory c)) #f)
+          (hash-ref (linklet-directory->hash (compiled->linklet-directory-or-bundle n-c)) #f)
           non-star?
           submods)
-         (map compiled->linklet-directory
+         (map compiled->linklet-directory-or-bundle
               (append (if non-star? submods (module-compiled-submodules c #t))
                       (if non-star? (module-compiled-submodules c #f) submods)))))])]))
 
@@ -158,6 +171,23 @@
 
 ;; ----------------------------------------
 
+;; Normalize a compiled module that may have no submodules and is
+;; represented directy by a linklet bundle to a representation that
+;; uses a linklet directory
+(define (normalize-to-linklet-directory c)
+  (cond
+   [(linklet-directory? (compiled->linklet-directory-or-bundle c))
+    ;; already in linklet-directory form:
+    c]
+   [(linklet-bundle? c)
+    (hash->linklet-directory (hasheq #f c))]
+   [else
+    (struct-copy compiled-in-memory c
+                 [linklet-directory (normalize-to-linklet-directory
+                                     (compiled-in-memory-linklet-directory c))])]))
+
+;; ----------------------------------------
+
 (define (module-compiled-immediate-name c)
   (car (reverse (module-compiled-name c))))
 
@@ -181,17 +211,20 @@
                  [post-compiled-in-memorys post-compiled-in-memorys]
                  [linklet-directory (rebuild-linklet-directory
                                      (update-one-name
-                                      (hash-ref (linklet-directory->hash (compiled->linklet-directory c)) #f)
+                                      (hash-ref (linklet-directory->hash (compiled->linklet-directory-or-bundle c)) #f)
                                       full-name)
                                      (append pre-compiled-in-memorys
                                              post-compiled-in-memorys))])]
-   [else
+   [(linklet-directory? c)
     (hash->linklet-directory
      (for/hasheq ([(key val) (in-hash (linklet-directory->hash c))])
        (values key
                (if (not key)
                    (update-one-name val full-name)
-                   (recur val key)))))]))
+                   (recur val key)))))]
+   [else
+    ;; linklet bundle
+    (update-one-name c full-name)]))
 
 (define (update-one-name lb name)
   (hash->linklet-bundle (hash-set (linklet-bundle->hash lb) 'name name)))
