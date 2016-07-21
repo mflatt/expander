@@ -895,8 +895,16 @@
 
 (define (attach-root-expand-context-properties s root-ctx orig-self new-self)
   ;; For `module->namespace`
-  (syntax-property s 'module-root-expand-context
-                   (root-expand-context-encode-for-module root-ctx orig-self new-self)))
+  (let ([s (syntax-property s
+                            'module-root-expand-context
+                            (root-expand-context-encode-for-module root-ctx orig-self new-self))])
+    ;; Original API:
+    (let* ([s (syntax-property s 'module-body-context (root-expand-context-all-scopes-stx root-ctx))]
+           [s (syntax-property s
+                               'module-body-inside-context
+                               (add-scope empty-syntax
+                                          (root-expand-context-post-expansion-scope root-ctx)))])
+      s)))
 
 ;; ----------------------------------------
 
