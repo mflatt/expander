@@ -189,7 +189,10 @@
 ;; ----------------------------------------
 
 (define (module-compiled-immediate-name c)
-  (car (reverse (module-compiled-name c))))
+  (define n (module-compiled-name c))
+  (if (pair? n)
+      (car (reverse n))
+      n))
 
 (define (change-module-name c name prefix)
   (define full-name (if (null? prefix) name (append prefix (list name))))

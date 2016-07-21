@@ -10,6 +10,7 @@
          "../namespace/module.rkt"
          "../namespace/provided.rkt"
          "../syntax/match.rkt"
+         "module-path.rkt"
          "require+provide.rkt"
          "env.rkt"
          "../common/module-path.rkt"
@@ -171,16 +172,6 @@
 (define (ids->sym-set ids)
   (for/set ([id (in-list ids)])
     (syntax-e id)))
-
-(define (module-path->mpi mod-path self
-                          #:declared-submodule-names [declared-submodule-names #hasheq()])
-  (if (and (list? mod-path)
-           (= 2 (length mod-path))
-           (eq? 'quote (car mod-path))
-           (symbol? (cadr mod-path))
-           (hash-ref declared-submodule-names (cadr mod-path) #f))
-      (module-path-index-join `(submod "." ,(cadr mod-path)) self)
-      (module-path-index-join mod-path self)))
 
 ;; ----------------------------------------
 

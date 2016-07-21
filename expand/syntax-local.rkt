@@ -16,6 +16,7 @@
          "require+provide.rkt"
          "protect.rkt"
          "log.rkt"
+         "module-path.rkt"
          "definition-context.rkt"
          "../common/module-path.rkt"
          "../namespace/namespace.rkt"
@@ -352,7 +353,7 @@
   (define ctx (get-current-expand-context 'syntax-local-module-required-identifiers))
   (define requires+provides (expand-context-requires+provides ctx))
   (define mpi (and mod-path
-                   (module-path-index-join mod-path (requires+provides-self requires+provides))))
+                   (module-path->mpi/context mod-path ctx)))
   (define requireds
     (extract-all-module-requires requires+provides
                                  mpi
@@ -383,13 +384,14 @@
                           mod-path))
   (define ctx (get-current-expand-context 'syntax-local-module-exports))
   (define ns (expand-context-namespace ctx))
-  (define mod-name (resolve-module-path (if (syntax? mod-path)
-                                            (syntax->datum mod-path)
-                                            mod-path)
-                                        (module-path-index-resolve
-                                         (namespace-mpi ns))))
+  (define mod-name (module-path-index-resolve
+                    (module-path->mpi/context (if (syntax? mod-path)
+                                                  (syntax->datum mod-path)
+                                                  mod-path)
+                                              ctx)
+                    #t))
   (define m (namespace->module ns mod-name))
-  (unless m (raise-unknown-module-error 'syntax-local-module-exports))
+  (unless m (raise-unknown-module-error 'syntax-local-module-exports mod-name))
   (for/list ([(phase syms) (in-hash (module-provides m))])
     (cons phase
           (for/list ([sym (in-hash-keys syms)])
@@ -398,7 +400,7 @@
 (define (syntax-local-submodules)
   (define ctx (get-current-expand-context 'syntax-local-submodules))
   (define submods (expand-context-declared-submodule-names ctx))
-  (for/list ([(name kind) (in-hash (unbox submods))]
+  (for/list ([(name kind) (in-hash submods)]
              #:when (eq? kind 'module))
     name))
 

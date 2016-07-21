@@ -10,6 +10,7 @@
          "require+provide.rkt"
          "context.rkt"
          "protect.rkt"
+         "module-path.rkt"
          "binding-for-transformer.rkt"
          "../namespace/core.rkt"
          "../common/module-path.rkt")
@@ -118,12 +119,12 @@
           [(all-from)
            (check-nested 'phaseless)
            (define-match m disarmed-spec '(all-from mod-path))
-           (parse-all-from (m 'mod-path) orig-s self null at-phase ns rp protected?)
+           (parse-all-from (m 'mod-path) orig-s self null at-phase ns rp protected? ctx)
            (values null (list spec))]
           [(all-from-except)
            (check-nested 'phaseless)
            (define-match m disarmed-spec '(all-from-except mod-path id ...))
-           (parse-all-from (m 'mod-path) orig-s self (m 'id) at-phase ns rp protected?)
+           (parse-all-from (m 'mod-path) orig-s self (m 'id) at-phase ns rp protected? ctx)
            (values null (list spec))]
           [(all-defined)
            (check-nested 'phaseless)
@@ -205,11 +206,11 @@
     (parse-identifier! get-id orig-s (syntax-e get-id) at-phase ns rp protected?)
     (parse-identifier! set-id orig-s (syntax-e set-id) at-phase ns rp protected?)))
   
-(define (parse-all-from mod-path-stx orig-s self except-ids at-phase ns rp protected?)
+(define (parse-all-from mod-path-stx orig-s self except-ids at-phase ns rp protected? ctx)
   (define mod-path (syntax->datum mod-path-stx))
   (unless (module-path? mod-path)
     (raise-syntax-error provide-form-name "not a module path" orig-s mod-path-stx))
-  (define mpi (module-path-index-join mod-path self))
+  (define mpi (module-path->mpi/context mod-path ctx))
   (parse-all-from-module mpi #f orig-s except-ids #f at-phase ns rp protected?))
   
 (define (parse-all-from-module mpi matching-stx orig-s except-ids prefix-sym at-phase ns rp protected?)

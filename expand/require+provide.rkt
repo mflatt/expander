@@ -253,7 +253,8 @@
 
 ;; Get all the definitions
 (define (extract-module-definitions r+p)
-  (extract-module-requires r+p (requires+provides-self r+p) 0))
+  (or (extract-module-requires r+p (requires+provides-self r+p) 0)
+      null))
 
 ;; Like `extract-module-requires`, but merging modules and phases
 (define (extract-all-module-requires r+p

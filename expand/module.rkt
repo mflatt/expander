@@ -113,7 +113,9 @@
 
    ;; Initial require name provides the module's base scopes
    (define all-scopes-s (apply-module-scopes 
-                         (or enclosing-all-scopes-stx
+                         (if enclosing-all-scopes-stx
+                             (syntax-shift-phase-level enclosing-all-scopes-stx
+                                                       keep-enclosing-scope-at-phase)
                              (m 'initial-require))))
    (define initial-require-s (apply-module-scopes (m 'initial-require)))
 
@@ -375,12 +377,19 @@
                   [context 'module-begin]
                   [module-begin-k module-begin-k]))
    
+   (define mb-scopes-s
+     (if keep-enclosing-scope-at-phase
+         ;; for `(module* name #f)`, use the `(module* ...)` form
+         disarmed-s
+         ;; otherwise, use the initial require
+         all-scopes-s))
+   
    ;; Add `#%module-begin` around the body if it's not already present;
    ;; also logs 'rename-one
    (define mb
      (ensure-module-begin bodys
                           #:module-name-sym module-name-sym
-                          #:all-scopes-s all-scopes-s
+                          #:scopes-s mb-scopes-s
                           #:m-ns m-ns
                           #:ctx mb-ctx
                           #:phase phase
@@ -425,7 +434,7 @@
 ;; Add `#%module-begin` to `bodys`, if needed
 (define (ensure-module-begin bodys
                              #:module-name-sym module-name-sym
-                             #:all-scopes-s all-scopes-s
+                             #:scopes-s scopes-s
                              #:m-ns m-ns
                              #:ctx ctx 
                              #:phase phase
@@ -456,24 +465,24 @@
           partly-expanded-body]
          [else
           ;; No, it didn't expand to `#%module-begin`
-          (add-module-begin (list partly-expanded-body) s all-scopes-s phase module-name-sym 
+          (add-module-begin (list partly-expanded-body) s scopes-s phase module-name-sym 
                             (make-mb-ctx)
                             #:log-rename-one? #f)])])]
      [else
       ;; Multiple body forms definitely need a `#%module-begin` wrapper
-      (add-module-begin bodys s all-scopes-s phase module-name-sym
+      (add-module-begin bodys s scopes-s phase module-name-sym
                         (make-mb-ctx))]))
   (add-enclosing-name-property mb module-name-sym))
 
 ;; Add `#%module-begin`, because it's needed
-(define (add-module-begin bodys s all-scopes-s phase module-name-sym mb-ctx
+(define (add-module-begin bodys s scopes-s phase module-name-sym mb-ctx
                           #:log-rename-one? [log-rename-one? #t])
-  (define disarmed-all-scopes-s (syntax-disarm all-scopes-s))
-  (define mb-id (datum->syntax disarmed-all-scopes-s '#%module-begin))
+  (define disarmed-scopes-s (syntax-disarm scopes-s))
+  (define mb-id (datum->syntax disarmed-scopes-s '#%module-begin))
   ;; If `mb-id` is not bound, we'd like to give a clear error message
   (unless (resolve mb-id phase)
     (raise-syntax-error #f "no #%module-begin binding in the module's language" s))
-  (define mb (datum->syntax disarmed-all-scopes-s `(,mb-id ,@bodys) s))
+  (define mb (datum->syntax disarmed-scopes-s `(,mb-id ,@bodys) s))
   (log-expand mb-ctx 'tag mb)
   (when log-rename-one?
     (log-expand mb-ctx 'rename-one mb))

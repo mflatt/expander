@@ -51,6 +51,7 @@
    [else
     ;; Extract a particular value via phase 0....
     (define m (namespace->module ns mod-name))
+    (unless m (raise-unknown-module-error 'dynamic-require mod-name))
     (define binding/p (hash-ref (hash-ref (module-provides m) 0 #hasheq())
                                 sym
                                 #f))

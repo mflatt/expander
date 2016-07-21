@@ -208,11 +208,14 @@
                                   (cons generic-module-name submod)))]
    [else
     (define keep-base
-      (cond
-       [(path? mod-path) #f]
-       [(and (pair? mod-path) (eq? 'quote (car mod-path))) #f]
-       [(symbol? mod-path) #f]
-       [else base]))
+      (let loop ([mod-path mod-path])
+        (cond
+         [(path? mod-path) #f]
+         [(and (pair? mod-path) (eq? 'quote (car mod-path))) #f]
+         [(symbol? mod-path) #f]
+         [(and (pair? mod-path) (eq? 'submod (car mod-path)))
+          (loop (cadr mod-path))]
+         [else base])))
     (module-path-index mod-path keep-base #f #f)]))
 
 (define (module-path-index-resolve/maybe base load?)

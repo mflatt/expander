@@ -134,10 +134,15 @@
 
 (define (namespace->name ns)
   (define n (namespace-source-name ns))
-  (cond
-   [(not n) 'top-level]
-   [(symbol? n) (format "'~s" n)]
-   [else (string-append "\"" (path->string n) "\"")]))
+  (define s
+    (cond
+     [(not n) 'top-level]
+     [(symbol? n) (format "'~s" n)]
+     [else (string-append "\"" (path->string n) "\"")]))
+  (define r (resolved-module-path-name (module-path-index-resolve (namespace-mpi ns))))
+  (if (pair? r)
+      (string-append "(submod " s " " (substring (format "~s" (cdr r)) 1))
+      s))
   
 (define (namespace->definitions ns phase-level)
   (define d (hash-ref (namespace-phase-level-to-definitions ns) phase-level #f))
