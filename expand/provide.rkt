@@ -1,6 +1,7 @@
 #lang racket/base
 (require  "../syntax/syntax.rkt"
           "../syntax/taint.rkt"
+          "../syntax/track.rkt"
          "../common/phase.rkt"
          "../syntax/scope.rkt"
          "../syntax/match.rkt"
@@ -29,123 +30,147 @@
              [at-phase phase]
              [protected? #f]
              [layer 'raw])
-    (apply
-     append
-     (for/list ([spec (in-list specs)])
-       (define disarmed-spec (syntax-disarm spec))
-       (define fm (and (pair? (syntax-e disarmed-spec))
-                       (identifier? (car (syntax-e disarmed-spec)))
-                       (syntax-e (car (syntax-e disarmed-spec)))))
-       (define (check-nested want-layer)
-         (unless (member want-layer (member layer layers))
-           (raise-syntax-error provide-form-name (format "nested `~a' not allowed" fm) orig-s spec)))
-       (case fm
-         [(for-meta)
-          (check-nested 'raw)
-          (define-match m disarmed-spec '(for-meta phase-level spec ...))
-          (define p (syntax-e (m 'phase-level)))
-          (unless (phase? p)
-            (raise-syntax-error provide-form-name "bad `for-meta' phase" orig-s spec))
-          (list
-           (rebuild
-            spec spec
-            `(,(m 'for-meta) ,(m 'phase-level) ,@(loop (m 'spec)
-                                                       (phase+ p at-phase)
-                                                       protected?
-                                                       'phaseless))))]
-         [(for-syntax)
-          (check-nested 'raw)
-          (define-match m disarmed-spec '(for-syntax spec ...))
-          (list
-           (rebuild
-            spec spec
-            `(,(m 'for-syntax) ,@(loop (m 'spec)
-                                       (phase+ 1 at-phase)
-                                       protected?
-                                       'phaseless))))]
-         [(for-label)
-          (check-nested 'raw)
-          (define-match m disarmed-spec '(for-label spec ...))
-          (list
-           (rebuild
-            spec spec
-            `(,(m 'for-label) ,@(loop (m 'spec)
-                                      #f
-                                      protected?
-                                      'phaseless))))]
-         [(protect)
-          (check-nested 'phaseless)
-          (when protected?
-            (raise-syntax-error provide-form-name "nested `protect' not allowed" orig-s spec))
-          (define-match m disarmed-spec '(protect p-spec ...))
-          (list
-           (rebuild
-            spec spec
-            `(,(m 'protect) ,@(loop (m 'p-spec)
-                                    at-phase
-                                    #t
-                                    layer))))]
-         [(rename)
-          (check-nested 'phaseless)
-          (define-match m disarmed-spec '(rename id:from id:to))
-          (parse-identifier! (m 'id:from) orig-s (syntax-e (m 'id:to)) at-phase ns rp protected?)
-          (list spec)]
-         [(struct)
-          (check-nested 'phaseless)
-          (define-match m disarmed-spec '(struct id:struct (id:field ...)))
-          (parse-struct! (m 'id:struct) orig-s (m 'id:field) at-phase ns rp protected?)
-          (list spec)]
-         [(all-from)
-          (check-nested 'phaseless)
-          (define-match m disarmed-spec '(all-from mod-path))
-          (parse-all-from (m 'mod-path) orig-s self null at-phase ns rp protected?)
-          (list spec)]
-         [(all-from-except)
-          (check-nested 'phaseless)
-          (define-match m disarmed-spec '(all-from-except mod-path id ...))
-          (parse-all-from (m 'mod-path) orig-s self (m 'id) at-phase ns rp protected?)
-          (list spec)]
-         [(all-defined)
-          (check-nested 'phaseless)
-          (define-match m disarmed-spec '(all-defined))
-          (parse-all-from-module self spec orig-s null #f at-phase ns rp protected?)
-          (list spec)]
-         [(all-defined-except)
-          (check-nested 'phaseless)
-          (define-match m disarmed-spec '(all-defined-except id ...))
-          (parse-all-from-module self spec orig-s (m 'id) #f at-phase ns rp protected?)
-          (list spec)]
-         [(prefix-all-defined)
-          (check-nested 'phaseless)
-          (define-match m disarmed-spec '(prefix-all-defined id:prefix))
-          (parse-all-from-module self spec orig-s null (syntax-e (m 'id:prefix)) at-phase ns rp protected?)
-          (list spec)]
-         [(prefix-all-defined-except)
-          (check-nested 'phaseless)
-          (define-match m disarmed-spec '(prefix-all-defined-except id:prefix id ...))
-          (parse-all-from-module self spec orig-s (m 'id) (syntax-e (m 'id:prefix)) at-phase ns rp protected?)
-          (list spec)]
-         [(expand)
-          (define-match ex-m disarmed-spec '(expand (id . datum))) ; just check syntax
-          (define-match m disarmed-spec '(expand form)) ; get form to expand
-          (define exp-spec (expand (m 'form) (struct-copy expand-context ctx
-                                                          [only-immediate? #t])))
-          (unless (and (pair? (syntax-e exp-spec))
-                       (identifier? (car (syntax-e exp-spec)))
-                       (eq? 'begin (core-form-sym exp-spec at-phase)))
-            (raise-syntax-error provide-form-name "expansion was not a `begin' sequence" orig-s spec))
-          (define-match e-m exp-spec '(begin spec ...))
-          (loop (e-m 'spec)
-                at-phase
-                protected?
-                layer)]
-         [else
-          (cond
-           [(identifier? spec)
-            (parse-identifier! spec orig-s (syntax-e spec) at-phase ns rp protected?)
-            (list spec)]
-           [else
-            (raise-syntax-error provide-form-name "bad syntax" orig-s spec)])])))))
+    (define-values (track-stxess exp-specss)
+      (for/lists (track-stxes exp-specs) ([spec (in-list specs)])
+        (define disarmed-spec (syntax-disarm spec))
+        (define fm (and (pair? (syntax-e disarmed-spec))
+                        (identifier? (car (syntax-e disarmed-spec)))
+                        (syntax-e (car (syntax-e disarmed-spec)))))
+        (define (check-nested want-layer)
+          (unless (member want-layer (member layer layers))
+            (raise-syntax-error provide-form-name (format "nested `~a' not allowed" fm) orig-s spec)))
+        (case fm
+          [(for-meta)
+           (check-nested 'raw)
+           (define-match m disarmed-spec '(for-meta phase-level spec ...))
+           (define p (syntax-e (m 'phase-level)))
+           (unless (phase? p)
+             (raise-syntax-error provide-form-name "bad `for-meta' phase" orig-s spec))
+           (define-values (track-stxes exp-specs)
+             (loop (m 'spec)
+                   (phase+ p at-phase)
+                   protected?
+                   'phaseless))
+           (values null
+                   (list
+                    (syntax-track-origin*
+                     track-stxes
+                     (rebuild
+                      spec spec
+                      `(,(m 'for-meta) ,(m 'phase-level) ,@exp-specs)))))]
+          [(for-syntax)
+           (check-nested 'raw)
+           (define-match m disarmed-spec '(for-syntax spec ...))
+           (define-values (track-stxes exp-specs)
+             (loop (m 'spec)
+                   (phase+ 1 at-phase)
+                   protected?
+                   'phaseless))
+           (values null
+                   (list
+                    (syntax-track-origin*
+                     track-stxes
+                     (rebuild
+                      spec spec
+                      `(,(m 'for-syntax) ,@exp-specs)))))]
+          [(for-label)
+           (check-nested 'raw)
+           (define-match m disarmed-spec '(for-label spec ...))
+           (define-values (track-stxes exp-specs)
+             (loop (m 'spec)
+                   #f
+                   protected?
+                   'phaseless))
+           (values null
+                   (list
+                    (syntax-track-origin*
+                     track-stxes
+                     (rebuild
+                      spec spec
+                      `(,(m 'for-label) ,@exp-specs)))))]
+          [(protect)
+           (check-nested 'phaseless)
+           (when protected?
+             (raise-syntax-error provide-form-name "nested `protect' not allowed" orig-s spec))
+           (define-match m disarmed-spec '(protect p-spec ...))
+           (define-values (track-stxes exp-specs)
+             (loop (m 'p-spec)
+                   at-phase
+                   #t
+                   layer))
+           (values null
+                   (list
+                    (syntax-track-origin*
+                     track-stxes
+                     (rebuild
+                      spec spec
+                      `(,(m 'protect) ,@exp-specs)))))]
+          [(rename)
+           (check-nested 'phaseless)
+           (define-match m disarmed-spec '(rename id:from id:to))
+           (parse-identifier! (m 'id:from) orig-s (syntax-e (m 'id:to)) at-phase ns rp protected?)
+           (values null (list spec))]
+          [(struct)
+           (check-nested 'phaseless)
+           (define-match m disarmed-spec '(struct id:struct (id:field ...)))
+           (parse-struct! (m 'id:struct) orig-s (m 'id:field) at-phase ns rp protected?)
+           (values null (list spec))]
+          [(all-from)
+           (check-nested 'phaseless)
+           (define-match m disarmed-spec '(all-from mod-path))
+           (parse-all-from (m 'mod-path) orig-s self null at-phase ns rp protected?)
+           (values null (list spec))]
+          [(all-from-except)
+           (check-nested 'phaseless)
+           (define-match m disarmed-spec '(all-from-except mod-path id ...))
+           (parse-all-from (m 'mod-path) orig-s self (m 'id) at-phase ns rp protected?)
+           (values null (list spec))]
+          [(all-defined)
+           (check-nested 'phaseless)
+           (define-match m disarmed-spec '(all-defined))
+           (parse-all-from-module self spec orig-s null #f at-phase ns rp protected?)
+           (values null (list spec))]
+          [(all-defined-except)
+           (check-nested 'phaseless)
+           (define-match m disarmed-spec '(all-defined-except id ...))
+           (parse-all-from-module self spec orig-s (m 'id) #f at-phase ns rp protected?)
+           (values null (list spec))]
+          [(prefix-all-defined)
+           (check-nested 'phaseless)
+           (define-match m disarmed-spec '(prefix-all-defined id:prefix))
+           (parse-all-from-module self spec orig-s null (syntax-e (m 'id:prefix)) at-phase ns rp protected?)
+           (values null (list spec))]
+          [(prefix-all-defined-except)
+           (check-nested 'phaseless)
+           (define-match m disarmed-spec '(prefix-all-defined-except id:prefix id ...))
+           (parse-all-from-module self spec orig-s (m 'id) (syntax-e (m 'id:prefix)) at-phase ns rp protected?)
+           (values null (list spec))]
+          [(expand)
+           (define-match ex-m disarmed-spec '(expand (id . datum))) ; just check syntax
+           (define-match m disarmed-spec '(expand form)) ; get form to expand
+           (define exp-spec (expand (m 'form) (struct-copy expand-context ctx
+                                                           [only-immediate? #t])))
+           (unless (and (pair? (syntax-e exp-spec))
+                        (identifier? (car (syntax-e exp-spec)))
+                        (eq? 'begin (core-form-sym exp-spec at-phase)))
+             (raise-syntax-error provide-form-name "expansion was not a `begin' sequence" orig-s spec))
+           (define-match e-m exp-spec '(begin spec ...))
+           (define-values (track-stxes exp-specs)
+             (loop (e-m 'spec)
+                   at-phase
+                   protected?
+                   layer))
+           (values (list* spec exp-spec track-stxes)
+                   exp-specs)]
+          [else
+           (cond
+            [(identifier? spec)
+             (parse-identifier! spec orig-s (syntax-e spec) at-phase ns rp protected?)
+             (values null (list spec))]
+            [else
+             (raise-syntax-error provide-form-name "bad syntax" orig-s spec)])])))
+    (values (apply append track-stxess)
+            (apply append exp-specss))))
 
 ;; ----------------------------------------
 

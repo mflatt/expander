@@ -5,6 +5,7 @@
          "../syntax/scope.rkt"
          "../syntax/taint.rkt"
          "../syntax/match.rkt"
+         "../syntax/track.rkt"
          "../common/phase.rkt"
          "../syntax/track.rkt"
          "../syntax/error.rkt"
@@ -826,7 +827,7 @@
          (log-expand ctx 'enter-prim (car bodys))
          (log-expand ctx 'enter-prim-provide)
          (define-match m disarmed-body '(#%provide spec ...))
-         (define specs
+         (define-values (track-stxes specs)
            (parse-and-expand-provides! (m 'spec) (car bodys)
                                        requires+provides self
                                        phase (struct-copy expand-context ctx
@@ -837,9 +838,11 @@
                                                           [declared-submodule-names declared-submodule-names])
                                        expand rebuild))
          (log-expand ctx 'exit-prim)
-         (cons (rebuild
-                (car bodys) disarmed-body
-                `(,(m '#%provide) ,@specs))
+         (cons (syntax-track-origin*
+                track-stxes
+                (rebuild
+                 (car bodys) disarmed-body
+                 `(,(m '#%provide) ,@specs)))
                (loop (cdr bodys) phase))]
         [(begin-for-syntax)
          (define-match m disarmed-body '(begin-for-syntax e ...))

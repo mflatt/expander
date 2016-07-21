@@ -4,7 +4,8 @@
          "property.rkt"
          "preserved.rkt")
 
-(provide syntax-track-origin)
+(provide syntax-track-origin
+         syntax-track-origin*)
 
 (define missing (gensym))
 
@@ -64,6 +65,10 @@
       (preserved-property-value (cons (plain-property-value a)
                                       (plain-property-value b)))
       (cons a b)))
+
+(define (syntax-track-origin* old-stxes new-stx)
+  (for/fold ([new-stx new-stx]) ([old-stx (in-list old-stxes)])
+    (syntax-track-origin new-stx old-stx)))
 
 (module+ test
   (define (check-track new-props old-props expected-props-except-origin)
