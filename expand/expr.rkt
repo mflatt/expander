@@ -498,6 +498,10 @@
            (and (not binding)
                 (or (register-eventual-variable!? id ctx)
                     (expand-context-allow-unbound? ctx))))
+       (when (and (module-binding? binding)
+                  (not (eq? (module-binding-module binding)
+                            (namespace-mpi (expand-context-namespace ctx)))))
+         (raise-syntax-error #f "cannot mutate imported identifier" s id))
        (log-expand ctx 'next)
        (register-variable-referenced-if-local! binding)
        (rebuild
