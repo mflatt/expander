@@ -398,7 +398,7 @@
                                        #:run-phase run-phase
                                        #:skip-run? skip-run?
                                        #:otherwise-available? otherwise-available?
-                                       #:seen (hash-set seen mpi #t))))
+                                       #:seen (hash-set seen mi #t))))
     
     ;; Run or make available phases of the module body:
     (unless (label-phase? instance-phase)

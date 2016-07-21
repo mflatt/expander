@@ -94,7 +94,10 @@
    (define outside-scope (new-scope 'module))
    (define inside-scope (new-multi-scope module-name-sym))
 
-   (define self (make-self-module-path-index module-name-sym
+   (define self (make-self-module-path-index (if enclosing-self
+                                                 module-name-sym
+                                                 (string->uninterned-symbol
+                                                  (symbol->string module-name-sym)))
                                              enclosing-self))
    
    (define enclosing-mod (and enclosing-self
