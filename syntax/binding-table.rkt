@@ -25,6 +25,8 @@
          
          in-binding-table
          
+         binding-table-symbols
+         
          prop:bulk-binding
          (struct-out bulk-binding-class)
          
@@ -198,6 +200,25 @@
                    (or (not (pair? i)) (not (null? (cdr i)))))
               (set-add already-covered-scopes scopes-id)]
              [else already-covered-scopes])])]])))
+;; ----------------------------------------
+
+;; Return a set of symbols that have bindings for a given scope set
+(define (binding-table-symbols table scs s extra-shifts)
+  (define-values (ht bulk-bindings)
+    (if (hash? table)
+        (values table null)
+        (values (table-with-bulk-bindings-syms table)
+                (table-with-bulk-bindings-bulk-bindings table))))
+  (set-union
+   (for/seteq ([(sym at-sym) (in-hash ht)]
+               #:when (for/or ([an-scs (in-hash-keys at-sym)])
+                        (subset? an-scs scs)))
+              sym)
+   (for*/seteq ([bba (in-list bulk-bindings)]
+                #:when (subset? (bulk-binding-at-scopes bba) scs)
+                [sym (in-hash-keys
+                      (bulk-binding-symbols (bulk-binding-at-bulk bba) s extra-shifts))])
+               sym)))
 
 ;; ----------------------------------------
 ;; Pruning functions are called by scope serialization

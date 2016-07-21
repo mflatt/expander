@@ -60,6 +60,7 @@
          namespace-module-identifier
          namespace-attach-module
          namespace-attach-module-declaration
+         namespace-mapped-symbols
          
          module-path-index?
          module-path-index-join

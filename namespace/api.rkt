@@ -7,6 +7,7 @@
          "../syntax/module-binding.rkt"
          "../syntax/api.rkt"
          "../syntax/error.rkt"
+         "../syntax/mapped-name.rkt"
          "namespace.rkt"
          "module.rkt"
          "attach.rkt"
@@ -219,10 +220,11 @@
   (check 'namespace-variable-value namespace? ns)
   (namespace-unset-variable! ns (namespace-phase ns) sym))
 
-;; FIXME
 (define (namespace-mapped-symbols [ns (current-namespace)])
   (check 'namespace-mapped-symbols namespace? ns)
-  null)
+  (set->list
+   (syntax-mapped-names (root-expand-context-all-scopes-stx (namespace-get-root-expand-ctx ns))
+                        (namespace-phase ns))))
 
 (define (namespace-base-phase [ns (current-namespace)])
   (check 'namespace-base-phase namespace? ns)
