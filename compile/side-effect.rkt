@@ -61,21 +61,26 @@
 (define (add-binding-info locals idss rhss)
   (for/fold ([locals locals]) ([ids (in-list idss)]
                                [rhs (in-list rhss)])
-     (case (and (pair? (correlated-e rhs))
-                (correlated-e (car (correlated-e rhs))))
-       [(make-struct-type)
-        ;; Record result "types"
-        (define field-count (extract-struct-field-count-lower-bound rhs))
-        (for/fold ([locals locals]) ([id (in-list (correlated->list ids))]
-                                     [type (in-list '(struct-type
-                                                      constructor
-                                                      predicate
-                                                      accessor
-                                                      mutator))])
-          (hash-set locals (correlated-e id) (struct-op type field-count)))]
-       [else
-        (for/fold ([locals locals]) ([id (in-list (correlated->list ids))])
-          (hash-set locals id #t))])))
+    (let loop ([rhs rhs])
+      (case (and (pair? (correlated-e rhs))
+                 (correlated-e (car (correlated-e rhs))))
+        [(make-struct-type)
+         ;; Record result "types"
+         (define field-count (extract-struct-field-count-lower-bound rhs))
+         (for/fold ([locals locals]) ([id (in-list (correlated->list ids))]
+                                      [type (in-list '(struct-type
+                                                       constructor
+                                                       predicate
+                                                       accessor
+                                                       mutator))])
+           (hash-set locals (correlated-e id) (struct-op type field-count)))]
+        [(let-values)
+         (if (null? (correlated-e (correlated-cadr rhs)))
+             (loop (caddr (correlated->list rhs)))
+             (loop #f))]
+        [else
+         (for/fold ([locals locals]) ([id (in-list (correlated->list ids))])
+           (hash-set locals id #t))]))))
 
 ;; ----------------------------------------
 

@@ -27,17 +27,18 @@
                                             phase      ; current expansion phase; must match phase of `namespace`
                                             namespace  ; namespace for modules and evaluation
                                             env        ; environment for local bindings
+                                            user-env   ; for `syntax-local-environment-ref`
                                             post-expansion-scope-action ; function to apply with `post-expansion-scope`
                                             scopes     ; list of scopes that should be pruned by `quote-syntax`
                                             def-ctx-scopes ; #f or box of list of scopes; transformer-created def-ctxes
                                             reference-records ; list of reference records for enclosing
-                                            only-immediate? ; #t => stop at core forms
+                                            only-immediate? ; #t => stop at core forms; #t => `def-ctx-scopes` is a box
                                             just-once? ; #t => stop (a given subform) after any expansion
                                             module-begin-k ; expander for `#%module-begin` in a 'module-begin context
                                             need-eventually-defined ; phase(>=1) -> variables expanded before binding
                                             allow-unbound? ; allow reference to unbound identifiers as variables
                                             preserve-#%expression-and-do-not-add-#%top? ; #t via `local-expand`
-                                            stops      ; free-id-set
+                                            stops      ; free-id-set; non-empty => `def-ctx-scopes` is a box
                                             current-introduction-scopes ; scopes for current macro expansion
                                             declared-submodule-names ; mutable hash table: symbol -> 'module or 'module*
                                             lifts      ; #f or lift-context, which contains a list of lifteds
@@ -64,6 +65,7 @@
                   (namespace-phase ns)
                   ns
                   empty-env
+                  #hasheq() ; user-env
                   push-scope ; post-expansion-scope-action
                   null ; scopes
                   #f   ; def-ctx-scopes
@@ -74,7 +76,7 @@
                   #f   ; need-eventually-defined
                   #t   ; allow-unbound?
                   #f   ; preserve-#%expression?
-                  empty-free-id-set
+                  empty-free-id-set ; stops
                   null ; current-introduction-scopes
                   #hasheq() ; declared-submodule-names
                   #f   ; lifts

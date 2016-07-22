@@ -1,6 +1,9 @@
 #lang racket/base
 (require racket/cmdline
          racket/pretty
+         (only-in racket/base
+                  [eval host:eval]
+                  [namespace-require host:namespace-require])
          "common/set.rkt"
          "main.rkt"
          "namespace/namespace.rkt"
@@ -20,6 +23,7 @@
 (define extract? #f)
 (define expand? #f)
 (define linklets? #f)
+(define checkout-directory #f)
 (define cache-dir #f)
 (define cache-read-only? #f)
 (define cache-save-only #f)
@@ -40,7 +44,15 @@
     (set! expand? #t)]
    [("--linklets") "Compile to linklets instead of running"
     (set! linklets? #t)]
+   [("-O") dir "Use and write bootstrap linklet to Racket checkout at <dir>"
+    (set! checkout-directory dir)
+    (set! extract? #t)
+    (set! extract-to-c? #t)
+    (linklet-compile-to-s-expr #t)
+    (set! print-extracted-to (build-path checkout-directory "src" "racket" "src" "startup.inc"))]
    #:once-each
+   [("-k") dir "Use Racket checkout at <dir>"
+    (set! checkout-directory dir)]
    [("-c" "--cache") dir "Save and load from <dir>"
     (set! cache-dir (path->complete-path dir))]
    [("-r" "--read-only") "Use cache in read-only mode"
@@ -56,6 +68,7 @@
    [("--time") "Time re-expansion"
     (set! time-expand? #t)]
    [("-o" "--output") file "Print extracted bootstrap linklet to <file>"
+    (when print-extracted-to (raise-user-error 'run "the `-O` flag implied `-o`, so don't use both"))
     (set! print-extracted-to file)]
    [("-C") "Print extracted bootstrap as a C encoding"
     (set! extract-to-c? #t)]
@@ -75,11 +88,25 @@
 (define cache (make-cache cache-dir (lambda (path)
                                       (log-status "changed: ~a" path))))
 
+(when checkout-directory
+  ;; After booting, we're going to change the way module paths
+  ;; resolve. That's not generally ok, but as long we trigger visits
+  ;; of available modules here, it turns out that it won't cause
+  ;; trouble.
+  (host:namespace-require ''#%kernel)
+  (host:eval '(void)))
+
 ;; Install handlers:
 (boot)
 
 ;; Avoid use of ".zo" files:
 (use-compiled-file-paths null)
+
+;; Redirect module search to another installation:
+(when checkout-directory
+  (current-library-collection-paths (list (build-path checkout-directory "collects")))
+  (current-library-collection-links (list #f
+                                          (build-path checkout-directory "share" "links.rktd"))))
 
 ;; Replace the load handler to stash compiled modules in the cache
 ;; and/or load them from the cache

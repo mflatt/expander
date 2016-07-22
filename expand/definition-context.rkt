@@ -42,7 +42,8 @@
   (define frame-id (or (root-expand-context-frame-id ctx) (gensym)))
   (define sc (new-scope 'intdef))
   (define def-ctx-scopes (expand-context-def-ctx-scopes ctx))
-  (when def-ctx-scopes (set-box! def-ctx-scopes (cons sc (unbox def-ctx-scopes))))
+  (unless def-ctx-scopes (error "internal error: no box to accumulate definition-context scopes"))
+  (set-box! def-ctx-scopes (cons sc (unbox def-ctx-scopes)))
   (internal-definition-context frame-id sc add-scope? (box null)))
 
 ;; syntax-local-bind-syntaxes
@@ -174,6 +175,9 @@
                          (and (list? context)
                               (list? (expand-context-context ctx)))))
   (define all-stop-ids (and stop-ids (stop-ids->all-stop-ids stop-ids phase)))
+  (define def-ctx-scopes (if (expand-context-def-ctx-scopes ctx)
+                             (unbox (expand-context-def-ctx-scopes ctx))
+                             null))
   (struct-copy expand-context ctx
                [context context]
                [env (add-intdef-bindings (expand-context-env ctx)
@@ -203,11 +207,9 @@
                       (add-intdef-scopes s intdefs))
                     (expand-context-post-expansion-scope-action ctx))]
                [scopes
-                (append (if (expand-context-def-ctx-scopes ctx)
-                            (unbox (expand-context-def-ctx-scopes ctx))
-                            null)
+                (append def-ctx-scopes
                         (expand-context-scopes ctx))]
-               [only-immediate? (not stop-ids)]
+               [only-immediate? (not stop-ids)] ; def-ctx-scopes is set for the enclosing transformer call
                [just-once? #f]
                [preserve-#%expression-and-do-not-add-#%top? #t]
                [stops (free-id-set phase (or all-stop-ids null))]
@@ -215,7 +217,8 @@
                [all-scopes-stx #:parent root-expand-context
                                (add-intdef-scopes
                                 (root-expand-context-all-scopes-stx ctx)
-                                intdefs)]))
+                                intdefs
+                                #:always? #t)]))
 
 ;; ----------------------------------------
 

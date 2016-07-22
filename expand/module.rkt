@@ -234,11 +234,16 @@
          ;; Pass 1: partially expand to discover all bindings and install all 
          ;; defined macro transformers
          
+         ;; Need to accumulate definition contexts created during
+         ;; partial expansion:
+         (define def-ctx-scopes (box null))
+         
          (define partial-body-ctx (struct-copy expand-context ctx
                                                [context 'module]
                                                [phase phase]
                                                [namespace (namespace->namespace-at-phase m-ns phase)]
                                                [only-immediate? #t]
+                                               [def-ctx-scopes def-ctx-scopes]
                                                [need-eventually-defined need-eventually-defined] ; used only at phase 1 and up
                                                [declared-submodule-names declared-submodule-names]
                                                [lifts (make-lift-context
@@ -278,8 +283,9 @@
          
          (log-expand partial-body-ctx 'next-group)
          
-         (define body-ctx (struct-copy expand-context partial-body-ctx
+         (define body-ctx (struct-copy expand-context (accumulate-def-ctx-scopes partial-body-ctx def-ctx-scopes)
                                        [only-immediate? #f]
+                                       [def-ctx-scopes #f]
                                        [frame-id #:parent root-expand-context #f]
                                        [post-expansion-scope #:parent root-expand-context #f]
                                        [to-module-lifts (make-to-module-lift-context phase

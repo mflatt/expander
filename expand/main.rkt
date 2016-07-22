@@ -48,7 +48,8 @@
          eval-for-bindings
          
          rebuild
-         attach-disappeared-transformer-bindings)
+         attach-disappeared-transformer-bindings
+         accumulate-def-ctx-scopes)
 
 ;; ----------------------------------------
 
@@ -294,10 +295,25 @@
                                       intro-scope use-scopes def-ctx-scopes
                                       id)
   (log-expand ctx 'macro-pre-x cleaned-s)
-  (define m-ctx (struct-copy expand-context ctx
+  (define confine-def-ctx-scopes?
+    (not (or (expand-context-only-immediate? ctx)
+             (not (free-id-set-empty? (expand-context-stops ctx))))))
+  (define accum-ctx
+    (if (and confine-def-ctx-scopes?
+             (expand-context-def-ctx-scopes ctx)
+             (not (null? (unbox (expand-context-def-ctx-scopes ctx)))))
+        (accumulate-def-ctx-scopes ctx (expand-context-def-ctx-scopes ctx))
+        ctx))
+  (define m-ctx (struct-copy expand-context accum-ctx
                              [current-introduction-scopes (cons intro-scope
                                                                 use-scopes)]
-                             [def-ctx-scopes def-ctx-scopes]))
+                             [def-ctx-scopes
+                               (if confine-def-ctx-scopes?
+                                   ;; Can confine tracking to this call
+                                   def-ctx-scopes
+                                   ;; Keep old def-ctx-scopes box, so that we don't
+                                   ;; lose them at the point where expansion stops
+                                   (expand-context-def-ctx-scopes ctx))]))
   (define transformed-s
     (parameterize ([current-expand-context m-ctx]
                    [current-namespace (namespace->namespace-at-phase
@@ -310,9 +326,9 @@
          ((transformer->procedure t) cleaned-s)))))
   (log-expand ctx 'macro-post-x transformed-s)
   (unless (syntax? transformed-s)
-    (raise-argument-error (syntax-e id)
-                          "received value from syntax expander was not syntax"
-                          "received" transformed-s))
+    (raise-arguments-error (syntax-e id)
+                           "received value from syntax expander was not syntax"
+                           "received" transformed-s))
   transformed-s)
 
 (define (maybe-add-use-site-scope s ctx binding)
@@ -350,7 +366,11 @@
       ctx
       (struct-copy expand-context ctx
                    [scopes (append (unbox def-ctx-scopes)
-                                   (expand-context-scopes ctx))])))
+                                   (expand-context-scopes ctx))]
+                   [all-scopes-stx #:parent root-expand-context
+                                   (add-scopes (root-expand-context-all-scopes-stx ctx)
+                                               (let ([b (expand-context-def-ctx-scopes ctx)])
+                                                 (if b (unbox b) null)))])))
 
 ;; ----------------------------------------
 
@@ -419,12 +439,14 @@
   (log-expand ctx 'block-renames (datum->syntax #f init-bodys) (datum->syntax #f bodys))
   (define phase (expand-context-phase ctx))
   (define frame-id (make-reference-record)) ; accumulates info on referenced variables
+  (define def-ctx-scopes (box null))
   ;; Create an expansion context for expanding only immediate macros;
   ;; this partial-expansion phase uncovers macro- and variable
   ;; definitions in the definition context
   (define body-ctx (struct-copy expand-context ctx
                                 [context (list (make-liberal-define-context))]
                                 [only-immediate? #t]
+                                [def-ctx-scopes def-ctx-scopes]
                                 [post-expansion-scope #:parent root-expand-context inside-sc]
                                 [post-expansion-scope-action add-scope]
                                 [scopes (list* outside-sc
@@ -455,7 +477,7 @@
       ;; `letrec-values`
       (log-expand body-ctx (if (null? val-idss) 'block->list 'block->letrec))
       (define result-s
-        (finish-expanding-body body-ctx frame-id
+        (finish-expanding-body body-ctx frame-id def-ctx-scopes
                                (reverse val-idss) (reverse val-keyss) (reverse val-rhss) (reverse track-stxs)
                                (reverse done-bodys)
                                #:source s #:disarmed-source disarmed-s
@@ -537,7 +559,7 @@
          (define keys (for/list ([id (in-list ids)])
                         (add-local-binding! id phase counter #:frame-id frame-id #:in exp-body)))
          (log-expand body-ctx 'prepare-env)
-         (define vals (eval-for-syntaxes-binding (m 'rhs) ids ctx))
+         (define vals (eval-for-syntaxes-binding (m 'rhs) ids body-ctx))
          (define extended-env (for/fold ([env (expand-context-env body-ctx)]) ([key (in-list keys)]
                                                                                [val (in-list vals)]
                                                                                [id (in-list ids)])
@@ -580,7 +602,7 @@
 
 ;; Partial expansion is complete, so assumble the result as a
 ;; `letrec-values` form and continue expanding
-(define (finish-expanding-body body-ctx frame-id
+(define (finish-expanding-body body-ctx frame-id def-ctx-scopes
                                val-idss val-keyss val-rhss track-stxs
                                done-bodys
                                #:source s #:disarmed-source disarmed-s
@@ -592,13 +614,14 @@
   (define s-core-stx
     (syntax-shift-phase-level core-stx (expand-context-phase body-ctx)))
   ;; As we finish expanding, we're no longer in a definition context
-  (define finish-ctx (struct-copy expand-context body-ctx
+  (define finish-ctx (struct-copy expand-context (accumulate-def-ctx-scopes body-ctx def-ctx-scopes)
                                   [context 'expression]
                                   [use-site-scopes #:parent root-expand-context #f]
                                   [scopes (append
                                            (unbox (root-expand-context-use-site-scopes body-ctx))
                                            (expand-context-scopes body-ctx))]
                                   [only-immediate? #f]
+                                  [def-ctx-scopes #f]
                                   [post-expansion-scope #:parent root-expand-context #f]))
   ;; Helper to expand and wrap the ending expressions in `begin`, if needed:
   (define (finish-bodys track?)
@@ -802,6 +825,7 @@
                                  [namespace ns]
                                  [env empty-env]
                                  [only-immediate? #f]
+                                 [def-ctx-scopes #f]
                                  [post-expansion-scope #:parent root-expand-context #f]))
   (expand/capture-lifts s trans-ctx
                         #:expand-lifts? expand-lifts?
