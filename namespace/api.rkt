@@ -165,9 +165,11 @@
          (define b (resolve+shift/extra-inspector (namespace-syntax-introduce id ns)
                                                   (namespace-phase ns)
                                                   ns))
-         (define v (if b
-                       (binding-lookup b empty-env null ns (namespace-phase ns) id)
-                       variable))
+         (when b (namespace-visit-available-modules! ns))
+         (define-values (v extra-inspector)
+           (if b
+               (binding-lookup b empty-env null ns (namespace-phase ns) id)
+               (values variable #f)))
          (unless (variable? v)
            (escape
             (or failure-thunk
@@ -179,10 +181,13 @@
                           (current-continuation-marks)
                           null))))))
          (if (module-binding? b)
-             (values (namespace->module-namespace ns
-                                                  (module-binding-module b)
-                                                  (phase- (namespace-phase ns)
-                                                          (module-binding-phase b)))
+             (values (if (top-level-module-path-index? (module-binding-module b))
+                         ns
+                         (namespace->module-namespace ns
+                                                      (module-binding-module b)
+                                                      (phase- (namespace-phase ns)
+                                                              (module-binding-phase b))
+                                                      #:complain-on-failure? #t))
                      (module-binding-phase b)
                      (module-binding-sym b))
              (values ns (namespace-phase ns) sym))]
@@ -192,11 +197,13 @@
        (namespace-get-variable var-ns var-phase-level var-sym
                                (lambda () (escape
                                       (or failure-thunk
-                                          (raise exn:fail:contract:variable
-                                                 (format (string-append
-                                                          "namespace-variable-value: given name is not defined\n"
-                                                          "  name: ~s"))
-                                                 sym))))))
+                                          (raise (exn:fail:contract:variable
+                                                  (format (string-append
+                                                           "namespace-variable-value: given name is not defined\n"
+                                                           "  name: ~s")
+                                                          sym)
+                                                  (current-continuation-marks)
+                                                  sym)))))))
      (lambda () val))))
 
 (define (namespace-set-variable-value! sym	 	 	 	 
@@ -207,6 +214,7 @@
   (check 'namespace-variable-value namespace? ns)
   (namespace-set-variable! ns (namespace-phase ns) sym val)
   (when map?
+    (namespace-unset-transformer! ns (namespace-phase ns) sym)
     (define id (datum->syntax #f sym))
     (add-binding! (namespace-syntax-introduce id ns)
                   (make-module-binding (namespace-mpi ns)

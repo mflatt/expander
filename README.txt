@@ -3,6 +3,7 @@ This is a work-in-progress reimplementation of Racket's macro expander.
 See "demo.rkt" for examples.
 
 TODO:
+ namespace-require/copy
  bug fix for local definition contexts (MB's example)
 
 ----------------------------------------

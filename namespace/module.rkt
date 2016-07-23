@@ -257,8 +257,8 @@
    [else
     (hash-set! (namespace-phase-to-namespace m-ns) 0-phase m-ns)
     (hash-set! (namespace-phase-level-to-definitions m-ns)
-               0-phase
-               (namespace->definitions existing-m-ns 0-phase))
+               0
+               (namespace->definitions existing-m-ns 0))
     (hash-set! (module-instance-phase-level-to-state mi) 0 'started)
     (define at-phase (or (hash-ref (namespace-module-instances ns) 0-phase #f)
                          (let ([at-phase (make-hasheq)])
@@ -478,7 +478,7 @@
   (define d (hash-ref (namespace-phase-level-to-definitions m-ns) (module-use-phase mu) #f))
   (if d
       (values mi (definitions-variables d))
-      (error "namespace mismatch: phase level not found")))
+      (error "namespace mismatch: phase level not found" mu)))
 
 ;; ----------------------------------------
 

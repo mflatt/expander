@@ -27,6 +27,7 @@
          namespace-set-variable!
          namespace-unset-variable!
          namespace-set-transformer!
+         namespace-unset-transformer!
          namespace-get-variable
          namespace-get-transformer
          
@@ -166,6 +167,10 @@
   (define d (namespace->definitions ns (add1 phase-level)))
   (hash-set! (definitions-transformers d) name val))
 
+(define (namespace-unset-transformer! ns phase-level name)
+  (define d (namespace->definitions ns (add1 phase-level)))
+  (hash-remove! (definitions-transformers d) name))
+
 (define (namespace-get-variable ns phase-level name fail-k)
   (define d (namespace->definitions ns phase-level))
   (instance-variable-value (definitions-variables d) name fail-k))
@@ -179,8 +184,8 @@
 
 (define (namespace-same-instance? a-ns b-ns)
   (eq? (hash-ref (namespace-phase-level-to-definitions a-ns)
-                 (namespace-0-phase a-ns)
+                 0
                  'no-a)
        (hash-ref (namespace-phase-level-to-definitions b-ns)
-                 (namespace-0-phase b-ns)
+                 0
                  'no-b)))
