@@ -15,8 +15,10 @@
   (let loop ()
     (define v (unbox lock-box))
     (cond
-     [(not v)
-      (define lock (cons (make-semaphore) (current-thread)))
+     [(or (not v)
+          (sync/timeout 0 (car v) (cdr v)))
+      (define sema (make-semaphore))
+      (define lock (cons (semaphore-peek-evt sema) (current-thread)))
       ((dynamic-wind
         void
         (lambda ()
@@ -28,7 +30,7 @@
             ;; CAS failed; take it from the top
             loop]))
         (lambda ()
-          (semaphore-post (car lock)))))]
+          (semaphore-post sema))))]
      [(eq? (current-thread) (cdr v))
       ;; This thread already holds the lock
       (proc)]
