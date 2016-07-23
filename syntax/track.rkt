@@ -18,7 +18,9 @@
   (cond
    [(zero? (hash-count old-props))
     (if id
-        (syntax-property new-stx 'origin (list id))
+        (syntax-property new-stx
+                         'origin
+                         (cons id (hash-ref (syntax-props new-stx) 'origin null)))
         new-stx)]
    [else
     (define new-props (syntax-props new-stx))
