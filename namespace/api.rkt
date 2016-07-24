@@ -20,7 +20,8 @@
          "../common/module-path.rkt"
          "../common/contract.rkt"
          "../expand/protect.rkt"
-         "../expand/env.rkt")
+         "../expand/env.rkt"
+         "../host/linklet.rkt")
 
 (provide make-empty-namespace
          
@@ -241,8 +242,11 @@
 (define (namespace-mapped-symbols [ns (current-namespace)])
   (check 'namespace-mapped-symbols namespace? ns)
   (set->list
-   (syntax-mapped-names (root-expand-context-all-scopes-stx (namespace-get-root-expand-ctx ns))
-                        (namespace-phase ns))))
+   (set-union
+    (syntax-mapped-names (root-expand-context-all-scopes-stx (namespace-get-root-expand-ctx ns))
+                         (namespace-phase ns))
+    (list->set
+     (instance-variable-names (namespace->instance ns 0))))))
 
 (define (namespace-base-phase [ns (current-namespace)])
   (check 'namespace-base-phase namespace? ns)
