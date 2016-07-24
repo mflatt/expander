@@ -102,7 +102,11 @@
 
 ;; ----------------------------------------
 
-(define (do-namespace-require #:run? run? #:visit? visit? who req ns)
+(define (do-namespace-require #:run? [run? #t] #:visit? [visit? #f]
+                              who req ns
+                              #:copy-variable-phase-level [copy-variable-phase-level #f]
+                              #:copy-variable-as-constant? [copy-variable-as-constant? #f]
+                              #:skip-variable-phase-level [skip-variable-phase-level #f])
   (check who namespace? ns)
   (define ctx-stx (add-scopes empty-syntax
                               (root-expand-context-module-scopes
@@ -118,7 +122,10 @@
                       #:run? run?
                       #:visit? visit?
                       #:phase-shift (namespace-phase ns)
-                      #:run-phase (namespace-phase ns))]
+                      #:run-phase (namespace-phase ns)
+                      #:copy-variable-phase-level copy-variable-phase-level
+                      #:copy-variable-as-constant? copy-variable-as-constant?
+                      #:skip-variable-phase-level skip-variable-phase-level)]
    [else
     ;; Slow way -- to allow renaming, check for conflicts, etc.
     (parse-and-perform-requires! #:run? run?
@@ -127,21 +134,24 @@
                                  #f
                                  ns
                                  (namespace-phase ns)
-                                 (make-requires+provides #f))]))
+                                 (make-requires+provides #f)
+                                 #:skip-variable-phase-level skip-variable-phase-level)]))
 
 (define (namespace-require req [ns (current-namespace)])
-  (do-namespace-require #:run? #t #:visit? #f 'namespace-require req ns))
+  (do-namespace-require 'namespace-require req ns))
 
 (define (namespace-require/expansion-time req [ns (current-namespace)])
   (do-namespace-require #:run? #f #:visit? #t 'namespace-require/expansion-time req ns))
   
-;; FIXME
 (define (namespace-require/constant req [ns (current-namespace)])
-  (namespace-require req ns))
+  (do-namespace-require 'namespace-require/constant req ns
+                        #:copy-variable-phase-level 0
+                        #:skip-variable-phase-level 0))
 
-;; FIXME
 (define (namespace-require/copy req [ns (current-namespace)])
-  (namespace-require req ns))
+  (do-namespace-require 'namespace-require/constant req ns
+                        #:copy-variable-phase-level 0
+                        #:copy-variable-as-constant? #t))
 
 ;; ----------------------------------------
 

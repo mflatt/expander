@@ -1,5 +1,6 @@
 #lang racket/base
-(require "../common/phase.rkt"
+(require "../common/set.rkt"
+         "../common/phase.rkt"
          "../namespace/namespace.rkt"
          "../namespace/module.rkt"
          "../compile/module-use.rkt"
@@ -10,6 +11,7 @@
          "../compile/eager-instance.rkt"
          "../compile/compiled-in-memory.rkt"
          "../compile/multi-top.rkt"
+         "../compile/namespace-scope.rkt"
          "top-level-instance.rkt"
          "protect.rkt")
 
@@ -62,7 +64,7 @@
   (define h (linklet-bundle->hash (hash-ref (linklet-directory->hash ld) #f)))
   (define link-instance
     (if (compiled-in-memory? c)
-        (link-instance-from-compiled-in-memory c)
+        (link-instance-from-compiled-in-memory c (and (not single-expression?) ns))
         (instantiate-linklet (hash-ref h 'link)
                              (list deserialize-instance
                                    (make-eager-instance-instance
@@ -150,7 +152,25 @@
   ;; Call last thunk tail position --- maybe, since using a prompt if not `as-tail?`
   (thunk as-tail?))
 
-(define (link-instance-from-compiled-in-memory cim)
+(define (link-instance-from-compiled-in-memory cim to-ns)
+  ;; If the compilation namespace doesn't match the evaluation
+  ;; namespace, then we need to adjust syntax object literals to work
+  ;; in the new namespace --- the same shifting that happens otherwise
+  ;; through deserialization
+  (define orig-syntax-literalss (compiled-in-memory-syntax-literalss cim))
+  (define syntax-literalss
+    (cond
+     [(not to-ns) orig-syntax-literalss]
+     [(namespace-scopes=? (compiled-in-memory-namespace-scopes cim)
+                          (extract-namespace-scopes to-ns))
+      orig-syntax-literalss]
+     [else
+      (for/vector #:length (vector-length orig-syntax-literalss) ([v (in-vector orig-syntax-literalss)])
+                  (for/vector #:length (vector-length v) ([s (in-vector v)])
+                              (swap-top-level-scopes s
+                                                     (compiled-in-memory-namespace-scopes cim)
+                                                     to-ns)))]))
+  ;; Create the instance:
   (make-instance 'link #f
                  mpi-vector-id (compiled-in-memory-mpis cim)
-                 syntax-literalss-id (compiled-in-memory-syntax-literalss cim)))
+                 syntax-literalss-id syntax-literalss))

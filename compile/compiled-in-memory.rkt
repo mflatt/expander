@@ -27,7 +27,10 @@
                             syntax-literalss
                             ;; Shortcuts for associated code (submodules or sequence of top levels)
                             pre-compiled-in-memorys
-                            post-compiled-in-memorys)
+                            post-compiled-in-memorys
+                            ;; Namespace scopes from top-level compilation, so syntax objects
+                            ;; can be adjusted for a target namespace:
+                            namespace-scopes)
         #:property prop:custom-write
         (lambda (cim port mode)
           (write (compiled-in-memory-linklet-directory cim) port)))

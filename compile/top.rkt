@@ -14,7 +14,8 @@
          "eager-instance.rkt"
          "expr.rkt"
          "form.rkt"
-         "multi-top.rkt")
+         "multi-top.rkt"
+         "namespace-scope.rkt")
 
 (provide compile-single
          compile-top)
@@ -121,7 +122,8 @@
                         (mpis-as-vector mpis)
                         (syntax-literals-as-vectors syntax-literalss phase)
                         null
-                        null)]))
+                        null
+                        (extract-namespace-scopes (compile-context-namespace cctx)))]))
 
 ;; Callback for compiling a sequence of expressions: handle `require`
 ;; (which is handled separately for modules)

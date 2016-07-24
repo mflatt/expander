@@ -8,7 +8,7 @@
 ;; Encode a sequence of compiled top-level forms by creating a linklet
 ;; directory using labels |0|, |1|, etc., to map to the given linklet
 ;; directories. Keep all the existing compile-in-memory records as
-;; "pre" record, too.
+;; "pre" records, too.
 (define (compiled-tops->compiled-top cims
                                      #:to-source? [to-source? #f])
   (define ht
@@ -29,7 +29,8 @@
                         #()
                         #()
                         cims
-                        null)]))
+                        null
+                        #f)]))
 
 ;; Decode a sequence of compiled top-level forms by unpacking the
 ;; linklet directory into a list of linklet directories

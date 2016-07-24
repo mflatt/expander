@@ -278,7 +278,8 @@
                         (mpis-as-vector mpis)
                         (syntax-literals-as-vectors all-syntax-literalss 0)
                         (map cdr pre-submodules)
-                        (map cdr post-submodules))]))
+                        (map cdr post-submodules)
+                        #f)])) ; no namespace scopes
 
 ;; ----------------------------------------
 

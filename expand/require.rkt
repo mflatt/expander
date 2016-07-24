@@ -34,7 +34,11 @@
                                      #:run-phase [run-phase (namespace-phase m-ns)]
                                      #:run? [run? #f]
                                      #:visit? [visit? #t]
-                                     #:declared-submodule-names [declared-submodule-names #hasheq()])
+                                     #:declared-submodule-names [declared-submodule-names #hasheq()]
+                                     ;; For `namespace-require/copy` and `namespace-require/constant`:
+                                     #:copy-variable-phase-level [copy-variable-phase-level #f]
+                                     #:copy-variable-as-constant? [copy-variable-as-constant? #f]
+                                     #:skip-variable-phase-level [skip-variable-phase-level #f])
   (let loop ([reqs reqs]
              [top-req #f]
              [phase-shift phase-shift]
@@ -167,7 +171,10 @@
                            #:adjust adjust
                            #:requires+provides requires+provides
                            #:run? run?
-                           #:visit? visit?)]))))
+                           #:visit? visit?
+                           #:copy-variable-phase-level copy-variable-phase-level
+                           #:copy-variable-as-constant? copy-variable-as-constant?
+                           #:skip-variable-phase-level skip-variable-phase-level)]))))
 
 (define (ids->sym-set ids)
   (for/set ([id (in-list ids)])
@@ -198,7 +205,11 @@
                           #:visit? [visit? #t]
                           #:run? [run? #f]
                           #:can-be-shadowed? [can-be-shadowed? #f]
-                          #:initial-require? [initial-require? #f])
+                          #:initial-require? [initial-require? #f]
+                          ;; For `namespace-require/copy` and `namespace-require/constant`:
+                          #:copy-variable-phase-level [copy-variable-phase-level #f]
+                          #:copy-variable-as-constant? [copy-variable-as-constant? #f]
+                          #:skip-variable-phase-level [skip-variable-phase-level #f])
   (define module-name (module-path-index-resolve mpi #t))
   (define bind-in-stx (if (adjust-rename? adjust)
                           (adjust-rename-to-id adjust)
@@ -226,9 +237,12 @@
            [(adjust-only? adjust) (set->list (adjust-only-syms adjust))]
            [(adjust-rename? adjust) (list (adjust-rename-from-sym adjust))]
            [else #f])
-   #:can-bulk? (not adjust)
+   #:can-bulk? (and (not adjust) (not skip-variable-phase-level))
    #:filter (and
-             (or adjust requires+provides)
+             (or adjust
+                 requires+provides
+                 copy-variable-phase-level
+                 skip-variable-phase-level)
              (lambda (binding as-transformer?)
                (define sym (module-binding-nominal-sym binding))
                (define provide-phase (module-binding-nominal-phase binding))
@@ -236,6 +250,10 @@
                  (cond
                   [(and (not (eq? just-meta 'all))
                         (not (equal? provide-phase just-meta)))
+                   #f]
+                  [(and skip-variable-phase-level
+                        (not as-transformer?)
+                        (equal? provide-phase skip-variable-phase-level))
                    #f]
                   [(not adjust) sym]
                   [(adjust-only? adjust)
@@ -269,6 +287,11 @@
                                               s bind-phase binding
                                               #:can-be-shadowed? can-be-shadowed?
                                               #:as-transformer? as-transformer?))
+               (when (and adjusted-sym
+                          copy-variable-phase-level
+                          (not as-transformer?)
+                          (equal? provide-phase copy-variable-phase-level))
+                 (copy-namespace-value m-ns adjusted-sym binding copy-variable-phase-level phase-shift))
                adjusted-sym)))
   ;; check that we covered all expected ids:
   (define need-syms (cond
@@ -354,3 +377,21 @@
            req
            (datum->syntax #f `(for-syntax ,req)))]))
   ((loop #f) req))
+
+;; ----------------------------------------
+
+(define (copy-namespace-value m-ns adjusted-sym binding phase-level phase-shift)
+  (define i-ns (namespace->module-namespace m-ns
+                                            (module-path-index-resolve (module-binding-module binding))
+                                            (phase- (module-binding-phase binding) phase-level)
+                                            #:complain-on-failure? #t))
+  (define val (namespace-get-variable i-ns (module-binding-phase binding) (module-binding-sym binding)
+                                      (lambda () (error 'namespace-require/copy
+                                                   (format
+                                                    (string-append "namespace mismatch;\n"
+                                                                   " variable not found\n"
+                                                                   "  variable name: ~s\n"
+                                                                   "  phase level: ~s")
+                                                    (module-binding-sym binding)
+                                                    (module-binding-phase binding))))))
+  (namespace-set-variable! m-ns (phase+ phase-shift phase-level) adjusted-sym val))
