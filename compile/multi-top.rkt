@@ -19,7 +19,7 @@
 ;; behavior.)
 (define (compiled-tops->compiled-top cims
                                      #:to-source? [to-source? #f]
-                                     #:merge-serialization? [merge-serialization? #t]
+                                     #:merge-serialization? [merge-serialization? #f]
                                      #:namespace [ns #f]) ; need for `merge-serialization?`
   (define sequence-ht
      (for/hasheq ([cim (in-list cims)]

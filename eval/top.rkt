@@ -20,18 +20,24 @@
 ;; see "compile/main.rkt", "compile/top.rkt", and "compile/multi-top.rkt"
 
 (provide eval-top
-         eval-single-top)
+         eval-single-top
+
+         compiled-multiple-top?)
 
 (define (eval-single-top c ns)
   (eval-one-top c ns #:single-expression? #t))
 
-(define (eval-top c ns [eval-compiled eval-top] #:as-tail? [as-tail? #t])
+(define (compiled-multiple-top? c)
   (define ld (if (compiled-in-memory? c)
                  (compiled-in-memory-linklet-directory c)
                  c))
-  (if (hash-ref (linklet-directory->hash ld) #f #f)
-      (eval-one-top c ns #:as-tail? as-tail?)
-      (eval-multiple-tops c ns eval-compiled #:as-tail? as-tail?)))
+  (and (linklet-directory? ld)
+       (not (hash-ref (linklet-directory->hash ld) #f #f))))
+
+(define (eval-top c ns [eval-compiled eval-top] #:as-tail? [as-tail? #t])
+  (if (compiled-multiple-top? c)
+      (eval-multiple-tops c ns eval-compiled #:as-tail? as-tail?)
+      (eval-one-top c ns #:as-tail? as-tail?)))
 
 (define (eval-multiple-tops c ns eval-compiled #:as-tail? as-tail?)
   (define (eval-compiled-parts l)

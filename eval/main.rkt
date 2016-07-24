@@ -84,7 +84,8 @@
                                                       serializable?
                                                       to-source?)))
                      #:combine append)]))
-  (if (= 1 (length cs))
+  (if (and (= 1 (length cs))
+           (not (compiled-multiple-top? (car cs))))
       (car cs)
       (compiled-tops->compiled-top cs
                                    #:to-source? to-source?
