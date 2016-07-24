@@ -270,8 +270,6 @@
    [else
     ;; Save mpis and syntax for direct evaluation, instead of unmarshaling:
     (compiled-in-memory ld
-                        0
-                        max-phase
                         phase-to-link-module-uses
                         (current-code-inspector)
                         phase-to-link-extra-inspectorsss

@@ -86,7 +86,10 @@
                      #:combine append)]))
   (if (= 1 (length cs))
       (car cs)
-      (compiled-tops->compiled-top cs #:to-source? to-source?)))
+      (compiled-tops->compiled-top cs
+                                   #:to-source? to-source?
+                                   #:merge-serialization? serializable?
+                                   #:namespace ns)))
 
 ;; Result is a hash table containing S-expressons that may have
 ;; "correlated" parts in the sense of "host/correlate.rkt"; use

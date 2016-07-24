@@ -20,6 +20,10 @@
          generate-lazy-syntax-literal-lookup
          syntax-literals-as-vectors
          empty-syntax-literals
+         
+         make-syntax-literals-boxes-container
+         add-syntax-literals-boxes!/pos
+         syntax-literals-boxes-container-ref
 
          header-empty-syntax-literals?
          
@@ -143,8 +147,12 @@
 
 ;; Generate immediate deserializartion and shifting of a set of syntax
 ;; objects across multiple phases; the result is an expression for a
-;; vector (indexed by original phase) of vectors (indexes by
-;; syntax-literal position)
+;; vector (indexed by original phase) of vectors (indexed by
+;; syntax-literal position).
+;; The original-phase layer of the vector might not actually correspond
+;; to a sequence of phases `syntax-literals-boxes` is actually from
+;; `syntax-literals-boxes-container-ref`, and the encoding doesn't
+;; depend on that order in any way.
 (define (generate-eager-syntax-literals! syntax-literals-boxes mpis base-phase self ns)
   (define syntax-literalss (map unbox syntax-literals-boxes))
   `(let-values ([(ns+stxss) ,(generate-deserialize (cons
@@ -186,6 +194,35 @@
     (for/list ([i (in-range base-phase)]) #f)
     ;; Vectors
     (map list->vector (map reverse (map unbox syntax-literals-boxes))))))
+
+;; ----------------------------------------
+
+;; For combining syntax literals from separate top-level compilations:
+(struct syntax-literals-boxes-container ([boxes #:mutable]
+                                         [count #:mutable]))
+
+(define (make-syntax-literals-boxes-container)
+  (syntax-literals-boxes-container null 0))
+
+;; Return a position in a larger vector where the given vector will
+;; start; for convenience, pair that position with the size of the vector
+(define (add-syntax-literals-boxes!/pos c vec)
+  (define pos (syntax-literals-boxes-container-count c))
+  (set-syntax-literals-boxes-container-boxes!
+   c
+   (append (for/list ([v (in-list (reverse (vector->list vec)))])
+             (box (or (and v (reverse (vector->list v)))
+                      null)))
+           (syntax-literals-boxes-container-boxes c)))
+  (set-syntax-literals-boxes-container-count! c (+ pos (vector-length vec)))
+  (cons pos (vector-length vec)))
+
+;; Reports a container's content into a form suitable for
+;; `generate-eager-syntax-literals!`. The list of boxes won't actually
+;; correspond to a sequence of phases, but instead a concatenation of
+;; sequences of phases for multiple top-level forms, but that's ok.
+(define (syntax-literals-boxes-container-ref c)
+  (reverse (syntax-literals-boxes-container-boxes c)))
 
 ;; ----------------------------------------
 

@@ -28,21 +28,26 @@
 ;;   record.
 ;;
 ;;   The generated linklets for a single form include one linklet for
-;;   potentially marshaled module path indices and syntax objects,
-;;   plus one linklet per relevant phase. Multi-form combinations
-;;   group the linklet sets for individual compilations in nested
-;;   linklet directories.
+;;   potentially serialized module path indices and syntax objects,
+;;   plus one linklet per relevant phase.
+;;
+;;   Multi-form combinations group the linklet sets for individual
+;;   compilations in nested linklet directories. In addition, a
+;;   linklet implements deserialization of all the data across
+;;   top-level forms that are compiled together, so that they share.
+;;   (In that case, the deserialization linklet with each inidvidual
+;;   form turns out not to be used.)
 ;;
 ;; * Modules are compiled to a slightly different protocol. Like the
 ;;   top-level protocol, the resulting set of linklets includes on
 ;;   linklet per phase plus three linklets for housing potentially
-;;   marshaled data. An additional linklet reports metadata about the
+;;   serialized data. An additional linklet reports metadata about the
 ;;   modules, such as its requires and provides. An individual module
 ;;   is represented by a linklet bundle, and a module is compiled with
 ;;   submodules through nested linklet directories.
 ;;
 ;;   Besides the extra metadata module, the handling of syntax-object
-;;   unmarshaling is a little different for modules than top-level
+;;   deserialization is a little different for modules than top-level
 ;;   forms, because syntax-literal unmarshaling is lazy for modules.
 ;;
 ;; Whichever protocol is used, the result is wrapped in a

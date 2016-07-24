@@ -13,6 +13,7 @@
          "../compile/multi-top.rkt"
          "../compile/namespace-scope.rkt"
          "top-level-instance.rkt"
+         "multi-top.rkt"
          "protect.rkt")
 
 ;; Run a representation of top-level code as produced by `compile-top`;
@@ -33,27 +34,31 @@
       (eval-multiple-tops c ns eval-compiled #:as-tail? as-tail?)))
 
 (define (eval-multiple-tops c ns eval-compiled #:as-tail? as-tail?)
+  (define (eval-compiled-parts l)
+    (let loop ([l l])
+      (cond
+       [(null? l) void]
+       [(null? (cdr l))
+        ;; Tail call:
+        (eval-compiled (car l) ns #:as-tail? as-tail?)]
+       [else
+        (eval-compiled (car l) ns #:as-tail? #f)
+        (loop (cdr l))])))
+  
   (cond
    [(compiled-in-memory? c)
-    (let loop ([cims (compiled-in-memory-pre-compiled-in-memorys c)])
-      (cond
-       [(null? cims) void]
-       [(null? (cdr cims))
-        ;; Tail call:
-        (eval-compiled (car cims) ns #:as-tail? as-tail?)]
-       [else
-        (eval-compiled (car cims) ns #:as-tail? #f)
-        (loop (cdr cims))]))]
+    (eval-compiled-parts (compiled-in-memory-pre-compiled-in-memorys c))]
+   [(hash-ref (linklet-directory->hash c) 'data #f)
+    => (lambda (data-ld)
+         (eval-compiled-parts
+          (create-compiled-in-memorys-using-shared-data
+           (compiled-top->compiled-tops c)
+           ;; extract data linklet:
+           (hash-ref (linklet-bundle->hash (hash-ref (linklet-directory->hash data-ld) #f)) 0)
+           ns)))]
    [else
-    (let loop ([lds (compiled-top->compiled-tops c)])
-      (cond
-       [(null? lds) (void)]
-       [(null? (cdr lds))
-        ;; Tail call:
-        (eval-compiled (car lds) ns #:as-tail? as-tail?)]
-       [else
-        (eval-compiled (car lds) ns #:as-tail? #f)
-        (loop (cdr lds))]))]))
+    ;; No shared data? Strage, but we can carry on, anyway:
+    (eval-compiled-parts (compiled-top->compiled-tops c))]))
 
 (define (eval-one-top c ns
                       #:single-expression? [single-expression? #f]
@@ -166,10 +171,11 @@
       orig-syntax-literalss]
      [else
       (for/vector #:length (vector-length orig-syntax-literalss) ([v (in-vector orig-syntax-literalss)])
-                  (for/vector #:length (vector-length v) ([s (in-vector v)])
-                              (swap-top-level-scopes s
-                                                     (compiled-in-memory-namespace-scopes cim)
-                                                     to-ns)))]))
+                  (and v
+                       (for/vector #:length (vector-length v) ([s (in-vector v)])
+                                   (swap-top-level-scopes s
+                                                          (compiled-in-memory-namespace-scopes cim)
+                                                          to-ns))))]))
   ;; Create the instance:
   (make-instance 'link #f
                  mpi-vector-id (compiled-in-memory-mpis cim)

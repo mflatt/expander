@@ -244,11 +244,7 @@
       (values phase (link-info-link-module-uses li))))
   
   (define phase-to-link-module-uses-expr
-    `(hasheqv ,@(apply
-                 append
-                 (for/list ([phase (in-list phases-in-order)])
-                   (list phase `(list ,@(serialize-module-uses (hash-ref phase-to-link-module-uses phase)
-                                                               mpis)))))))
+    (serialize-phase-to-link-module-uses phase-to-link-module-uses mpis))
 
   (define phase-to-link-extra-inspectorsss
     (for/hash ([(phase li) (in-hash phase-to-link-info)])

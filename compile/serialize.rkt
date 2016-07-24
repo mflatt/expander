@@ -68,6 +68,7 @@
 
 (provide make-module-path-index-table
          add-module-path-index!
+         add-module-path-index!/pos
          generate-module-path-index-deserialize
          mpis-as-vector
          mpi-vector-id
@@ -77,7 +78,8 @@
          deserialize-instance
          deserialize-imports
          
-         serialize-module-uses)
+         serialize-module-uses
+         serialize-phase-to-link-module-uses)
 
 ;; ----------------------------------------
 ;; Module path index serialization
@@ -203,6 +205,14 @@
            (symbol-interned? v))
       (char? v)
       (keyword? v)))
+
+(define (serialize-phase-to-link-module-uses phase-to-link-module-uses mpis)
+  (define phases-in-order (sort (hash-keys phase-to-link-module-uses) <))
+  `(hasheqv ,@(apply
+               append
+               (for/list ([phase (in-list phases-in-order)])
+                 (list phase `(list ,@(serialize-module-uses (hash-ref phase-to-link-module-uses phase)
+                                                             mpis)))))))
 
 ;; ----------------------------------------
 ;; Serialization for everything else
