@@ -156,7 +156,18 @@
         [else
          (dispatch-core-form t (make-explicit sym s disarmed-s) ctx)])]
       [else
-       (raise-syntax-implicit-error s sym trigger-id ctx)])])))
+       (define tl-id
+         (and (eq? sym '#%top)
+              (root-expand-context-top-level-bind-scope ctx)
+              (add-scope s (root-expand-context-top-level-bind-scope ctx))))
+       (cond
+        [(and tl-id (resolve tl-id (expand-context-phase ctx)))
+         ;; Special case: the identifier is not bound and its scopes don't
+         ;; have a binding for `#%top`, but it's bound temporaily for compilation;
+         ;; treat the identifier as a variable reference
+         tl-id]
+        [else
+         (raise-syntax-implicit-error s sym trigger-id ctx)])])])))
 
 ;; An expression that is already fully expanded via `local-expand-expression`
 (define (expand-already-expanded s ctx)
