@@ -48,11 +48,14 @@
                       (extract-submodules ld 'post)
                       null))
     (define (map-construct-compiled-in-memory l vec-pos)
-      (for/list ([sub-ld (in-list l)])
+      (for/list ([sub-ld (in-list l)]
+                 [mpi-vector-tree (in-list (vector-ref mpi-vector-tree vec-pos))]
+                 [phase-to-link-modules-tree (in-list (vector-ref phase-to-link-modules-tree vec-pos))]
+                 [syntax-literalss-tree (in-list (vector-ref syntax-literalss-tree vec-pos))])
         (construct-compiled-in-memory sub-ld
-                                      (vector-ref mpi-vector-tree vec-pos)
-                                      (vector-ref phase-to-link-modules-tree vec-pos)
-                                      (vector-ref syntax-literalss-tree vec-pos))))
+                                      mpi-vector-tree
+                                      phase-to-link-modules-tree
+                                      syntax-literalss-tree)))
     (compiled-in-memory ld
                         (vector-ref phase-to-link-modules-vector (vector-ref phase-to-link-modules-tree 0))
                         #f ; compile-time-inspector
@@ -80,6 +83,9 @@
     null]
    [else
     (define h (linklet-directory->hash ld))
-    (define names (hash-ref h names-key null))
+    (define mod (hash-ref h #f #f))
+    (unless mod (error "missing main module"))
+    (define mh (linklet-bundle->hash mod))
+    (define names (hash-ref mh names-key null))
     (for/list ([name (in-list names)])
       (hash-ref h name (lambda () (error "missing submodule declaration:" name))))]))

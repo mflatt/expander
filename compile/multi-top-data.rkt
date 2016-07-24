@@ -89,5 +89,5 @@
   (let loop ([cims cims])
     (for/list ([cim (in-list cims)])
       (vector (proc cim)
-              (map loop (compiled-in-memory-pre-compiled-in-memorys cim))
-              (map loop (compiled-in-memory-post-compiled-in-memorys cim))))))
+              (loop (compiled-in-memory-pre-compiled-in-memorys cim))
+              (loop (compiled-in-memory-post-compiled-in-memorys cim))))))
