@@ -125,7 +125,8 @@
   (copy-runtime-module! name
                         #:namespace ns
                         #:protected? (or (eq? name '#%foreign)
-                                         (eq? name '#%futures))))
+                                         (eq? name '#%futures)
+                                         (eq? name '#%unsafe))))
 (declare-reexporting-module! '#%builtin (list* '#%place-struct
                                                '#%utils
                                                '#%boot

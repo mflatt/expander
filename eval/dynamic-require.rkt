@@ -70,16 +70,17 @@
       (define ex-sym (module-binding-sym binding))
       (define ex-phase (module-binding-phase binding))
       (namespace-module-instantiate! ns mpi phase #:run-phase phase)
-      (define m-ns (namespace->module-namespace ns
-                                                (module-path-index-resolve
-                                                 (module-path-index-shift
-                                                  (module-binding-module binding)
-                                                  (module-self m)
-                                                  mpi))
-                                                (phase- phase ex-phase)
+      (define ex-mod-name (module-path-index-resolve
+                           (module-path-index-shift
+                            (module-binding-module binding)
+                            (module-self m)
+                            mpi)))
+      (define m-ns (namespace->module-namespace ns ex-mod-name (phase- phase ex-phase)
                                                 #:complain-on-failure? #t))
       ;; Before continuing, make sure that we're allowed to access the binding
-      (when (and (provided-as-protected? binding/p)
+      (define mi (namespace->module ns ex-mod-name))
+      (define access (or (module-access m) (module-compute-access! m)))
+      (when (and (not (eq? 'provided (hash-ref access ex-sym #f)))
                  (and (not (inspector-superior? (current-code-inspector) (namespace-inspector m-ns)))
                       (not (and (module-binding-extra-inspector binding)
                                 (inspector-superior? (module-binding-extra-inspector binding)
