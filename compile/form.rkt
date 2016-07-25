@@ -2,6 +2,7 @@
 (require "../syntax/syntax.rkt"
          "../syntax/scope.rkt"
          "../syntax/taint.rkt"
+         "../syntax/property.rkt"
          "../syntax/match.rkt"
          "../common/phase.rkt"
          "../namespace/core.rkt"
@@ -12,13 +13,15 @@
          "serialize.rkt"
          "built-in-symbol.rkt"
          "../host/linklet.rkt"
+         "../host/correlate.rkt"
          "context.rkt"
          "header.rkt"
          "reserved-symbol.rkt"
          "id-to-symbol.rkt"
          "instance.rkt"
          "namespace-scope.rkt"
-         "expr.rkt")
+         "expr.rkt"
+         "correlate.rkt")
 
 (provide compile-forms
 
@@ -28,6 +31,8 @@
 ;; linklet directory to cover all phases covered by the forms
 (define (compile-forms bodys cctx mpis
                        #:body-imports body-imports
+                       #:body-suffix-forms [body-suffix-forms null]
+                       #:force-phases [force-phases null]
                        #:encoded-root-expand-ctx-box [encoded-root-expand-ctx-box #f] ; encoded root context, if any
                        #:root-ctx-only-if-syntax? [root-ctx-only-if-syntax? #f]
                        #:compiled-expression-callback [compiled-expression-callback void]
@@ -51,7 +56,12 @@
         (let ([header (make-header mpis)])
           (hash-set! phase-to-header phase header)
           header)))
-  
+
+  ;; Ensure that some requested phases are realized:
+  (for ([phase (in-list force-phases)])
+    (find-or-create-header! phase)
+    (add-body! phase '(void)))
+
   ;; Keep track of whether any `define-syntaxes` appeared at any phase
   (define saw-define-syntaxes? #f)
   
@@ -116,7 +126,9 @@
          (definition-callback)
          (compiled-expression-callback rhs (length def-syms) phase (as-required? header))
          ;; Generate a definition:
-         (add-body! phase `(define-values ,def-syms ,rhs))
+         (add-body! phase (propagate-inline-property
+                           (correlate* body `(define-values ,def-syms ,rhs))
+                           body))
          (unless (or (compile-context-module-self cctx)
                      (null? ids))
            ;; Not in a module; ensure that the defined names are
@@ -240,7 +252,8 @@
                (define def-sym (hash-ref binding-sym-to-define-sym binding-sym))
                `[,def-sym ,binding-sym]))
           ;; body
-          ,@(reverse bodys))))))
+          ,@(reverse bodys)
+          ,@body-suffix-forms)))))
   
   (define phase-to-link-module-uses
     (for/hash ([(phase li) (in-hash phase-to-link-info)])
@@ -329,3 +342,11 @@
        ;; Provoke the wrong-number-of-arguments error:
        (let-values ([,gen-syms (apply values args)])
          (void))])))
+
+;; ----------------------------------------
+
+(define (propagate-inline-property e orig-s)
+  (define v (syntax-property orig-s 'compiler-hint:cross-module-inline))
+  (if v
+      (correlated-property e 'compiler-hint:cross-module-inline v)
+      e))

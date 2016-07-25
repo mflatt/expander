@@ -200,7 +200,7 @@
         [(define-values)
          (define-correlated-match m e '(define-values (id ...) rhs))
          (define ids (m 'id))
-         (define tmps (map gensym ids))
+         (define tmps (map gensym (map correlated-e ids)))
          `(define-values ,(for/list ([id (in-list ids)]
                                      #:when (not (set-member? box-syms (correlated-e id))))
                             id)

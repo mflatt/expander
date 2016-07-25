@@ -32,6 +32,11 @@
          (and (for/and ([e (in-list (m 'e))])
                 (not (any-side-effects? e 1 required-reference? #:locals locals)))
               (length (m 'e)))]
+        [(void)
+         (define-correlated-match m e '(_ e ...))
+         (and (for/and ([e (in-list (m 'e))])
+                (not (any-side-effects? e 1 required-reference? #:locals locals)))
+              1)]
         [(begin)
          (define-correlated-match m e '(_ e ...))
          (let bloop ([es (m 'e)])

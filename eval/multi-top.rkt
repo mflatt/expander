@@ -63,7 +63,8 @@
                         (for/vector #:length (vector-length mpi-pos-vec) ([pos (in-vector mpi-pos-vec)])
                                     (vector-ref mpi-vector pos))
                         (for/vector #:length (cdr syntax-literals-spec) ([i (in-range (cdr syntax-literals-spec))])
-                                    (vector-ref syntax-literalss (+ (car syntax-literals-spec) i)))
+                                    (and syntax-literalss
+                                         (vector-ref syntax-literalss (+ (car syntax-literals-spec) i))))
                         (map-construct-compiled-in-memory pres 1)
                         (map-construct-compiled-in-memory posts 2)
                         namespace-scopes

@@ -92,6 +92,8 @@
                    #:body-imports `([,syntax-literalss-id
                                      ,get-syntax-literal!-id]
                                     [,set-transformer!-id])
+                   #:body-suffix-forms '((void)) ; otherwise, compiler always preserves last form
+                   #:force-phases '(0) ; minor hack for more consistent compilation
                    #:encoded-root-expand-ctx-box encoded-root-expand-ctx-box
                    #:root-ctx-only-if-syntax? body-context-simple?
                    #:compiled-expression-callback check-side-effects!
