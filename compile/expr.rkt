@@ -153,8 +153,20 @@
   `(,gen-formals ,(compile body cctx #f)))
 
 (define (add-lambda-properties s inferred-name orig-s)
-  (define name (or inferred-name
-                   (syntax-property orig-s inferred-name)))
+  ;; Allow pairs formed by origin tracking to provide the
+  ;; same name multiple times:
+  (define (simplify-name v)
+    (cond
+     [(pair? v)
+      (define n1 (simplify-name (car v)))
+      (define n2 (simplify-name (cdr v)))
+      (if (eq? n1 n2) n1 v)]
+     [else v]))
+  ;; Get either a declared 'inferred-name or one accumulated by the compiler
+  (define name (or (let ([v (simplify-name (syntax-property orig-s 'inferred-name))])
+                     (and (or (symbol? v) (syntax? v) (void? v))
+                          v))
+                   inferred-name))
   (define named-s (if name
                       (correlated-property s
                                            'inferred-name
