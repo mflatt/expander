@@ -45,6 +45,7 @@
   ;; definitions in the definition context
   (define body-ctx (struct-copy expand-context ctx
                                 [context (list (make-liberal-define-context))]
+                                [name #f]
                                 [only-immediate? #t]
                                 [def-ctx-scopes def-ctx-scopes]
                                 [post-expansion-scope #:parent root-expand-context inside-sc]
@@ -62,6 +63,8 @@
                                   (add-scope (root-expand-context-all-scopes-stx ctx)
                                              outside-sc)
                                   inside-sc)]))
+  (define name (expand-context-name ctx))
+  ;; Loop through the body forms for partial expansion
   (let loop ([body-ctx body-ctx]
              [bodys init-bodys]
              [done-bodys null] ; accumulated expressions
@@ -82,11 +85,15 @@
                                (reverse done-bodys)
                                #:source s #:disarmed-source disarmed-s
                                #:stratified? stratified?
-                               #:track? track?))
+                               #:track? track?
+                               #:name name))
       (attach-disappeared-transformer-bindings result-s (reverse trans-idss))]
      [else
       (log-expand body-ctx 'next)
-      (define exp-body (expand (syntax-disarm (car bodys)) body-ctx))
+      (define exp-body (expand (syntax-disarm (car bodys)) (if (and name (null? (cdr bodys)))
+                                                               (struct-copy expand-context body-ctx
+                                                                            [name name])
+                                                               body-ctx)))
       (define disarmed-exp-body (syntax-disarm exp-body))
       (case (core-form-sym disarmed-exp-body phase)
         [(begin)
@@ -207,7 +214,8 @@
                                done-bodys
                                #:source s #:disarmed-source disarmed-s
                                #:stratified? stratified?
-                               #:track? track?)
+                               #:track? track?
+                               #:name name)
   (when (null? done-bodys)
     (raise-syntax-error #f "no expression after a sequence of internal definitions" s))
   ;; To reference core forms at the current expansion phase:
@@ -230,6 +238,7 @@
     (cond
      [(null? (cdr done-bodys))
       (define last-ctx (struct-copy expand-context finish-ctx
+                                    [name name]
                                     [reference-records (cdr (expand-context-reference-records finish-ctx))]))
       (define exp-body (expand (car done-bodys) last-ctx))
       (if track?
@@ -239,10 +248,15 @@
           exp-body)]
      [else
       (unless block->list? (log-expand body-ctx 'prim-begin))
+      (define last-i (sub1 (length done-bodys)))
       (log-expand body-ctx 'enter-list exp-bodys)
-      (define exp-bodys (for/list ([body (in-list done-bodys)])
+      (define exp-bodys (for/list ([body (in-list done-bodys)]
+                                   [i (in-naturals)])
                           (log-expand body-ctx 'next)
-                          (expand body finish-ctx)))
+                          (expand body (if (and name (= i last-i))
+                                           (struct-copy expand-context finish-ctx
+                                                        [name name])
+                                           finish-ctx))))
       (log-expand body-ctx 'exit-list exp-bodys)
       (rebuild
        #:track? track?
