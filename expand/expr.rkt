@@ -18,6 +18,7 @@
          "context.rkt"
          "allowed-context.rkt"
          "main.rkt"
+         "body.rkt"
          "set-bang-trans.rkt"
          "rename-trans.rkt"
          "reference-record.rkt"
