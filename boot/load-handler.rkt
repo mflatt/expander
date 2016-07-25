@@ -28,7 +28,7 @@
                             expected-mod))
     (cond
      [expected-mod
-      ((call-with-input-file*
+      ((call-with-input-module-file
         path
         (lambda (i)
           (unless (regexp-match? #rx"[.]zo$" path)
@@ -208,3 +208,10 @@
       (parameterize ([read-on-demand-source (path->complete-path path)])
         (with-module-reading-parameterization thunk))
       (with-module-reading-parameterization thunk)))
+
+(define (call-with-input-module-file path proc)
+  (define i #f)
+  (dynamic-wind
+   (lambda () (set! i (open-input-file path #:for-module? #t)))
+   (lambda () (proc i))
+   (lambda () (close-input-port i))))
