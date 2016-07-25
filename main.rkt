@@ -39,6 +39,7 @@
          
          compile-to-linklets
          
+         syntax?
          read-syntax
          datum->syntax syntax->datum
          identifier-binding
