@@ -66,7 +66,8 @@
                                     (vector-ref syntax-literalss (+ (car syntax-literals-spec) i)))
                         (map-construct-compiled-in-memory pres 1)
                         (map-construct-compiled-in-memory posts 2)
-                        namespace-scopes))
+                        namespace-scopes
+                        #f))
   
   (map construct-compiled-in-memory
        tops

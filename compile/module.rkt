@@ -72,7 +72,7 @@
   ;; Callback to track phases that have side effects
   (define side-effects (make-hasheqv))
   (define (check-side-effects! e ; compiled expression
-                               expected-results ; number of expected reuslts, or #f if any number is ok
+                               expected-results ; number of expected results, or #f if any number is ok
                                phase
                                required-reference?)
     (unless (hash-ref side-effects phase #f)
@@ -277,7 +277,8 @@
                         (syntax-literals-as-vectors all-syntax-literalss 0)
                         (map cdr pre-submodules)
                         (map cdr post-submodules)
-                        #f)])) ; no namespace scopes
+                        #f     ; no namespace scopes
+                        #f)])) ; not purely functional, since it declares a module
 
 ;; ----------------------------------------
 

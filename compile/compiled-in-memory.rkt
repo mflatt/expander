@@ -28,7 +28,9 @@
                             post-compiled-in-memorys
                             ;; Namespace scopes from top-level compilation, so syntax objects
                             ;; can be adjusted for a target namespace:
-                            namespace-scopes)
+                            namespace-scopes
+                            ;; To track whether a form in a top-level sequence can be discarded:
+                            purely-functional?)
         #:property prop:custom-write
         (lambda (cim port mode)
           (write (compiled-in-memory-linklet-directory cim) port)))

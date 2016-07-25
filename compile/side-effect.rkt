@@ -32,6 +32,19 @@
          (and (for/and ([e (in-list (m 'e))])
                 (not (any-side-effects? e 1 required-reference? #:locals locals)))
               (length (m 'e)))]
+        [(begin)
+         (define-correlated-match m e '(_ e ...))
+         (let bloop ([es (m 'e)])
+           (cond
+            [(null? es) #f]
+            [(null? (cdr es)) (loop (car es) locals)]
+            [else (and (not (any-side-effects? (car es) #f required-reference? #:locals locals))
+                       (bloop (cdr es)))]))]
+        [(begin0)
+         (define-correlated-match m e '(_ e0 e ...))
+         (and (for/and ([e (in-list (m 'e))])
+                (not (any-side-effects? e #f required-reference? #:locals locals)))
+              (loop (m 'e0) locals))]
         [(make-struct-type)
          (and (ok-make-struct-type? e required-reference?)
               5)]

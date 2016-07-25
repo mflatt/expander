@@ -15,7 +15,8 @@
          "expr.rkt"
          "form.rkt"
          "multi-top.rkt"
-         "namespace-scope.rkt")
+         "namespace-scope.rkt"
+         "side-effect.rkt")
 
 (provide compile-single
          compile-top)
@@ -41,6 +42,7 @@
   (define phase (compile-context-phase cctx))
 
   (define mpis (make-module-path-index-table))
+  (define purely-functional? #t)
 
   ;; Compile the body forms, similar to compiling the body of a module
   (define-values (body-linklets
@@ -62,7 +64,15 @@
                                          ,syntax-literalss-id]
                                         ,instance-imports))
                    #:to-source? to-source?
-                   #:other-form-callback compile-top-level-require))
+                   #:definition-callback (lambda () (set! purely-functional? #f))
+                   #:compiled-expression-callback
+                   (lambda (e expected-results phase required-reference?)
+                     (when (and purely-functional?
+                                (any-side-effects? e expected-results required-reference?))
+                       (set! purely-functional? #f)))
+                   #:other-form-callback (lambda (s cctx)
+                                           (set! purely-functional? #f)
+                                           (compile-top-level-require s cctx))))
 
   (define (add-metadata ht)
     (let* ([ht (hash-set ht 'original-phase phase)]
@@ -121,7 +131,8 @@
                         (syntax-literals-as-vectors syntax-literalss phase)
                         null
                         null
-                        (extract-namespace-scopes (compile-context-namespace cctx)))]))
+                        (extract-namespace-scopes (compile-context-namespace cctx))
+                        purely-functional?)]))
 
 ;; Callback for compiling a sequence of expressions: handle `require`
 ;; (which is handled separately for modules)

@@ -155,30 +155,35 @@
 ;; depend on that order in any way.
 (define (generate-eager-syntax-literals! syntax-literals-boxes mpis base-phase self ns)
   (define syntax-literalss (map unbox syntax-literals-boxes))
-  `(let-values ([(ns+stxss) ,(generate-deserialize (cons
-                                                    ;; Prefix with namespace scope:
-                                                    (encode-namespace-scopes ns)
-                                                    (append
-                                                     ;; Pad result vector get to the base phase:
-                                                     (for/list ([i (in-range base-phase)]) null)
-                                                     ;; Reverse syntax literals per phase
-                                                     (map reverse syntax-literalss)))
-                                                   mpis)])
-    (let-values ([(ns-scope-s) (car ns+stxss)])
-      (list->vector
-       (map (lambda (stxs)
-              (list->vector
-               (map (lambda (stx)
-                      (swap-top-level-scopes
-                       (syntax-module-path-index-shift
-                        (syntax-shift-phase-level
-                         stx
-                         (- ,base-phase ,dest-phase-id))
-                        ,(add-module-path-index! mpis self)
-                        ,self-id)
-                       ns-scope-s ,ns-id))
-                    stxs)))
-            (cdr ns+stxss))))))
+  (cond
+   [(andmap null? syntax-literalss)
+    ;; Avoid serializing unneeded namespace scope:
+    #f]
+   [else
+    `(let-values ([(ns+stxss) ,(generate-deserialize (cons
+                                                      ;; Prefix with namespace scope:
+                                                      (encode-namespace-scopes ns)
+                                                      (append
+                                                       ;; Pad result vector get to the base phase:
+                                                       (for/list ([i (in-range base-phase)]) null)
+                                                       ;; Reverse syntax literals per phase
+                                                       (map reverse syntax-literalss)))
+                                                     mpis)])
+      (let-values ([(ns-scope-s) (car ns+stxss)])
+        (list->vector
+         (map (lambda (stxs)
+                (list->vector
+                 (map (lambda (stx)
+                        (swap-top-level-scopes
+                         (syntax-module-path-index-shift
+                          (syntax-shift-phase-level
+                           stx
+                           (- ,base-phase ,dest-phase-id))
+                          ,(add-module-path-index! mpis self)
+                          ,self-id)
+                         ns-scope-s ,ns-id))
+                      stxs)))
+              (cdr ns+stxss)))))]))
 
 (define (generate-eager-syntax-literal-lookup phase pos)
   `(vector-ref (vector-ref ,syntax-literalss-id ',phase) ',pos))

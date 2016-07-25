@@ -17,38 +17,44 @@
 ;; is preserved. (By doing that only on request for the very
 ;; top of a tree, we repeat work only twice and avoid non-linear
 ;; behavior.)
-(define (compiled-tops->compiled-top cims
+(define (compiled-tops->compiled-top all-cims
                                      #:to-source? [to-source? #f]
                                      #:merge-serialization? [merge-serialization? #f]
                                      #:namespace [ns #f]) ; need for `merge-serialization?`
-  (define sequence-ht
-     (for/hasheq ([cim (in-list cims)]
-                  [i (in-naturals)])
-       (values (string->symbol (number->string i))
-               ((if to-source? values compiled-in-memory-linklet-directory)
-                cim))))
-  (define ht (if merge-serialization?
-                 (hash-set sequence-ht
-                           'data
-                           (hash->linklet-directory
-                            (hasheq #f
-                                    (hash->linklet-bundle
-                                     (hasheq
-                                      0
-                                      (build-shared-data-linklet cims ns))))))
-                 sequence-ht))
+  (define cims (remove-nontail-purely-functional all-cims))
   (cond
-   [to-source? ht]
+   [(= 1 (length cims))
+    (car cims)]
    [else
-    (compiled-in-memory (hash->linklet-directory ht)
-                        #hasheqv()
-                        #f
-                        #hasheqv()
-                        #() ; mpis
-                        #() ; syntax-literalss
-                        cims
-                        null
-                        #f)]))
+    (define sequence-ht
+      (for/hasheq ([cim (in-list cims)]
+                   [i (in-naturals)])
+        (values (string->symbol (number->string i))
+                ((if to-source? values compiled-in-memory-linklet-directory)
+                 cim))))
+    (define ht (if merge-serialization?
+                   (hash-set sequence-ht
+                             'data
+                             (hash->linklet-directory
+                              (hasheq #f
+                                      (hash->linklet-bundle
+                                       (hasheq
+                                        0
+                                        (build-shared-data-linklet cims ns))))))
+                   sequence-ht))
+    (cond
+     [to-source? ht]
+     [else
+      (compiled-in-memory (hash->linklet-directory ht)
+                          #hasheqv()
+                          #f
+                          #hasheqv()
+                          #() ; mpis
+                          #() ; syntax-literalss
+                          cims
+                          null
+                          #f
+                          #f)])]))
 
 ;; Decode a sequence of compiled top-level forms by unpacking the
 ;; linklet directory into a list of linklet directories
@@ -59,3 +65,15 @@
               #:when top)
     top))
 
+;; ----------------------------------------
+
+(define (remove-nontail-purely-functional cims)
+  (let loop ([cims cims])
+    (cond
+     [(null? cims) null]
+     [(null? (cdr cims)) cims]
+     [(and (compiled-in-memory? (car cims))
+           (compiled-in-memory-purely-functional? (car cims)))
+      (loop (cdr cims))]
+     [else
+      (cons (car cims) (cdr cims))])))

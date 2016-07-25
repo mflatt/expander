@@ -31,6 +31,7 @@
                        #:encoded-root-expand-ctx-box [encoded-root-expand-ctx-box #f] ; encoded root context, if any
                        #:root-ctx-only-if-syntax? [root-ctx-only-if-syntax? #f]
                        #:compiled-expression-callback [compiled-expression-callback void]
+                       #:definition-callback [definition-callback void]
                        #:other-form-callback [other-form-callback void]
                        #:to-source? [to-source? #f])
   (define phase (compile-context-phase cctx))
@@ -112,6 +113,7 @@
                                            [phase phase]
                                            [header header])
                               (and (= (length ids) 1) (car ids))))
+         (definition-callback)
          (compiled-expression-callback rhs (length def-syms) phase (as-required? header))
          ;; Generate a definition:
          (add-body! phase `(define-values ,def-syms ,rhs))
@@ -143,6 +145,7 @@
                               (struct-copy compile-context cctx
                                            [phase (add1 phase)]
                                            [header next-header])))
+         (definition-callback)
          (compiled-expression-callback rhs (length gen-syms) (add1 phase) (as-required? header))
          (define transformer-set!s (for/list ([binding-sym (in-list binding-syms)]
                                               [gen-sym (in-list gen-syms)])
