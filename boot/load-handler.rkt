@@ -99,7 +99,10 @@
              (parameterize ([read-accept-compiled #t]
                             [read-accept-reader #t]
                             [read-accept-lang #t])
-               (read-syntax (object-name i) i)))
+               (if (load-on-demand-enabled)
+                   (parameterize ([read-on-demand-source (path->complete-path path)])
+                     (read-syntax (object-name i) i))
+                   (read-syntax (object-name i) i))))
            (if (eof-object? s)
                (apply values vals)
                (loop
