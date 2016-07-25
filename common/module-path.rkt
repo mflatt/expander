@@ -131,6 +131,10 @@
             (define l (let loop ([r r])
                         (cond
                          [(not r) null]
+                         [(resolved-module-path? r)
+                          (list
+                           "+"
+                           (format "~a" r))]
                          [(module-path-index-path r)
                           (cons (format "~.s" (module-path-index-path r))
                                 (loop (module-path-index-base r)))]
