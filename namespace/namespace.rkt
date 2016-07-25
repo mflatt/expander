@@ -114,7 +114,13 @@
     (hash-set! (namespace-phase-to-namespace ns) phase ns))
   ns)
 
-(define current-namespace (make-parameter (make-namespace)))
+(define current-namespace (make-parameter (make-namespace)
+                                          (lambda (v)
+                                            (unless (namespace? v)
+                                              (raise-argument-error 'current-namespace
+                                                                    "namespace?"
+                                                                    v))
+                                            v)))
 
 (define (namespace-get-root-expand-ctx ns)
   (force (unbox (namespace-root-expand-ctx ns))))
