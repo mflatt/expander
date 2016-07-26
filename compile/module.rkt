@@ -30,7 +30,8 @@
                         #:with-submodules? [with-submodules? #t]
                         #:as-submodule? [as-submodule? #f]
                         #:serializable? [serializable? with-submodules?]
-                        #:to-source? [to-source? #f])
+                        #:to-source? [to-source? #f]
+                        #:modules-being-compiled [modules-being-compiled (make-hasheq)])
   ;; Some information about a module is commuicated here through syntax
   ;; propertoes, such as 'module-requires
   (define-match m-m (syntax-disarm s) '(module name initial-require mb))
@@ -79,6 +80,15 @@
       (when (any-side-effects? e expected-results required-reference?)
         (hash-set! side-effects phase #t))))
 
+  ;; Compile submodules; each list is (cons linklet-directory-key compiled-in-memory)
+  (define pre-submodules (compile-submodules 'module
+                                             #:bodys bodys
+                                             #:with-submodules? with-submodules?
+                                             #:serializable? serializable?
+                                             #:to-source? to-source?
+                                             #:cctx body-cctx
+                                             #:modules-being-compiled modules-being-compiled))
+
   ;; Compile the sequence of body forms:
   (define-values (body-linklets
                   min-phase
@@ -109,7 +119,15 @@
                                                   (set-box! encoded-root-expand-ctx-box #t)))
                                               #f]
                                              [else #f]))
+                   #:get-module-linklet (lambda (mod-name phase)
+                                          (define ht (hash-ref modules-being-compiled mod-name #f))
+                                          (and ht
+                                               (hash-ref ht phase #f)))
                    #:to-source? to-source?))
+  
+  ;; Record this module's linklets for cross-module inlining among (sub)modules
+  ;; that are compiled together
+  (hash-set! modules-being-compiled (module-path-index-resolve self) body-linklets)
   
   (define all-syntax-literalss
     (if root-ctx-syntax-literals
@@ -117,18 +135,13 @@
         syntax-literalss))
   
   ;; Compile submodules; each list is (cons linklet-directory-key compiled-in-memory)
-  (define pre-submodules (compile-submodules 'module
-                                             #:bodys bodys
-                                             #:with-submodules? with-submodules?
-                                             #:serializable? serializable?
-                                             #:to-source? to-source?
-                                             #:cctx body-cctx))
   (define post-submodules (compile-submodules 'module*
                                               #:bodys bodys
                                               #:with-submodules? with-submodules?
                                               #:serializable? serializable?
                                               #:to-source? to-source?
-                                              #:cctx body-cctx))
+                                              #:cctx body-cctx
+                                              #:modules-being-compiled modules-being-compiled))
 
   ;; Generate module-declaration info, which includes linking
   ;; information for each phase
@@ -146,7 +159,7 @@
   ;; Assemble the declaration linking unit, which is instanted
   ;; once for a module declaration and shared among instances
   (define declaration-linklet
-    ((if to-source? values compile-linklet)
+    ((if to-source? values (lambda (s) (compile-linklet s 'decl)))
      `(linklet
        ;; imports
        (,deserialize-imports
@@ -171,7 +184,7 @@
   ;; `module->namespace` can have the same scopes as literal syntax
   ;; objects in the module.
   (define syntax-literals-linklet
-    ((if to-source? values compile-linklet)
+    ((if to-source? values (lambda (s) (compile-linklet s 'syntax-literals)))
      `(linklet
        ;; imports
        (,deserialize-imports
@@ -206,7 +219,7 @@
   ;; indexes, such as required modules.
   (define syntax-literals-data-linklet
     (and serializable?
-         ((if to-source? values compile-linklet)
+         ((if to-source? values (lambda (s) (compile-linklet s 'syntax-literals-data)))
           `(linklet
             ;; imports
             (,deserialize-imports
@@ -226,7 +239,7 @@
   ;; across module instances.
   (define data-linklet
     (and serializable?
-         ((if to-source? values compile-linklet)
+         ((if to-source? values (lambda (s) (compile-linklet s 'data)))
           `(linklet
             ;; imports
             (,deserialize-imports)
@@ -291,7 +304,8 @@
                             #:with-submodules? with-submodules?
                             #:serializable? serializable?
                             #:to-source? to-source?
-                            #:cctx body-cctx)
+                            #:cctx body-cctx
+                            #:modules-being-compiled modules-being-compiled)
   (cond
    [(not with-submodules?)
     null]
@@ -316,7 +330,8 @@
                       (compile-module s-shifted body-cctx
                                       #:as-submodule? #t
                                       #:serializable? serializable?
-                                      #:to-source? to-source?))
+                                      #:to-source? to-source?
+                                      #:modules-being-compiled modules-being-compiled))
                 (loop (cdr bodys) phase))]
          [(eq? f 'begin-for-syntax)
           (define-match m body '(begin-for-syntax e ...))

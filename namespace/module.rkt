@@ -14,6 +14,7 @@
 (provide make-module-namespace
          raise-unknown-module-error
 
+         namespace->module-linklet
          namespace->module-instance
          namespace->module-namespace
          namespace-install-module-namespace!
@@ -59,6 +60,7 @@
                 language-info   ; #f or vector
                 min-phase-level ; phase-level
                 max-phase-level ; phase-level
+                phase-level-linklet ; phase-level -> linklet-or-false
                 prepare-instance  ; box namespace phase-shift bulk-binding-registry inspector -> any
                 instantiate-phase ; box namespace phase-shift phase-level bulk-binding-registry inspector -> any
                 primitive?      ; inline variable values in compiled code?
@@ -78,6 +80,7 @@
                      #:max-phase-level [max-phase-level 0]
                      #:instantiate-phase-callback instantiate-phase
                      #:prepare-instance-callback [prepare-instance void]
+                     #:phase-level-linklet-callback [phase-level-linklet-callback (lambda (phase-level) #f)]
                      #:language-info [language-info #f]
                      #:primitive? [primitive? #f]
                      #:predefined? [predefined? #f]
@@ -93,6 +96,7 @@
           #f ; access
           language-info
           min-phase-level max-phase-level
+          phase-level-linklet-callback
           prepare-instance
           instantiate-phase
           primitive?
@@ -213,6 +217,10 @@
   (raise-arguments-error who
                          "unknown module" 
                          "module name" mod-name))
+
+(define (namespace->module-linklet ns name phase-level)
+  (define m (namespace->module ns name))
+  (and m ((module-phase-level-linklet m) phase-level)))
 
 ;; ----------------------------------------
 

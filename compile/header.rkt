@@ -119,7 +119,7 @@
   (define syntax-literalss (map unbox syntax-literals-boxes))
   (cond
    [(andmap null? syntax-literalss)
-    null]
+    `((define-values (,deserialize-syntax-id) #f))]
    [else
     `((define-values (,deserialize-syntax-id)
         ;; Put deserialization under a `lambda` so that it's loaded

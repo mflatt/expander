@@ -283,7 +283,7 @@
 (define linklet-compile-to-s-expr (make-parameter #f))
 
 ;; Compile to a serializable form
-(define (compile-linklet c)
+(define (compile-linklet c [name #f] [get-import-linklet (lambda (pos) (values #f #f))])
   (cond
    [(linklet-compile-to-s-expr)
     (marshal (correlated->datum c))]

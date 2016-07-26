@@ -48,7 +48,12 @@
          deserialize-multi-scope
          deserialize-shifted-multi-scope
          
-         generalize-scope)
+         generalize-scope
+         
+         scope?
+         scope<?
+         shifted-multi-scope?
+         shifted-multi-scope<?)
 
 (module+ for-debug
   (provide (struct-out scope)
@@ -252,6 +257,16 @@
 
 (define (scope>? sc1 sc2)
   ((scope-id sc1) . > . (scope-id sc2)))
+(define (scope<? sc1 sc2)
+  ((scope-id sc1) . < . (scope-id sc2)))
+
+(define (shifted-multi-scope<? sms1 sms2)
+  (define ms1 (shifted-multi-scope-multi-scope sms1))
+  (define ms2 (shifted-multi-scope-multi-scope sms2))
+  (if (eq? ms1 ms2)
+      (phase<? (shifted-multi-scope-phase sms1)
+               (shifted-multi-scope-phase sms2))
+      ((multi-scope-id ms1) . < . (multi-scope-id ms2))))
 
 ;; Adding, removing, or flipping a scope is propagated
 ;; lazily to subforms

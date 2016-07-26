@@ -268,14 +268,14 @@
                 (add-frontier! (unbox v))))]
          [(hash? v)
           (if (immutable? v)
-              (for ([(k v) (in-hash v)])
+              (for ([k (in-list (sorted-hash-keys v))])
                 (loop k)
-                (loop v))
+                (loop (hash-ref v k)))
               (begin
                 (hash-set! mutables v (hash-count mutables))
-                (for ([(k v) (in-hash v)])
+                (for ([k (in-list (sorted-hash-keys v))])
                   (add-frontier! k)
-                  (add-frontier! v))))]
+                  (add-frontier! (hash-ref v k)))))]
          [(prefab-struct-key v)
           (for ([e (in-vector (struct->vector v) 1)])
             (loop e))]
@@ -366,10 +366,11 @@
           (quoted v)
           (cons 'vector-immutable (list->vector content)))]
      [(hash? v)
-      (define k-content (for/list ([k (in-hash-keys v)])
+      (define ks (sorted-hash-keys v))
+      (define k-content (for/list ([k (in-list ks)])
                           (ser k)))
-      (define v-content (for/list ([v (in-hash-values v)])
-                          (ser v)))
+      (define v-content (for/list ([k (in-list ks)])
+                          (ser (hash-ref v k))))
       (cond
        [(and (andmap quoted? k-content)
              (andmap quoted? v-content))
@@ -429,11 +430,13 @@
      [(vector? v) `(set-vector!
                     ,(list->vector
                       (for/list ([v (in-vector v)]) (ser v))))]
-     [(hash? v) `(hash-set!
-                  ,(list->vector
-                    (for/list ([k (in-hash-keys v)]) (ser k)))
-                  ,(list->vector
-                    (for/list ([v (in-hash-values v)]) (ser v))))]
+     [(hash? v)
+      (define ks (sorted-hash-keys v))
+      `(hash-set!
+        ,(list->vector
+          (for/list ([k (in-list ks)]) (ser k)))
+        ,(list->vector
+          (for/list ([k (in-list ks)]) (ser (hash-ref v k)))))]
      [else
       (error 'ser-shell-fill "unknown mutable: ~e" v)]))
   
@@ -478,6 +481,23 @@
   (if (or (number? v) (boolean? v) (symbol? v))
       v
       `(quote . ,v)))
+
+(define (sorted-hash-keys ht)
+  (define ks (hash-keys ht))
+  (cond
+   [(null? ks) ks]
+   [(null? (cdr ks)) ks]
+   [(andmap symbol? ks)
+    (sort ks symbol<?)]
+   [(andmap scope? ks)
+    (sort ks scope<?)]
+   [(andmap shifted-multi-scope? ks)
+    (sort ks shifted-multi-scope<?)]
+   [(andmap real? ks)
+    (sort ks <)]
+   [else
+    ;; (log-error "unable to sort hash keys ~s" ks)
+    ks]))
 
 ;; ----------------------------------------
 ;; Deserialization

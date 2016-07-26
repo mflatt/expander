@@ -7,6 +7,7 @@
          "../common/phase.rkt"
          "../namespace/core.rkt"
          "../namespace/namespace.rkt"
+         "../namespace/module.rkt"
          "../expand/root-expand-context.rkt"
          "../common/module-path.rkt"
          "module-use.rkt"
@@ -38,6 +39,7 @@
                        #:compiled-expression-callback [compiled-expression-callback void]
                        #:definition-callback [definition-callback void]
                        #:other-form-callback [other-form-callback void]
+                       #:get-module-linklet [get-module-linklet (lambda (mod-name p) #f)] ; to support submodules
                        #:to-source? [to-source? #f])
   (define phase (compile-context-phase cctx))
   (define self (compile-context-self cctx))
@@ -253,8 +255,22 @@
                `[,def-sym ,binding-sym]))
           ;; body
           ,@(reverse bodys)
-          ,@body-suffix-forms)))))
-  
+          ,@body-suffix-forms)
+        'module
+        ;; Support for cross-module optimization:
+        (lambda (pos) ; pos is an import position
+          (define num-preceding (length body-imports))
+          (if (pos . < . num-preceding)
+              (values #f #f)
+              (let ([mu (list-ref (link-info-link-module-uses li) (- pos num-preceding))])
+                (define mod-name (module-path-index-resolve (module-use-module mu)))
+                (values (or (get-module-linklet mod-name (module-use-phase mu))
+                            (namespace->module-linklet (compile-context-namespace cctx)
+                                                       mod-name
+                                                       (module-use-phase mu)))
+                        ;; For now, we don't chain further:
+                        (lambda (pos) (values #f #f))))))))))
+
   (define phase-to-link-module-uses
     (for/hash ([(phase li) (in-hash phase-to-link-info)])
       (values phase (link-info-link-module-uses li))))
