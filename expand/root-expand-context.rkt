@@ -41,7 +41,7 @@
                            (add-scopes empty-syntax module-scopes))
                        (box null)      ; use-site-scopes
                        (make-hasheqv)  ; defined-syms
-                       (gensym)        ; frame-id
+                       (string->uninterned-symbol "root-frame") ; frame-id
                        (box 0)         ; counter
                        (generate-lift-key)))
 
