@@ -283,24 +283,30 @@
 (define linklet-compile-to-s-expr (make-parameter #f))
 
 ;; Compile to a serializable form
-(define (compile-linklet c [name #f] [get-import-linklet (lambda (pos) (values #f #f))])
-  (cond
-   [(linklet-compile-to-s-expr)
-    (marshal (correlated->datum c))]
-   [else
-    (define plain-c (desugar-linklet c))
-    (parameterize ([current-namespace cu-namespace]
-                   [current-eval orig-eval]
-                   [current-compile orig-compile])
-      ;; Use a vector to list the exported variables
-      ;; with the compiled bytecode
-      (linklet (compile plain-c)
-               (marshal (extract-import-variables-from-expression c #:pairs? #f))
-               (marshal (extract-export-variables-from-expression c #:pairs? #f))))]))
+(define (compile-linklet c [name #f] [import-keys #f] [get-import (lambda (key) (values #f #f))])
+  (define l
+    (cond
+     [(linklet-compile-to-s-expr)
+      (marshal (correlated->datum c))]
+     [else
+      (define plain-c (desugar-linklet c))
+      (parameterize ([current-namespace cu-namespace]
+                     [current-eval orig-eval]
+                     [current-compile orig-compile])
+        ;; Use a vector to list the exported variables
+        ;; with the compiled bytecode
+        (linklet (compile plain-c)
+                 (marshal (extract-import-variables-from-expression c #:pairs? #f))
+                 (marshal (extract-export-variables-from-expression c #:pairs? #f))))]))
+  (if import-keys
+      (values l import-keys) ; no imports added or removed
+      l))
 
 ;; For re-optimizing:
-(define (recompile-linklet c)
-  c)
+(define (recompile-linklet linklet name [import-keys #f] [get-import (lambda (key) (values #f #f))])
+  (if import-keys
+      (values linklet import-keys)
+      linklet))
 
 ;; Intended for JIT preparation
 ;; (and we could compile to a function here)

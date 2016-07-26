@@ -234,15 +234,19 @@
       (values phase (link-info link-module-uses imports extra-inspectorsss def-decls))))
   
   ;; Generate the phase-specific linking units
-  (define body-linklets
+  (define body-linklets+module-uses
     (for/hasheq ([phase (in-list phases-in-order)])
       (define bodys (hash-ref phase-to-body phase))
       (define li (hash-ref phase-to-link-info phase))
       (define binding-sym-to-define-sym
         (header-binding-sym-to-define-sym (hash-ref phase-to-header phase)))
-      (values
-       phase
-       ((if to-source? values compile-linklet)
+      (define module-uses (link-info-link-module-uses li))
+      ;; Compile the linklet with support for cross-module inlining, which
+      ;; means that the set of imports can change:
+      (define-values (linklet new-module-uses)
+        ((if to-source?
+             (lambda (l name keys getter) (values l keys))
+             compile-linklet)
         `(linklet
           ;; imports
           (,@body-imports
@@ -257,23 +261,37 @@
           ,@(reverse bodys)
           ,@body-suffix-forms)
         'module
-        ;; Support for cross-module optimization:
-        (lambda (pos) ; pos is an import position
-          (define num-preceding (length body-imports))
-          (if (pos . < . num-preceding)
-              (values #f #f)
-              (let ([mu (list-ref (link-info-link-module-uses li) (- pos num-preceding))])
-                (define mod-name (module-path-index-resolve (module-use-module mu)))
-                (values (or (get-module-linklet mod-name (module-use-phase mu))
-                            (namespace->module-linklet (compile-context-namespace cctx)
-                                                       mod-name
-                                                       (module-use-phase mu)))
-                        ;; For now, we don't chain further:
-                        (lambda (pos) (values #f #f))))))))))
+        ;; Support for cross-module optimization starts with a vector
+        ;; of keys for the linklet imports; we use `module-use` values
+        ;; as keys, plus #f for the boilerplate linklets
+        (list->vector (append (for/list ([i (in-list body-imports)]) #f)
+                              (link-info-link-module-uses li)))
+        ;; To complete cross-module support, map a key (which is a `module-use`)
+        ;; to a linklet and an optional
+        (lambda (mu)
+          (cond
+           [mu
+            (define mod-name (module-path-index-resolve (module-use-module mu)))
+            (values (or (get-module-linklet mod-name (module-use-phase mu))
+                        (namespace->module-linklet (compile-context-namespace cctx)
+                                                   mod-name
+                                                   (module-use-phase mu)))
+                    ;; For now, we don't chain further:
+                    #f)]
+           [else
+            ;; No inlining of boilerplate, since that would change the
+            ;; overall protocol for module or top-level linklets
+            (values #f #f)]))))
+      (values phase (cons linklet (list-tail (vector->list new-module-uses)
+                                             (length body-imports))))))
+  
+  (define body-linklets
+    (for/hasheq ([(phase l+mus) (in-hash body-linklets+module-uses)])
+      (values phase (car l+mus))))
 
   (define phase-to-link-module-uses
-    (for/hash ([(phase li) (in-hash phase-to-link-info)])
-      (values phase (link-info-link-module-uses li))))
+    (for/hasheq ([(phase l+mus) (in-hash body-linklets+module-uses)])
+      (values phase (cdr l+mus))))
   
   (define phase-to-link-module-uses-expr
     (serialize-phase-to-link-module-uses phase-to-link-module-uses mpis))
