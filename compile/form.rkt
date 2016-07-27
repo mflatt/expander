@@ -39,7 +39,7 @@
                        #:compiled-expression-callback [compiled-expression-callback void]
                        #:definition-callback [definition-callback void]
                        #:other-form-callback [other-form-callback void]
-                       #:get-module-linklet [get-module-linklet (lambda (mod-name p) #f)] ; to support submodules
+                       #:get-module-linklet-info [get-module-linklet-info (lambda (mod-name p) #f)] ; to support submodules
                        #:to-source? [to-source? #f])
   (define phase (compile-context-phase cctx))
   (define self (compile-context-self cctx))
@@ -267,21 +267,11 @@
         (list->vector (append (for/list ([i (in-list body-imports)]) #f)
                               (link-info-link-module-uses li)))
         ;; To complete cross-module support, map a key (which is a `module-use`)
-        ;; to a linklet and an optional
-        (lambda (mu)
-          (cond
-           [mu
-            (define mod-name (module-path-index-resolve (module-use-module mu)))
-            (values (or (get-module-linklet mod-name (module-use-phase mu))
-                        (namespace->module-linklet (compile-context-namespace cctx)
-                                                   mod-name
-                                                   (module-use-phase mu)))
-                    ;; For now, we don't chain further:
-                    #f)]
-           [else
-            ;; No inlining of boilerplate, since that would change the
-            ;; overall protocol for module or top-level linklets
-            (values #f #f)]))))
+        ;; to a linklet and an optional vector of keys for that linklet's
+        ;; imports:
+        (make-module-use-to-linklet (compile-context-namespace cctx)
+                                    get-module-linklet-info
+                                    (link-info-link-module-uses li))))
       (values phase (cons linklet (list-tail (vector->list new-module-uses)
                                              (length body-imports))))))
   
@@ -375,3 +365,47 @@
   (if v
       (correlated-property e 'compiler-hint:cross-module-inline v)
       e))
+
+;; ----------------------------------------
+
+(define (make-module-use-to-linklet ns get-module-linklet-info init-mus)
+  ;; Inlining might reach the same module though differnt indirections;
+  ;; use a consistent `module-use` value so that the compiler knows to
+  ;; collapse them to a single import
+  (define mu-intern-table (make-hash))
+  (define (intern-module-use mu)
+    (define mod-name (module-path-index-resolve (module-use-module mu)))
+    (or (hash-ref mu-intern-table (cons mod-name (module-use-phase mu)) #f)
+        (begin
+          (hash-set! mu-intern-table (cons mod-name (module-use-phase mu)) mu)
+          mu)))
+  (for-each intern-module-use init-mus)
+  ;; The callback function supplied to `compile-linklet`:
+  (lambda (mu)
+    (cond
+     [mu
+      (define mod-name (module-path-index-resolve (module-use-module mu)))
+      (define mli (or (get-module-linklet-info mod-name (module-use-phase mu))
+                      (namespace->module-linklet-info ns
+                                                      mod-name
+                                                      (module-use-phase mu))))
+      (if mli
+          ;; Found info for inlining:
+          (values (module-linklet-info-linklet mli)
+                  (and (module-linklet-info-module-uses mli)
+                       (list->vector
+                        (append
+                         '(#f #f) ; boilerplate imports common to all modules
+                         (for/list ([sub-mu (module-linklet-info-module-uses mli)])
+                           (intern-module-use
+                            (module-use (module-path-index-shift
+                                         (module-use-module sub-mu)
+                                         (module-linklet-info-self mli)
+                                         (module-use-module mu))
+                                        (module-use-phase sub-mu))))))))
+          ;; Didn't find info, for some reason:
+          (values #f #f))]
+     [else
+      ;; No inlining of boilerplate, since that would change the
+      ;; overall protocol for module or top-level linklets
+      (values #f #f)])))

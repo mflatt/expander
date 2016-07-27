@@ -6,6 +6,7 @@
          "../syntax/match.rkt"
          "../common/phase.rkt"
          "../namespace/core.rkt"
+         "../namespace/module.rkt"
          "../common/module-path.rkt"
          "module-use.rkt"
          "serialize.rkt"
@@ -31,7 +32,8 @@
                         #:as-submodule? [as-submodule? #f]
                         #:serializable? [serializable? with-submodules?]
                         #:to-source? [to-source? #f]
-                        #:modules-being-compiled [modules-being-compiled (make-hasheq)])
+                        #:modules-being-compiled [modules-being-compiled (and with-submodules?
+                                                                              (make-hasheq))])
   ;; Some information about a module is commuicated here through syntax
   ;; propertoes, such as 'module-requires
   (define-match m-m (syntax-disarm s) '(module name initial-require mb))
@@ -119,15 +121,22 @@
                                                   (set-box! encoded-root-expand-ctx-box #t)))
                                               #f]
                                              [else #f]))
-                   #:get-module-linklet (lambda (mod-name phase)
-                                          (define ht (hash-ref modules-being-compiled mod-name #f))
-                                          (and ht
-                                               (hash-ref ht phase #f)))
+                   #:get-module-linklet-info (lambda (mod-name phase)
+                                               (define ht (and modules-being-compiled
+                                                               (hash-ref modules-being-compiled mod-name #f)))
+                                               (and ht (hash-ref ht phase #f)))
                    #:to-source? to-source?))
   
-  ;; Record this module's linklets for cross-module inlining among (sub)modules
-  ;; that are compiled together
-  (hash-set! modules-being-compiled (module-path-index-resolve self) body-linklets)
+  (when with-submodules?
+    ;; Record this module's linklets for cross-module inlining among (sub)modules
+    ;; that are compiled together
+    (hash-set! modules-being-compiled
+               (module-path-index-resolve self) 
+               (for/hasheq ([(phase linklet) (in-hash body-linklets)])
+                 (values phase
+                         (module-linklet-info linklet
+                                              (hash-ref phase-to-link-module-uses phase #f)
+                                              self)))))
   
   ;; Compile submodules; each list is (cons linklet-directory-key compiled-in-memory)
   (define post-submodules (compile-submodules 'module*

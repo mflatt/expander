@@ -109,9 +109,11 @@
                              #:submodule-names (append pre-submodule-names post-submodule-names)
                              #:supermodule-name supermodule-name
                              #:get-all-variables (lambda () (get-all-variables phases-h))
-                             #:phase-level-linklet-callback
+                             #:phase-level-linklet-info-callback
                              (lambda (phase-level)
-                               (hash-ref phases-h phase-level #f))
+                               (module-linklet-info (hash-ref phases-h phase-level #f)
+                                                    (hash-ref phase-to-link-modules phase-level #f)
+                                                    original-self))
                              #:prepare-instance-callback
                              (lambda (data-box ns phase-shift self bulk-binding-registry insp)
                                (unless (unbox data-box)

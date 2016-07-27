@@ -98,7 +98,7 @@
              (loop #f))]
         [else
          (for/fold ([locals locals]) ([id (in-list (correlated->list ids))])
-           (hash-set locals id #t))]))))
+           (hash-set locals (correlated-e id) #t))]))))
 
 ;; ----------------------------------------
 
