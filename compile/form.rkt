@@ -43,6 +43,9 @@
                        #:to-source? [to-source? #f])
   (define phase (compile-context-phase cctx))
   (define self (compile-context-self cctx))
+  
+  ;; Accumulate syntax objects across all phases:
+  (define syntax-literals (make-syntax-literals))
 
   ;; For each phase, keep track of all compiled expressions for the
   ;; phase
@@ -55,7 +58,7 @@
   (define phase-to-header (make-hasheqv)) ; phase -> header
   (define (find-or-create-header! phase)
     (or (hash-ref phase-to-header phase #f)
-        (let ([header (make-header mpis)])
+        (let ([header (make-header mpis syntax-literals)])
           (hash-set! phase-to-header phase header)
           header)))
 
@@ -204,16 +207,13 @@
 
   ;; Register root-expand-context, if any, encoded as a syntax object;
   ;; see also "../eval/root-context.rkt"
-  (define encoded-root-expand-header
+  (define encoded-root-expand-pos
     (and encoded-root-expand-ctx-box
          (unbox encoded-root-expand-ctx-box) ; box => can be cleared by a callback
          (not (and root-ctx-only-if-syntax?
                    (not saw-define-syntaxes?)
-                   (for/and ([h (in-hash-values phase-to-header)])
-                     (header-empty-syntax-literals? h))))
-         (let ([h (find-or-create-header! 'root-ctx)])
-           (add-syntax-literal! h (unbox encoded-root-expand-ctx-box))
-           h)))
+                   (syntax-literals-empty? syntax-literals)))
+         (add-syntax-literal! syntax-literals (unbox encoded-root-expand-ctx-box))))
 
   ;; Collect resulting phases
   (define phases-in-order (sort (hash-keys phase-to-body) <))
@@ -300,22 +300,14 @@
     (for/hash ([(phase li) (in-hash phase-to-link-info)])
       (values phase (link-info-extra-inspectorsss li))))
 
-  (define syntax-literalss
-    (for/list ([phase (in-range phase (add1 max-phase))])
-      (define h (hash-ref phase-to-header phase #f))
-      (if h
-          (header-syntax-literals h)
-          empty-syntax-literals)))
-
   (values body-linklets   ; main compilation result
           min-phase
           max-phase
           phase-to-link-module-uses
           phase-to-link-module-uses-expr
           phase-to-link-extra-inspectorsss
-          syntax-literalss
-          (and encoded-root-expand-header
-               (header-syntax-literals encoded-root-expand-header))))
+          syntax-literals
+          encoded-root-expand-pos))
 
 ;; ----------------------------------------
 
@@ -344,15 +336,14 @@
                                             `'#f)))])
         (define id-stx
           (compile-quote-syntax (remove-scope id top-level-bind-scope)
-                                phase
                                 cctx))
         `(,top-level-bind!-id ,id-stx ,self-expr ,phase ,phase-shift-id ,ns-id ',binding-sym ,trans-expr))))
 
 ;; To support namespace-relative binding, bundle scope information for
 ;; the current namespace into a syntax object
-(define (compile-namespace-scopes phase cctx)
+(define (compile-namespace-scopes cctx)
   (define v (encode-namespace-scopes (compile-context-namespace cctx)))
-  (compile-quote-syntax v phase cctx))
+  (compile-quote-syntax v cctx))
 
 ;; ----------------------------------------
 

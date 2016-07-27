@@ -7,7 +7,7 @@
          dest-phase-id
          ns-id
          self-id
-         syntax-literalss-id
+         syntax-literals-id
          get-syntax-literal!-id
          bulk-binding-registry-id
          inspector-id
@@ -21,7 +21,7 @@
 (define dest-phase-id (make-built-in-symbol! 'dest-phase))
 (define ns-id (make-built-in-symbol! 'namespace))
 (define self-id (make-built-in-symbol! 'self))
-(define syntax-literalss-id (make-built-in-symbol! 'syntax-literalss))
+(define syntax-literals-id (make-built-in-symbol! 'syntax-literals))
 (define get-syntax-literal!-id (make-built-in-symbol! 'get-syntax-literal!))
 (define bulk-binding-registry-id (make-built-in-symbol! 'bulk-binding-registry))
 (define inspector-id (make-built-in-symbol! 'inspector))

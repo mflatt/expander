@@ -96,10 +96,10 @@
                   phase-to-link-module-uses
                   phase-to-link-module-uses-expr
                   phase-to-link-extra-inspectorsss
-                  syntax-literalss
-                  root-ctx-syntax-literals)
+                  syntax-literals
+                  root-ctx-pos)
     (compile-forms bodys body-cctx mpis
-                   #:body-imports `([,syntax-literalss-id
+                   #:body-imports `([,syntax-literals-id
                                      ,get-syntax-literal!-id]
                                     [,set-transformer!-id])
                    #:body-suffix-forms '((void)) ; otherwise, compiler always preserves last form
@@ -128,11 +128,6 @@
   ;; Record this module's linklets for cross-module inlining among (sub)modules
   ;; that are compiled together
   (hash-set! modules-being-compiled (module-path-index-resolve self) body-linklets)
-  
-  (define all-syntax-literalss
-    (if root-ctx-syntax-literals
-        (append syntax-literalss (list root-ctx-syntax-literals))
-        syntax-literalss))
   
   ;; Compile submodules; each list is (cons linklet-directory-key compiled-in-memory)
   (define post-submodules (compile-submodules 'module*
@@ -195,17 +190,17 @@
                '())]
         ,instance-imports)
        ;; exports
-       (,syntax-literalss-id
+       (,syntax-literals-id
         ,get-syntax-literal!-id
         get-encoded-root-expand-ctx)
        ;; body
-       ,@(generate-lazy-syntax-literals! all-syntax-literalss mpis self
+       ,@(generate-lazy-syntax-literals! syntax-literals mpis self
                                          #:skip-deserialize? (not serializable?))
        (define-values (get-encoded-root-expand-ctx)
          ,(cond
-           [root-ctx-syntax-literals
+           [root-ctx-pos
             `(lambda ()
-              ,(generate-lazy-syntax-literal-lookup (add1 max-phase) 0))]
+              ,(generate-lazy-syntax-literal-lookup root-ctx-pos))]
            [empty-result-for-module->namespace?
             `'empty]
            [else
@@ -231,8 +226,8 @@
              ,deserialize-syntax-id)
             ;; body
             (define-values (,deserialized-syntax-vector-id)
-              (make-vector ,(+ 2 max-phase) #f))
-            ,@(generate-lazy-syntax-literals-data! all-syntax-literalss mpis)))))
+              (make-vector ,(syntax-literals-count syntax-literals) #f))
+            ,@(generate-lazy-syntax-literals-data! syntax-literals mpis)))))
 
   ;; The data linklet houses deserialized data for use by the
   ;; declaration and module-body linklets. Its instance is shared
@@ -289,7 +284,7 @@
                         (current-code-inspector)
                         phase-to-link-extra-inspectorsss
                         (mpis-as-vector mpis)
-                        (syntax-literals-as-vectors all-syntax-literalss 0)
+                        (syntax-literals-as-vector syntax-literals)
                         (map cdr pre-submodules)
                         (map cdr post-submodules)
                         #f     ; no namespace scopes

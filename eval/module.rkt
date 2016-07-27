@@ -299,7 +299,7 @@
 (define (make-syntax-literal-data-instance-from-compiled-in-memory cim)
   (make-instance 'syntax-literal-data #f
                  deserialize-syntax-id void
-                 deserialized-syntax-vector-id (compiled-in-memory-syntax-literalss cim)))
+                 deserialized-syntax-vector-id (compiled-in-memory-syntax-literals cim)))
 
 (define (make-declaration-context-instance ns)
   (make-instance 'declaration-context #f

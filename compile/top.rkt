@@ -51,17 +51,17 @@
                   phase-to-link-module-uses
                   phase-to-link-module-uses-expr
                   phase-to-link-extra-inspectorsss
-                  syntax-literalss
-                  no-root-context-syntax-literals)
+                  syntax-literals
+                  no-root-context-pos)
     (compile-forms (list s) cctx mpis
                    #:body-imports (if single-expression?
                                       `([]
-                                        [,syntax-literalss-id]
+                                        [,syntax-literals-id]
                                         [])
                                       `([,top-level-bind!-id
                                          ,top-level-require!-id]
                                         [,mpi-vector-id
-                                         ,syntax-literalss-id]
+                                         ,syntax-literals-id]
                                         ,instance-imports))
                    #:to-source? to-source?
                    #:definition-callback (lambda () (set! purely-functional? #f))
@@ -86,9 +86,9 @@
        [serializable?
         ;; To support seialization, construct a linklet that will
         ;; deserialize module path indexes, syntax objects, etc.
-        (define syntax-literalss-expr
+        (define syntax-literals-expr
           (generate-eager-syntax-literals! 
-           syntax-literalss
+           syntax-literals
            mpis
            phase
            (compile-context-self cctx)
@@ -104,13 +104,13 @@
              (,mpi-vector-id
               ,deserialized-syntax-vector-id
               phase-to-link-modules
-              ,syntax-literalss-id)
+              ,syntax-literals-id)
              (define-values (,mpi-vector-id)
                ,(generate-module-path-index-deserialize mpis))
              (define-values (,deserialized-syntax-vector-id) 
                (make-vector ,(add1 phase) #f))
              (define-values (phase-to-link-modules) ,phase-to-link-module-uses-expr)
-             (define-values (,syntax-literalss-id) ,syntax-literalss-expr))))
+             (define-values (,syntax-literals-id) ,syntax-literals-expr))))
         
         (hash-set body-linklets 'link link-linklet)]
        [else
@@ -128,7 +128,7 @@
                         (current-code-inspector)
                         phase-to-link-extra-inspectorsss
                         (mpis-as-vector mpis)
-                        (syntax-literals-as-vectors syntax-literalss phase)
+                        (syntax-literals-as-vector syntax-literals)
                         null
                         null
                         (extract-namespace-scopes (compile-context-namespace cctx))
@@ -140,6 +140,6 @@
   (define phase (compile-context-phase cctx))
   (case (core-form-sym s phase)
     [(#%require)
-     (define form-stx (compile-quote-syntax s phase cctx))
+     (define form-stx (compile-quote-syntax s cctx))
      `(,top-level-require!-id ,form-stx ,ns-id)]
     [else #f]))

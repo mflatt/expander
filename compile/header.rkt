@@ -12,18 +12,17 @@
 (provide (struct-out header)
          make-header
          
+         make-syntax-literals
+         syntax-literals-empty?
+         syntax-literals-count
          add-syntax-literal!
+         add-syntax-literals!
          generate-eager-syntax-literals!
          generate-eager-syntax-literal-lookup
          generate-lazy-syntax-literals!
          generate-lazy-syntax-literals-data!
          generate-lazy-syntax-literal-lookup
-         syntax-literals-as-vectors
-         empty-syntax-literals
-         
-         make-syntax-literals-boxes-container
-         add-syntax-literals-boxes!/pos
-         syntax-literals-boxes-container-ref
+         syntax-literals-as-vector
 
          header-empty-syntax-literals?
          
@@ -44,6 +43,9 @@
 ;; which linklet imports, and it keeps track of compile-time
 ;; inspectors that may grant access to some of those imports.
 
+(struct syntax-literals ([stxes #:mutable]
+                         [count #:mutable]))
+
 (struct header (module-path-indexes        ; module-path-index -> linklet import position
                 binding-sym-to-define-sym  ; sym -> sym; avoid conflicts with primitives
                 [binding-syms-in-order #:mutable] ; list of sym
@@ -51,14 +53,15 @@
                 import-sym-to-extra-inspectors ; sym -> set of inspectors
                 [require-vars-in-order #:mutable] ; list of variable-use
                 define-and-import-syms     ; hash of sym -> 'defined/'imported, to select distinct symbols
-                syntax-literals            ; box of list of syntax-literal
-                [num-syntax-literals #:mutable]))
+                syntax-literals))          ; syntax-literals
 
 (struct variable-use (module-use sym)
         #:transparent) ; for hashing
 
+(define (make-syntax-literals)
+  (syntax-literals null 0))
 
-(define (make-header mpis)
+(define (make-header mpis syntax-literals)
   (header mpis
           (make-hasheq)        ; binding-sym-to-define-sym
           null                 ; binding-syms-in-order
@@ -66,59 +69,64 @@
           (make-hasheq)        ; import-sym-to-extra-inspectors
           null                 ; require-vars-in-order
           (make-hasheq)        ; define-and-import-syms
-          (box null)
-          0))
+          syntax-literals))
 
 (define (make-variable-uses)
   (make-hash))
 
-(define (add-syntax-literal! header q)
-  (define pos (header-num-syntax-literals header))
-  (set-header-num-syntax-literals! header (add1 pos))
-  (define b (header-syntax-literals header))
-  (set-box! b (cons q (unbox b)))
+(define (add-syntax-literal! header-or-literals q)
+  (define sl (if (header? header-or-literals)
+                 (header-syntax-literals header-or-literals)
+                 header-or-literals))
+  (define pos (syntax-literals-count sl))
+  (set-syntax-literals-count! sl (add1 pos))
+  (set-syntax-literals-stxes! sl (cons q (syntax-literals-stxes sl)))
   pos)
 
-(define empty-syntax-literals '#&())
+;; Return a position in a larger vector where the given vector will
+;; start; for convenience, pair that position with the size of the
+;; vector
+(define (add-syntax-literals! sl vec)
+  (define pos (syntax-literals-count sl))
+  (for ([e (in-vector vec)])
+    (add-syntax-literal! sl e))
+  (cons pos (vector-length vec)))
 
-(define (header-empty-syntax-literals? header)
-  (null? (unbox (header-syntax-literals header))))
+(define (syntax-literals-empty? sl)
+  (null? (syntax-literals-stxes sl)))
 
 ;; Generate on-demand shifting (not shared among module instances)
 ;; using `deserialize-syntax-literal-data` (shared among module
 ;; instances); the result defines `syntax-literals-id` and
 ;; `get-syntax-literal!-id`
-(define (generate-lazy-syntax-literals! syntax-literals-boxes mpis self
+(define (generate-lazy-syntax-literals! sl mpis self
                                         #:skip-deserialize? [skip-deserialize? #f])
-  (define syntax-literalss (map unbox syntax-literals-boxes))
-  `((define-values (,syntax-literalss-id)
-      (vector ,@(for/list ([syntax-literals (in-list syntax-literalss)])
-                  `(make-vector ,(length syntax-literals) #f))))
+  `((define-values (,syntax-literals-id)
+      (make-vector ,(syntax-literals-count sl) #f))
     (define-values (,get-syntax-literal!-id)
-      (lambda (phase pos)
+      (lambda (pos)
         (begin
           ,@(if skip-deserialize?
                 null
-                `((if (vector-ref ,deserialized-syntax-vector-id phase)
+                `((if (vector-ref ,deserialized-syntax-vector-id 0)
                       (void)
                       (,deserialize-syntax-id))))
           (let-values ([(stx)
                         (syntax-module-path-index-shift
                          (syntax-shift-phase-level
-                          (vector-ref (vector-ref ,deserialized-syntax-vector-id phase) pos)
+                          (vector-ref ,deserialized-syntax-vector-id pos)
                           ,phase-shift-id)
                          ,(add-module-path-index! mpis self)
                          ,self-id)])
             (begin
-              (vector-set! (vector-ref ,syntax-literalss-id phase) pos stx)
+              (vector-set! ,syntax-literals-id pos stx)
               stx)))))))
 
 ;; Generate on-demand deserialization (shared across instances); the
 ;; result defines `deserialize-syntax-id`
-(define (generate-lazy-syntax-literals-data! syntax-literals-boxes mpis)
-  (define syntax-literalss (map unbox syntax-literals-boxes))
+(define (generate-lazy-syntax-literals-data! sl mpis)
   (cond
-   [(andmap null? syntax-literalss)
+   [(syntax-literals-empty? sl)
     `((define-values (,deserialize-syntax-id) #f))]
    [else
     `((define-values (,deserialize-syntax-id)
@@ -132,102 +140,56 @@
              '0
              ,(generate-deserialize (vector->immutable-vector
                                      (list->vector
-                                      (map
-                                       vector->immutable-vector
-                                       (map list->vector
-                                            (map reverse syntax-literalss)))))
+                                      (reverse (syntax-literals-stxes sl))))
                                     mpis))
             (set! ,deserialize-syntax-id #f)))))]))
 
-(define (generate-lazy-syntax-literal-lookup phase pos)
-  `(let-values ([(stx) ,(generate-eager-syntax-literal-lookup phase pos)])
+(define (generate-lazy-syntax-literal-lookup pos)
+  `(let-values ([(stx) ,(generate-eager-syntax-literal-lookup pos)])
     (if stx
         stx
-        (,get-syntax-literal!-id ',phase ',pos))))
+        (,get-syntax-literal!-id ',pos))))
 
 ;; Generate immediate deserializartion and shifting of a set of syntax
 ;; objects across multiple phases; the result is an expression for a
-;; vector (indexed by original phase) of vectors (indexed by
-;; syntax-literal position).
-;; The original-phase layer of the vector might not actually correspond
-;; to a sequence of phases `syntax-literals-boxes` is actually from
-;; `syntax-literals-boxes-container-ref`, and the encoding doesn't
-;; depend on that order in any way.
-(define (generate-eager-syntax-literals! syntax-literals-boxes mpis base-phase self ns)
-  (define syntax-literalss (map unbox syntax-literals-boxes))
+;; vector (indexed by syntax-literal position).
+(define (generate-eager-syntax-literals! sl mpis base-phase self ns)
   (cond
-   [(andmap null? syntax-literalss)
+   [(syntax-literals-empty? sl)
     ;; Avoid serializing unneeded namespace scope:
     #f]
    [else
     `(let-values ([(ns+stxss) ,(generate-deserialize (cons
                                                       ;; Prefix with namespace scope:
                                                       (encode-namespace-scopes ns)
-                                                      (append
-                                                       ;; Pad result vector get to the base phase:
-                                                       (for/list ([i (in-range base-phase)]) null)
-                                                       ;; Reverse syntax literals per phase
-                                                       (map reverse syntax-literalss)))
+                                                      (reverse
+                                                       (syntax-literals-stxes sl)))
                                                      mpis)])
       (let-values ([(ns-scope-s) (car ns+stxss)])
         (list->vector
-         (map (lambda (stxs)
-                (list->vector
-                 (map (lambda (stx)
-                        (swap-top-level-scopes
-                         (syntax-module-path-index-shift
-                          (syntax-shift-phase-level
-                           stx
-                           (- ,base-phase ,dest-phase-id))
-                          ,(add-module-path-index! mpis self)
-                          ,self-id)
-                         ns-scope-s ,ns-id))
-                      stxs)))
+         (map (lambda (stx)
+                (swap-top-level-scopes
+                 (syntax-module-path-index-shift
+                  (syntax-shift-phase-level
+                   stx
+                   (- ,base-phase ,dest-phase-id))
+                  ,(add-module-path-index! mpis self)
+                  ,self-id)
+                 ns-scope-s ,ns-id))
               (cdr ns+stxss)))))]))
 
-(define (generate-eager-syntax-literal-lookup phase pos)
-  `(vector-ref (vector-ref ,syntax-literalss-id ',phase) ',pos))
+(define (generate-eager-syntax-literal-lookup pos)
+  `(vector-ref ,syntax-literals-id ',pos))
 
-;; Genereate a vector for a set of syntax objects across multiple
-;; phases; the result is a vector of vectors like the one generated and
-;; expression from `generate-eager-syntax-literals!`, where no shifts
-;; are needed
-(define (syntax-literals-as-vectors syntax-literals-boxes base-phase)
+;; Genereate a vector for a set of syntax objects; the result is a
+;; vector like the one generated in expression from by
+;; `generate-eager-syntax-literals!`, where no shifts are needed
+(define (syntax-literals-as-vector sl)
   (list->vector
-   (append
-    ;; Padding
-    (for/list ([i (in-range base-phase)]) #f)
-    ;; Vectors
-    (map list->vector (map reverse (map unbox syntax-literals-boxes))))))
+   (reverse (syntax-literals-stxes sl))))
 
-;; ----------------------------------------
-
-;; For combining syntax literals from separate top-level compilations:
-(struct syntax-literals-boxes-container ([boxes #:mutable]
-                                         [count #:mutable]))
-
-(define (make-syntax-literals-boxes-container)
-  (syntax-literals-boxes-container null 0))
-
-;; Return a position in a larger vector where the given vector will
-;; start; for convenience, pair that position with the size of the vector
-(define (add-syntax-literals-boxes!/pos c vec)
-  (define pos (syntax-literals-boxes-container-count c))
-  (set-syntax-literals-boxes-container-boxes!
-   c
-   (append (for/list ([v (in-list (reverse (vector->list vec)))])
-             (box (or (and v (reverse (vector->list v)))
-                      null)))
-           (syntax-literals-boxes-container-boxes c)))
-  (set-syntax-literals-boxes-container-count! c (+ pos (vector-length vec)))
-  (cons pos (vector-length vec)))
-
-;; Reports a container's content into a form suitable for
-;; `generate-eager-syntax-literals!`. The list of boxes won't actually
-;; correspond to a sequence of phases, but instead a concatenation of
-;; sequences of phases for multiple top-level forms, but that's ok.
-(define (syntax-literals-boxes-container-ref c)
-  (reverse (syntax-literals-boxes-container-boxes c)))
+(define (header-empty-syntax-literals? h)
+  (syntax-literals-empty? (header-syntax-literals h)))
 
 ;; ----------------------------------------
 

@@ -168,21 +168,19 @@
   ;; namespace, then we need to adjust syntax object literals to work
   ;; in the new namespace --- the same shifting that happens otherwise
   ;; through deserialization
-  (define orig-syntax-literalss (compiled-in-memory-syntax-literalss cim))
-  (define syntax-literalss
+  (define orig-syntax-literals (compiled-in-memory-syntax-literals cim))
+  (define syntax-literals
     (cond
-     [(not to-ns) orig-syntax-literalss]
+     [(not to-ns) orig-syntax-literals]
      [(namespace-scopes=? (compiled-in-memory-namespace-scopes cim)
                           (extract-namespace-scopes to-ns))
-      orig-syntax-literalss]
+      orig-syntax-literals]
      [else
-      (for/vector #:length (vector-length orig-syntax-literalss) ([v (in-vector orig-syntax-literalss)])
-                  (and v
-                       (for/vector #:length (vector-length v) ([s (in-vector v)])
-                                   (swap-top-level-scopes s
-                                                          (compiled-in-memory-namespace-scopes cim)
-                                                          to-ns))))]))
+      (for/vector #:length (vector-length orig-syntax-literals) ([s (in-vector orig-syntax-literals)])
+                  (swap-top-level-scopes s
+                                         (compiled-in-memory-namespace-scopes cim)
+                                         to-ns))]))
   ;; Create the instance:
   (make-instance 'link #f
                  mpi-vector-id (compiled-in-memory-mpis cim)
-                 syntax-literalss-id syntax-literalss))
+                 syntax-literals-id syntax-literals))

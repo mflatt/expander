@@ -27,20 +27,20 @@
   (define mpi-vector-trees (data 'mpi-vector-trees))
   (define phase-to-link-modules-vector (data 'phase-to-link-modules-vector))
   (define phase-to-link-modules-trees (data 'phase-to-link-modules-trees))
-  (define syntax-literalss (data 'syntax-literalss))
-  (define syntax-literalss-trees (data 'syntax-literalss-trees))
+  (define syntax-literals (data 'syntax-literals))
+  (define syntax-literals-trees (data 'syntax-literals-trees))
   
   (define namespace-scopes (extract-namespace-scopes ns))
   
   (define (construct-compiled-in-memory ld
                                         mpi-vector-tree
                                         phase-to-link-modules-tree
-                                        syntax-literalss-tree)
+                                        syntax-literals-tree)
     (define is-module? (or (linklet-bundle? ld)
                            (let ([b (hash-ref (linklet-directory->hash ld) #f #f)])
                              (and b (hash-ref (linklet-bundle->hash b) 'decl #f)))))
     (define mpi-pos-vec (vector-ref mpi-vector-tree 0))
-    (define syntax-literals-spec (vector-ref syntax-literalss-tree 0))
+    (define syntax-literals-spec (vector-ref syntax-literals-tree 0))
     (define pres (if is-module? 
                      (extract-submodules ld 'pre)
                      (compiled-top->compiled-tops ld)))
@@ -51,11 +51,11 @@
       (for/list ([sub-ld (in-list l)]
                  [mpi-vector-tree (in-list (vector-ref mpi-vector-tree vec-pos))]
                  [phase-to-link-modules-tree (in-list (vector-ref phase-to-link-modules-tree vec-pos))]
-                 [syntax-literalss-tree (in-list (vector-ref syntax-literalss-tree vec-pos))])
+                 [syntax-literals-tree (in-list (vector-ref syntax-literals-tree vec-pos))])
         (construct-compiled-in-memory sub-ld
                                       mpi-vector-tree
                                       phase-to-link-modules-tree
-                                      syntax-literalss-tree)))
+                                      syntax-literals-tree)))
     (compiled-in-memory ld
                         (vector-ref phase-to-link-modules-vector (vector-ref phase-to-link-modules-tree 0))
                         #f ; compile-time-inspector
@@ -63,8 +63,8 @@
                         (for/vector #:length (vector-length mpi-pos-vec) ([pos (in-vector mpi-pos-vec)])
                                     (vector-ref mpi-vector pos))
                         (for/vector #:length (cdr syntax-literals-spec) ([i (in-range (cdr syntax-literals-spec))])
-                                    (and syntax-literalss
-                                         (vector-ref syntax-literalss (+ (car syntax-literals-spec) i))))
+                                    (and syntax-literals
+                                         (vector-ref syntax-literals (+ (car syntax-literals-spec) i))))
                         (map-construct-compiled-in-memory pres 1)
                         (map-construct-compiled-in-memory posts 2)
                         namespace-scopes
@@ -74,7 +74,7 @@
        tops
        mpi-vector-trees
        phase-to-link-modules-trees
-       syntax-literalss-trees))
+       syntax-literals-trees))
 
 ;; ----------------------------------------
  

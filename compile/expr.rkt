@@ -117,7 +117,7 @@
         [(quote-syntax)
          (define-match m s '(quote-syntax datum . _))
          (if result-used?
-             (compile-quote-syntax (m 'datum) phase cctx)
+             (compile-quote-syntax (m 'datum) cctx)
              (correlate* s `(quote ,(syntax->datum (m 'datum)))))]
         [(#%variable-reference)
          (define-match id-m s #:try '(#%variable-reference id))
@@ -266,10 +266,10 @@
   (local-key->symbol (local-binding-key b)))
 
 
-(define (compile-quote-syntax q phase cctx)
+(define (compile-quote-syntax q cctx)
   (define pos (add-syntax-literal! (compile-context-header cctx) q))
   (cond
    [(compile-context-lazy-syntax-literals? cctx)
-    (generate-lazy-syntax-literal-lookup phase pos)]
+    (generate-lazy-syntax-literal-lookup pos)]
    [else
-    (generate-eager-syntax-literal-lookup phase pos)]))
+    (generate-eager-syntax-literal-lookup pos)]))

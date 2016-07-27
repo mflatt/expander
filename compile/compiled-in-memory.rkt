@@ -22,7 +22,7 @@
                             phase-to-link-extra-inspectorsss ; phase -> list of lists
                             ;; For using existing values directly, instead of unmarshaling:
                             mpis
-                            syntax-literalss
+                            syntax-literals
                             ;; Shortcuts for associated code (submodules or sequence of top levels)
                             pre-compiled-in-memorys
                             post-compiled-in-memorys

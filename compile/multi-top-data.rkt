@@ -30,13 +30,13 @@
                       (add-module-path-index!/pos mpis mpi)))))
 
   ;; Gather all syntax literals:
-  (define syntax-literals-boxes (make-syntax-literals-boxes-container))
-  (define syntax-literalss-trees
+  (define syntax-literals (make-syntax-literals))
+  (define syntax-literals-trees
     (map-cim-tree cims
                   (lambda (cim)
-                    (add-syntax-literals-boxes!/pos
-                     syntax-literals-boxes
-                     (compiled-in-memory-syntax-literalss cim)))))
+                    (add-syntax-literals!
+                     syntax-literals
+                     (compiled-in-memory-syntax-literals cim)))))
 
   ;; Gather all phase-to-module-uses tables:
   (define module-uses-tables null)
@@ -50,9 +50,9 @@
                     (set! module-uses-tables-count (add1 pos))
                     pos)))
   
-  (define syntax-literalss-expr
-    (generate-eager-syntax-literals! 
-     (syntax-literals-boxes-container-ref syntax-literals-boxes)
+  (define syntax-literals-expr
+    (generate-eager-syntax-literals!
+     syntax-literals
      mpis
      0
      #f ; self
@@ -73,15 +73,15 @@
       mpi-vector-trees
       phase-to-link-modules-vector
       phase-to-link-modules-trees
-      syntax-literalss
-      syntax-literalss-trees)
+      syntax-literals
+      syntax-literals-trees)
      (define-values (,mpi-vector-id)
        ,(generate-module-path-index-deserialize mpis))
      (define-values (mpi-vector-trees) ',mpi-trees)
      (define-values (phase-to-link-modules-vector) ,phase-to-link-module-uses-expr)
      (define-values (phase-to-link-modules-trees) ',phase-to-link-module-uses-trees)
-     (define-values (syntax-literalss) ,syntax-literalss-expr)
-     (define-values (syntax-literalss-trees) ',syntax-literalss-trees))))
+     (define-values (syntax-literals) ,syntax-literals-expr)
+     (define-values (syntax-literals-trees) ',syntax-literals-trees))))
 
 ;; ----------------------------------------
 

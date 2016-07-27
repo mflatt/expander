@@ -50,7 +50,7 @@
                           #f
                           #hasheqv()
                           #() ; mpis
-                          #() ; syntax-literalss
+                          #() ; syntax-literals
                           cims
                           null
                           #f
