@@ -229,6 +229,9 @@
   (when (not (or visit? run?))
     ;; make the module available:
     (namespace-module-make-available! m-ns interned-mpi phase-shift #:visit-phase run-phase))
+  (define can-bulk-bind? (and (not adjust) (not skip-variable-phase-level)))
+  (define can-bulk-requires+provides? (or (not requires+provides)
+                                          (and can-bulk-bind? initial-require?)))
   (bind-all-provides!
    m
    bind-in-stx phase-shift m-ns interned-mpi
@@ -237,12 +240,21 @@
            [(adjust-only? adjust) (set->list (adjust-only-syms adjust))]
            [(adjust-rename? adjust) (list (adjust-rename-from-sym adjust))]
            [else #f])
-   #:can-bulk? (and (not adjust) (not skip-variable-phase-level))
+   #:can-bulk? can-bulk-bind?
+   #:bulk-callback (and
+                    requires+provides
+                    can-bulk-requires+provides?
+                    (lambda (provides provide-phase-level)
+                      (add-bulk-required-ids! requires+provides
+                                              in-stx
+                                              (module-self m) mpi phase-shift
+                                              provides
+                                              provide-phase-level
+                                              #:can-be-shadowed? can-be-shadowed?)))
    #:filter (and
-             (or adjust
-                 requires+provides
-                 copy-variable-phase-level
-                 skip-variable-phase-level)
+             (or (not can-bulk-bind?)
+                 (not can-bulk-requires+provides?)
+                 copy-variable-phase-level)
              (lambda (binding as-transformer?)
                (define sym (module-binding-nominal-sym binding))
                (define provide-phase (module-binding-nominal-phase binding))
@@ -273,7 +285,7 @@
                         (hash-set! done-syms sym #t)
                         (adjust-rename-to-id adjust))]))
                (when (and adjusted-sym
-                          requires+provides)
+                          (not can-bulk-requires+provides?))
                  (define s (datum->syntax bind-in-stx adjusted-sym))
                  (define bind-phase (phase+ phase-shift provide-phase))
                  (unless initial-require?
@@ -314,10 +326,13 @@
                             #:in orig-s
                             #:only only-syms
                             #:can-bulk? can-bulk?
-                            #:filter filter)
+                            #:filter filter
+                            #:bulk-callback bulk-callback)
   (define self (module-self m))
   (for ([(provide-phase-level provides) (in-hash (module-provides m))])
     (define phase (phase+ phase-shift provide-phase-level))
+    (when bulk-callback
+      (bulk-callback provides provide-phase-level))
     (when filter
       (for ([sym (in-list (or only-syms (hash-keys provides)))])
         (define binding/p (hash-ref provides sym #f))

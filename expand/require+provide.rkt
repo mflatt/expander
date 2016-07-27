@@ -20,6 +20,7 @@
          (struct-out required)
          add-required-module!
          add-defined-or-required-id!
+         add-bulk-required-ids!
          add-enclosing-module-defined-and-required!
          remove-required-id!
          check-not-defined
@@ -41,13 +42,22 @@
                            require-mpis ; module-path-index to itself as interned
                            require-mpis/fast ; same table, but `eq?`-keyed for fast already-interned checks
                            require-mpis-in-order ; require-phase -> list of module-path-index
-                           requires   ; mpi [interned] -> require-phase -> sym -> list of required
+                           requires   ; mpi [interned] -> require-phase -> sym -> list of [bulk-]required
                            provides   ; phase -> sym -> binding or protected
                            phase-to-defined-syms ; phase -> sym -> boolean
                            [can-cross-phase-persistent? #:mutable]
                            [all-bindings-simple? #:mutable])) ; tracks whether bindings are easily reconstructed
 
+;; A `required` represents an identifier required into a module
 (struct required (id phase can-be-shadowed? as-transformer?))
+
+;; A `bulk-required` can be converted into a `required` given the
+;; module path, phase, and symbol that are mapped to it
+(struct bulk-required (provides ; extract binding info based on the sym
+                       s        ; combine with the sym to create an identifier
+                       self     ; source of module path index shift to the one that reaches the bulk require
+                       provide-phase-level ; phase of `provide` in immediately providing module
+                       can-be-shadowed?))  ; shadowed because, e.g., an initial import
 
 (define (make-requires+provides self)
   (requires+provides self
@@ -130,6 +140,32 @@
   (hash-set! sym-to-reqds sym (cons (required id phase can-be-shadowed? as-transformer?)
                                     (hash-ref sym-to-reqds sym null))))
 
+;; Like `add-defined-or-required-id!`, but faster for bindings that
+;; all have the same scope, etc.
+(define (add-bulk-required-ids! r+p s self nominal-module phase-shift provides provide-phase-level
+                                #:can-be-shadowed? can-be-shadowed?)
+  (define at-mod (hash-ref! (requires+provides-requires r+p)
+                            (intern-mpi r+p nominal-module)
+                            make-hasheqv))
+  (define sym-to-reqds (hash-ref! at-mod phase-shift make-hasheq))
+  (define br (bulk-required provides s self provide-phase-level can-be-shadowed?))
+  (for ([sym (in-hash-keys provides)])
+    (hash-set! sym-to-reqds sym (cons br (hash-ref sym-to-reqds sym null)))))
+
+;; Convert a combination of a symbol and `bulk-required` to a
+;; `required` on demand
+(define (bulk-required->required br nominal-module phase sym)
+  (define binding/p (hash-ref (bulk-required-provides br) sym))
+  (required (datum->syntax (bulk-required-s br) sym)
+            (phase+ phase (bulk-required-provide-phase-level br))
+            (bulk-required-can-be-shadowed? br)
+            (provided-as-transformer? binding/p)))
+
+(define (normalize-required r mod-name phase sym)
+  (if (bulk-required? r)
+      (bulk-required->required r mod-name phase sym)
+      r))
+
 ;; Add bindings of an enclosing module
 (define (add-enclosing-module-defined-and-required! r+p
                                                     #:enclosing-requires+provides enclosing-r+p
@@ -138,8 +174,9 @@
   (set-requires+provides-all-bindings-simple?! r+p #f)
   (for ([(mod-name at-mod) (in-hash (requires+provides-requires enclosing-r+p))])
     (for* ([(phase at-phase) (in-hash at-mod)]
-           [reqds (in-hash-values at-phase)]
-           [reqd (in-list reqds)])
+           [(sym reqds) (in-hash at-phase)]
+           [reqd/maybe-bulk (in-list reqds)])
+      (define reqd (normalize-required reqd/maybe-bulk mod-name phase sym))
       (add-defined-or-required-id-at-nominal! r+p
                                               (syntax-module-path-index-shift
                                                (required-id reqd)
@@ -151,16 +188,16 @@
                                               #:can-be-shadowed? #t
                                               #:as-transformer? (required-as-transformer? reqd)))))
 
-;; Removes a required identifier, in anticiation of it being defined
+;; Removes a required identifier, in anticipation of it being defined
 (define (remove-required-id! r+p id phase #:unless-matches binding)
   (define b (resolve+shift id phase #:exactly? #t))
   (when b
-    (define at-mod (hash-ref (requires+provides-requires r+p)
-                             (intern-mpi r+p (module-binding-nominal-module b))
-                             #f))
+    (define mpi (intern-mpi r+p (module-binding-nominal-module b)))
+    (define at-mod (hash-ref (requires+provides-requires r+p) mpi #f))
     (when at-mod
+      (define nominal-phase (module-binding-nominal-require-phase b))
       (define sym-to-reqds (hash-ref at-mod
-                                     (module-binding-nominal-require-phase b)
+                                     nominal-phase
                                      #f))
       (when sym-to-reqds
         (define sym (syntax-e id))
@@ -168,8 +205,9 @@
         (unless (null? l)
           (unless (same-binding? b binding)
             (hash-set! sym-to-reqds sym
-                       (for/list ([r (in-list l)]
-                                  #:unless (free-identifier=? (required-id r) id phase phase))
+                       (for*/list ([r (in-list l)]
+                                   [r (in-value (normalize-required r mpi nominal-phase sym))]
+                                   #:unless (free-identifier=? (required-id r) id phase phase))
                          r))))))))
 
 ;; Check whether an identifier has a binding that is from a non-shadowable
@@ -211,6 +249,10 @@
         ;; enclosing module, then we've already marked bindings
         ;; a non-simple --- otherwise, we don't care
         (void)]
+       [(and ok-binding (same-binding? b ok-binding))
+        ;; It's the same binding already, so overall binding hasn't
+        ;; become non-simple
+        (void)]
        [else
         (for ([r (in-list (hash-ref (hash-ref at-mod
                                               (module-binding-nominal-require-phase b)
@@ -218,11 +260,9 @@
                                     (syntax-e id)
                                     null))])
           (cond
-           [(and ok-binding (same-binding? b ok-binding))
-            ;; It's the same binding already, so overall binding hasn't
-            ;; become non-simple
-            (void)]
-           [(required-can-be-shadowed? r)
+           [(if (bulk-required? r)
+                (bulk-required-can-be-shadowed? r)
+                (required-can-be-shadowed? r))
             ;; Shadowing --- ok, but non-simple
             (set-requires+provides-all-bindings-simple?! r+p #f)]
            [else
@@ -247,9 +287,12 @@
 
 ;; Get all the bindings imported from a given module
 (define (extract-module-requires r+p mod-name phase)
-  (define at-mod (hash-ref (requires+provides-requires r+p) (intern-mpi r+p mod-name) #f))
+  (define mpi (intern-mpi r+p mod-name))
+  (define at-mod (hash-ref (requires+provides-requires r+p) mpi #f))
   (and at-mod
-       (apply append (hash-values (hash-ref at-mod phase #hasheq())))))
+       (for*/list ([(sym reqds) (in-hash (hash-ref at-mod phase #hasheq()))]
+                   [reqd (in-list reqds)])
+         (normalize-required reqd mpi phase sym))))
 
 ;; Get all the definitions
 (define (extract-module-definitions r+p)
@@ -271,12 +314,12 @@
                 [phase (in-list (if (eq? phase 'all)
                                     (hash-keys phase-to-requireds)
                                     (list phase)))]
-                [reqds (in-hash-values
-                        (hash-ref phase-to-requireds phase
-                                  ;; failure => not required at that phase
-                                  (lambda () (esc #f))))]
+                [(sym reqds) (in-hash
+                              (hash-ref phase-to-requireds phase
+                                        ;; failure => not required at that phase
+                                        (lambda () (esc #f))))]
                 [reqd (in-list reqds)])
-      reqd)))
+      (normalize-required reqd mod-name phase sym))))
 
 ;; ----------------------------------------
 
