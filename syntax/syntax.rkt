@@ -26,7 +26,6 @@
                 shifted-multi-scopes ; scopes with a distinct identity at each phase; maybe a fallback search
                 [scope-propagations #:mutable] ; lazy propogation info
                 mpi-shifts ; chain of module-path-index substitutions
-                bulk-binding-registry ; for resolving bulk bindings on unmarshal
                 srcloc  ; source location
                 props   ; properties
                 inspector ; inspector for access to protected bindings
@@ -109,7 +108,6 @@
           empty-shifted-multi-scopes
           #f   ; scope-propogations
           empty-mpi-shifts
-          #f   ; bulk-binding-registry
           #f   ; srcloc
           empty-props
           #f   ; inspector
@@ -134,8 +132,6 @@
             (if stx-c
                 (syntax-mpi-shifts stx-c)
                 empty-mpi-shifts)
-            (and stx-c
-                 (syntax-bulk-binding-registry stx-c))
             (and stx-l (syntax-srcloc stx-l))
             (if stx-p (syntax-props stx-p) empty-props)
             (and stx-c
@@ -192,7 +188,6 @@
           (vector-ref context-triple 1)
           #f
           (vector-ref context-triple 2)
-          #f
           srcloc
           (if props
               (for/hasheq ([(k v) (in-immutable-hash props)])

@@ -648,7 +648,7 @@
                    free=id
                    extra-inspector)]
          [(deserialize-simple-module-binding)
-          (decode* deserialize-simple-module-binding module sym phase)]
+          (decode* deserialize-simple-module-binding module sym phase nominal-module)]
          [(deserialize-full-local-binding)
           (decode* deserialize-full-local-binding key free=id)]
          [(deserialize-bulk-binding)

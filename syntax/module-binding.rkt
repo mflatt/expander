@@ -35,8 +35,7 @@
    [(or frame-id
         free=id
         extra-inspector
-        (not (and (eq? nominal-module module)
-                  (eqv? nominal-phase phase)
+        (not (and (eqv? nominal-phase phase)
                   (eq? nominal-sym sym)
                   (eqv? nominal-require-phase 0))))
     (full-module-binding frame-id
@@ -46,7 +45,7 @@
                          nominal-require-phase
                          extra-inspector)]
    [else
-    (simple-module-binding module phase sym)]))
+    (simple-module-binding module phase sym nominal-module)]))
 
 (define (module-binding-update b
                                #:module [module (module-binding-module b)]
@@ -105,7 +104,7 @@
            [else
             (ser simplified-b)])))
 
-(struct simple-module-binding (module phase sym)
+(struct simple-module-binding (module phase sym nominal-module)
         #:transparent
         #:property prop:serialize
         (lambda (b ser state)
@@ -113,7 +112,8 @@
           `(deserialize-simple-module-binding
             ,(ser (simple-module-binding-module b))
             ,(ser (simple-module-binding-sym b))
-            ,(ser (simple-module-binding-phase b)))))
+            ,(ser (simple-module-binding-phase b))
+            ,(ser (simple-module-binding-nominal-module b)))))
 
 (define (deserialize-full-module-binding module sym phase
                                          nominal-module
@@ -130,8 +130,8 @@
                        #:free=id free=id
                        #:extra-inspector extra-inspector))
 
-(define (deserialize-simple-module-binding module sym phase)
-  (simple-module-binding module phase sym))
+(define (deserialize-simple-module-binding module sym phase nominal-module)
+  (simple-module-binding module phase sym nominal-module))
 
 ;; ----------------------------------------
 
@@ -152,7 +152,7 @@
 
 (define (module-binding-nominal-module b)
   (if (simple-module-binding? b)
-      (simple-module-binding-module b)
+      (simple-module-binding-nominal-module b)
       (full-module-binding-nominal-module b)))
        
 (define (module-binding-nominal-phase b)

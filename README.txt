@@ -17,7 +17,7 @@ Running:
    Runs the examples/tests in "demo.rkt". The tests are not remotely
    complete, but they're a quick and useful sanity check. The
    "demo.rkt" module uses the somewhat internal interface exported by
-   `main`, where the expansion, compilation, and evaluation aer less
+   `main`, where the expansion, compilation, and evaluation are less
    overloaded and more controlable.
 
    Use the "bootstrap-demo.rkt" when running in an older version of
@@ -41,6 +41,20 @@ Running:
    Runs the expander to load the specified module (instead of the
    default module, which is the expander itself).
 
+   When running with a new enough version of Racket that "run.rkt"
+   works (as opposed to "bootstrap-run.rkt"), the performance of the
+   expander in this mode should be close to the performance when the
+   expander is built into the Racket executable. Beware, however, that
+   "run.rkt" implements just enough of the module loader protocol to
+   work as a bridge, so module loading and caching can have very
+   different performance than in an embedding build.
+
+   Beware also that the flags above cause bytecode for the target
+   module to be cached, so running a second time will not test the
+   expander a second time. Prime the cache directory with modules that
+   don't change, and then use `-r` to load a module with a read-only
+   cache.
+
  % racket run.rkt -c <dir> -f <file-path-for-top-level>
 
    Loads the given file as a sequence of top-level forms.
@@ -57,7 +71,7 @@ Running:
  % racket run.rkt -c <dir> -x
 
    Checks possibility of converting a module to a stand-alone linklet
-   with no imports, used mainly to extract the expander itself.
+   with no imports --- used mainly to extract the expander itself.
 
  % racket bootstrap-run.rkt -c <dir> -o <checkout-dir>/racket
 
@@ -67,6 +81,13 @@ Running:
    a linklet-based Racket. Be sure to increment the target Racket
    version if you change the serialization of syntax objects or the
    linklet protocol.
+
+   When you `make`, then "startup.inc" will be automatically compiled
+   to bytecode for for embedding into the Racket executable. If you
+   change the expander in a way that makes existing compiled files
+   invalid, be sure to update "schvers.h". (Updating "schvers.h" is
+   important both for bytecode files and the makefile/preprocessor
+   dance that generates the bytecode version of the expander itself.)
 
 ----------------------------------------
 

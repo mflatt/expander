@@ -244,7 +244,7 @@
                     can-bulk-bind?
                     (lambda (provides provide-phase-level)
                       (add-bulk-required-ids! requires+provides
-                                              in-stx
+                                              bind-in-stx
                                               (module-self m) mpi phase-shift
                                               provides
                                               provide-phase-level

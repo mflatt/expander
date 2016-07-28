@@ -7,6 +7,7 @@
          "../syntax/binding.rkt"
          "../syntax/error.rkt"
          "../syntax/bulk-binding.rkt"
+         "../syntax/mapped-name.rkt"
          "../namespace/namespace.rkt"
          "../namespace/provided.rkt"
          "../common/module-path.rkt")
@@ -146,13 +147,18 @@
                                 #:in orig-s
                                 #:can-be-shadowed? can-be-shadowed?
                                 #:check-and-remove? check-and-remove?)
+  (define phase (phase+ provide-phase-level phase-shift))
+  (define shortcut-table (and check-and-remove?
+                              ((hash-count provides) . > . 64)
+                              (syntax-mapped-names s phase)))
   (define mpi (intern-mpi r+p nominal-module))
   (define at-mod (hash-ref! (requires+provides-requires r+p) mpi make-hasheqv))
   (define sym-to-reqds (hash-ref! at-mod phase-shift make-hasheq))
   (define br (bulk-required provides s provide-phase-level can-be-shadowed?))
-  (define phase (phase+ provide-phase-level phase-shift))
   (for ([(sym binding/p) (in-hash provides)])
-    (when check-and-remove?
+    (when (and check-and-remove?
+               (or (not shortcut-table)
+                   (hash-ref shortcut-table sym #f)))
       (check-not-defined #:check-not-required? #t
                          r+p (datum->syntax s sym s) phase #:in orig-s
                          #:unless-matches

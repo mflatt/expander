@@ -159,11 +159,21 @@
      [(null? mpi-shifts)
       b]
      [else
-      (module-binding-update b
-                             #:module (apply-syntax-shifts (module-binding-module b) mpi-shifts)
-                             #:nominal-module (apply-syntax-shifts (module-binding-nominal-module b) mpi-shifts)
-                             #:free=id (and (binding-free=id b)
-                                            (syntax-transfer-shifts (binding-free=id b) s)))])]
+      (define mod (module-binding-module b))
+      (define shifted-mod (apply-syntax-shifts mod mpi-shifts))
+      (define nominal-mod (module-binding-nominal-module b))
+      (define shifted-nominal-mod (if (eq? mod nominal-mod)
+                                      shifted-mod
+                                      (apply-syntax-shifts nominal-mod mpi-shifts)))
+      (if (and (eq? mod shifted-mod)
+               (eq? nominal-mod shifted-nominal-mod)
+               (not (binding-free=id b)))
+          b
+          (module-binding-update b
+                                 #:module shifted-mod
+                                 #:nominal-module shifted-nominal-mod
+                                 #:free=id (and (binding-free=id b)
+                                                (syntax-transfer-shifts (binding-free=id b) s))))])]
    [(and (not b) unbound-sym?)
     (syntax-e s)]
    [else b]))

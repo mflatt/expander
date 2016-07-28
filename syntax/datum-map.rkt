@@ -32,6 +32,8 @@
      [(pair? s)
       (f tail? (cons (loop #f (car s) depth seen)
                      (loop #t (cdr s) depth seen)))]
+     [(or (symbol? s) (boolean? s) (number? s))
+      (f #f s)]
      [(vector? s)
       (f #f (vector->immutable-vector
              (for/vector #:length (vector-length s) ([e (in-vector s)])
