@@ -6,6 +6,7 @@
          "../syntax/scope.rkt"
          "../syntax/binding.rkt"
          "../syntax/error.rkt"
+         "../syntax/bulk-binding.rkt"
          "../namespace/namespace.rkt"
          "../namespace/provided.rkt"
          "../common/module-path.rkt")
@@ -55,7 +56,6 @@
 ;; module path, phase, and symbol that are mapped to it
 (struct bulk-required (provides ; extract binding info based on the sym
                        s        ; combine with the sym to create an identifier
-                       self     ; source of module path index shift to the one that reaches the bulk require
                        provide-phase-level ; phase of `provide` in immediately providing module
                        can-be-shadowed?))  ; shadowed because, e.g., an initial import
 
@@ -143,13 +143,27 @@
 ;; Like `add-defined-or-required-id!`, but faster for bindings that
 ;; all have the same scope, etc.
 (define (add-bulk-required-ids! r+p s self nominal-module phase-shift provides provide-phase-level
-                                #:can-be-shadowed? can-be-shadowed?)
-  (define at-mod (hash-ref! (requires+provides-requires r+p)
-                            (intern-mpi r+p nominal-module)
-                            make-hasheqv))
+                                #:in orig-s
+                                #:can-be-shadowed? can-be-shadowed?
+                                #:check-and-remove? check-and-remove?)
+  (define mpi (intern-mpi r+p nominal-module))
+  (define at-mod (hash-ref! (requires+provides-requires r+p) mpi make-hasheqv))
   (define sym-to-reqds (hash-ref! at-mod phase-shift make-hasheq))
-  (define br (bulk-required provides s self provide-phase-level can-be-shadowed?))
-  (for ([sym (in-hash-keys provides)])
+  (define br (bulk-required provides s provide-phase-level can-be-shadowed?))
+  (define phase (phase+ provide-phase-level phase-shift))
+  (for ([(sym binding/p) (in-hash provides)])
+    (when check-and-remove?
+      (check-not-defined #:check-not-required? #t
+                         r+p (datum->syntax s sym s) phase #:in orig-s
+                         #:unless-matches
+                         (lambda ()
+                           (provide-binding-to-require-binding binding/p
+                                                               sym
+                                                               #:self self
+                                                               #:mpi mpi
+                                                               #:provide-phase-level provide-phase-level
+                                                               #:phase-shift phase-shift))
+                         #:remove-shadowed!? #t))
     (hash-set! sym-to-reqds sym (cons br (hash-ref sym-to-reqds sym null)))))
 
 ;; Convert a combination of a symbol and `bulk-required` to a
@@ -188,7 +202,9 @@
                                               #:can-be-shadowed? #t
                                               #:as-transformer? (required-as-transformer? reqd)))))
 
-;; Removes a required identifier, in anticipation of it being defined
+;; Removes a required identifier, in anticipation of it being defined.
+;; The `check-not-defined` function below is similar, and it also includes
+;; an option to remove shadowed bindings.
 (define (remove-required-id! r+p id phase #:unless-matches binding)
   (define b (resolve+shift id phase #:exactly? #t))
   (when b
@@ -204,18 +220,22 @@
         (define l (hash-ref sym-to-reqds sym null))
         (unless (null? l)
           (unless (same-binding? b binding)
-            (hash-set! sym-to-reqds sym
-                       (for*/list ([r (in-list l)]
-                                   [r (in-value (normalize-required r mpi nominal-phase sym))]
-                                   #:unless (free-identifier=? (required-id r) id phase phase))
-                         r))))))))
+            (hash-set! sym-to-reqds sym (remove-non-matching-requireds l id phase mpi nominal-phase sym))))))))
+
+;; Prune a list of `required`s t remove any with a different binding
+(define (remove-non-matching-requireds reqds id phase mpi nominal-phase sym)
+  (for*/list ([r (in-list reqds)]
+              [r (in-value (normalize-required r mpi nominal-phase sym))]
+              #:unless (free-identifier=? (required-id r) id phase phase))
+    r))
 
 ;; Check whether an identifier has a binding that is from a non-shadowable
 ;; require; if something is found but it will be replaced, then record that
 ;; bindings are not simple.
 (define (check-not-defined #:check-not-required? [check-not-required? #f]
                            r+p id phase #:in orig-s
-                           #:unless-matches [ok-binding #f])
+                           #:unless-matches [ok-binding/delayed #f] ; binding or (-> binding)
+                           #:remove-shadowed!? [remove-shadowed!? #f])
   (define b (resolve+shift id phase #:exactly? #t))
   (cond
    [(not b) (void)]
@@ -240,9 +260,11 @@
       ;; Doesn't count as previously defined
       (void)]
      [else
-      (define at-mod (hash-ref (requires+provides-requires r+p)
-                               (intern-mpi r+p (module-binding-nominal-module b))
-                               #f))
+      (define mpi (intern-mpi r+p (module-binding-nominal-module b)))
+      (define at-mod (hash-ref (requires+provides-requires r+p) mpi #f))
+      (define ok-binding (if (procedure? ok-binding/delayed)
+                             (ok-binding/delayed)
+                             ok-binding/delayed))
       (cond
        [(not at-mod)
         ;; Binding is from an enclosing context; if it's from an
@@ -254,11 +276,10 @@
         ;; become non-simple
         (void)]
        [else
-        (for ([r (in-list (hash-ref (hash-ref at-mod
-                                              (module-binding-nominal-require-phase b)
-                                              #hasheq())
-                                    (syntax-e id)
-                                    null))])
+        (define nominal-phase (module-binding-nominal-require-phase b))
+        (define sym-to-reqds (hash-ref at-mod nominal-phase #hasheq()))
+        (define reqds (hash-ref sym-to-reqds (syntax-e id) null))
+        (for ([r (in-list reqds)])
           (cond
            [(if (bulk-required? r)
                 (bulk-required-can-be-shadowed? r)
@@ -274,8 +295,15 @@
                                                 [(label-phase? phase) " for label"]
                                                 [(= 1 phase) " for syntax"]
                                                 [else (format " for phase ~a" phase)]))
+                                ;; FIXME: doesn't report in the right way;
+                                ;; part of the problem is that `parse-and-perofmr-requires`
+                                ;; sends along `#f` as the original form
                                 orig-s
-                                id)]))])])]))
+                                id)]))
+        (when (and remove-shadowed!? (pair? reqds))
+          ;; Same work as in `remove-required-id!`
+          (hash-set! sym-to-reqds (syntax-e id)
+                     (remove-non-matching-requireds reqds id phase mpi nominal-phase (syntax-e id))))])])]))
 
 (define (add-defined-syms! r+p syms phase)
   (define phase-to-defined-syms (requires+provides-phase-to-defined-syms r+p))

@@ -230,8 +230,6 @@
     ;; make the module available:
     (namespace-module-make-available! m-ns interned-mpi phase-shift #:visit-phase run-phase))
   (define can-bulk-bind? (and (not adjust) (not skip-variable-phase-level)))
-  (define can-bulk-requires+provides? (or (not requires+provides)
-                                          (and can-bulk-bind? initial-require?)))
   (bind-all-provides!
    m
    bind-in-stx phase-shift m-ns interned-mpi
@@ -243,17 +241,18 @@
    #:can-bulk? can-bulk-bind?
    #:bulk-callback (and
                     requires+provides
-                    can-bulk-requires+provides?
+                    can-bulk-bind?
                     (lambda (provides provide-phase-level)
                       (add-bulk-required-ids! requires+provides
                                               in-stx
                                               (module-self m) mpi phase-shift
                                               provides
                                               provide-phase-level
-                                              #:can-be-shadowed? can-be-shadowed?)))
+                                              #:can-be-shadowed? can-be-shadowed?
+                                              #:check-and-remove? (not initial-require?)
+                                              #:in orig-s)))
    #:filter (and
              (or (not can-bulk-bind?)
-                 (not can-bulk-requires+provides?)
                  copy-variable-phase-level)
              (lambda (binding as-transformer?)
                (define sym (module-binding-nominal-sym binding))
@@ -284,8 +283,7 @@
                    (and (eq? sym (adjust-rename-from-sym adjust))
                         (hash-set! done-syms sym #t)
                         (adjust-rename-to-id adjust))]))
-               (when (and adjusted-sym
-                          (not can-bulk-requires+provides?))
+               (when (and adjusted-sym requires+provides)
                  (define s (datum->syntax bind-in-stx adjusted-sym))
                  (define bind-phase (phase+ phase-shift provide-phase))
                  (unless initial-require?
@@ -293,8 +291,8 @@
                                       requires+provides
                                       s bind-phase
                                       #:unless-matches binding
-                                      #:in in-stx)
-                   (remove-required-id! requires+provides s bind-phase #:unless-matches binding))
+                                      #:in orig-s
+                                      #:remove-shadowed!? #t))
                  (add-defined-or-required-id! requires+provides
                                               s bind-phase binding
                                               #:can-be-shadowed? can-be-shadowed?
