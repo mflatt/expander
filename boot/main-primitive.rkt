@@ -58,5 +58,6 @@
           'module->exports module->exports
           'module->indirect-exports module->indirect-exports
           'module-compiled-cross-phase-persistent? module-compiled-cross-phase-persistent?
+          'module-provide-protected? module-provide-protected?
           'module->namespace module->namespace
           'namespace-unprotect-module namespace-unprotect-module))

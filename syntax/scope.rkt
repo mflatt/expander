@@ -273,7 +273,7 @@
             (phase<? (shifted-to-label-phase-from p1) (shifted-to-label-phase-from p2))]
            [else #f])]
          [(shifted-to-label-phase? p2) #t]
-         [els (phase<? p1 p2)]))
+         [else (phase<? p1 p2)]))
       ((multi-scope-id ms1) . < . (multi-scope-id ms2))))
 
 ;; Adding, removing, or flipping a scope is propagated

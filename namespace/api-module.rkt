@@ -5,6 +5,7 @@
          (submod "namespace.rkt" for-module)
          "module.rkt"
          "provide-for-api.rkt"
+         "provided.rkt"
          (submod "module.rkt" for-module-reflect)
          "../common/contract.rkt")
 
@@ -14,6 +15,7 @@
          module->imports
          module->exports
          module->indirect-exports
+         module-provide-protected?
          module->namespace
          namespace-unprotect-module)
 
@@ -58,6 +60,12 @@
               (variables->api-nonprovides (module-provides m)
                                           ((module-get-all-variables m))))
             'module->indirect-exports mod))
+
+(define (module-provide-protected? mod sym)
+  (module-> (lambda (m)
+              (define b/p (hash-ref (module-provides m) sym #f))
+              (or (not b/p) (provided-as-protected? b/p)))
+            'module-provide-protected? mod))
 
 (define (module->namespace mod [ns (current-namespace)])
   (unless (module-reference? mod)
