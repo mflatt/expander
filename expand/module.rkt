@@ -853,8 +853,7 @@
                                                           [phase phase]
                                                           [namespace (namespace->namespace-at-phase m-ns phase)]
                                                           [requires+provides requires+provides]
-                                                          [declared-submodule-names declared-submodule-names])
-                                       expand rebuild))
+                                                          [declared-submodule-names declared-submodule-names])))
          (log-expand ctx 'exit-prim)
          (cons (syntax-track-origin*
                 track-stxes

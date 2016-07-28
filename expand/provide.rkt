@@ -13,7 +13,8 @@
          "module-path.rkt"
          "binding-for-transformer.rkt"
          "../namespace/core.rkt"
-         "../common/module-path.rkt")
+         "../common/module-path.rkt"
+         "main.rkt")
 
 (provide parse-and-expand-provides!)
 
@@ -23,8 +24,7 @@
 
 (define (parse-and-expand-provides! specs orig-s
                                     rp self
-                                    phase ctx
-                                    expand rebuild)
+                                    phase ctx)
   ;; returns a list of expanded specs while registering provides in `rp`
   (define ns (expand-context-namespace ctx))
   (let loop ([specs specs]
