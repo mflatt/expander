@@ -264,8 +264,16 @@
   (define ms1 (shifted-multi-scope-multi-scope sms1))
   (define ms2 (shifted-multi-scope-multi-scope sms2))
   (if (eq? ms1 ms2)
-      (phase<? (shifted-multi-scope-phase sms1)
-               (shifted-multi-scope-phase sms2))
+      (let ([p1 (shifted-multi-scope-phase sms1)]
+            [p2 (shifted-multi-scope-phase sms2)])
+        (cond
+         [(shifted-to-label-phase? p1)
+          (cond
+           [(shifted-to-label-phase? p2)
+            (phase<? (shifted-to-label-phase-from p1) (shifted-to-label-phase-from p2))]
+           [else #f])]
+         [(shifted-to-label-phase? p2) #t]
+         [els (phase<? p1 p2)]))
       ((multi-scope-id ms1) . < . (multi-scope-id ms2))))
 
 ;; Adding, removing, or flipping a scope is propagated

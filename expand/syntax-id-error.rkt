@@ -18,24 +18,33 @@
 
 (define (syntax-debug-info-string s ctx)
   (define info (syntax-debug-info s (expand-context-phase ctx) #t))
-  (let loop ([info info] [layer 0])
-    (string-append
-     "\n  context" (layer->string layer) "...:"
-     (describe-context (hash-ref info 'context))
-     (apply string-append
-            (for/list ([b (hash-ref info 'bindings null)])
-              (string-append
-               "\n  " (if (hash-ref b 'match? #f) "matching" "other") " binding" (layer->string layer) "...:"
-               "\n   " (if (hash-ref b 'local #f)
-                           "local"
-                           (format "~a" (hash-ref b 'module #f)))
-               (describe-context (hash-ref b 'context)))))
-     (let ([fallbacks (hash-ref info 'fallbacks null)])
-       (apply
-        string-append
-        (for/list ([fallback (in-list fallbacks)]
-                   [layer (in-naturals (add1 layer))])
-          (loop fallback layer)))))))
+  (cond
+   [(not (or (for/or ([b (in-list (hash-ref info 'bindings null))])
+               (hash-ref b 'match? #f))
+             (for*/or ([fb-info (in-list (hash-ref info 'fallbacks null))]
+                       [b (in-list (hash-ref fb-info 'bindings null))])
+               (hash-ref b 'match? #f))))
+    ;; Don't show context if there's no binding to compare it to
+    ""]
+   [else
+    (let loop ([info info] [layer 0])
+      (string-append
+       "\n  context" (layer->string layer) "...:"
+       (describe-context (hash-ref info 'context))
+       (apply string-append
+              (for/list ([b (in-list (hash-ref info 'bindings null))])
+                (string-append
+                 "\n  " (if (hash-ref b 'match? #f) "matching" "other") " binding" (layer->string layer) "...:"
+                 "\n   " (if (hash-ref b 'local #f)
+                             "local"
+                             (format "~a" (hash-ref b 'module #f)))
+                 (describe-context (hash-ref b 'context)))))
+       (let ([fallbacks (hash-ref info 'fallbacks null)])
+         (apply
+          string-append
+          (for/list ([fallback (in-list fallbacks)]
+                     [layer (in-naturals (add1 layer))])
+            (loop fallback layer))))))]))
 
 (define (describe-context scopes)
   (define strs
