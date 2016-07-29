@@ -44,14 +44,18 @@
                                  #:skip-log-exit? #t
                                  #:local-keys local-keys
                                  #:local-values local-values))
+  (define ctx (get-current-expand-context))
+  ;; Move introduction scope from the already-expanded syntax object to
+  ;; its wrapper. The expander will later check that the wrapper ends up
+  ;; with an empty set of scopes, and then the already-expanded inside has
+  ;; the scopes suitably flipped
   (define ae (already-expanded
-              exp-s
+              (flip-introduction-scopes exp-s ctx)
               (root-expand-context-all-scopes-stx
                (get-current-expand-context 'syntax-local-expand-expression))))
-  (let ([ctx (get-current-expand-context)])
-    (log-expand ctx 'opaque-expr ae)
-    (log-expand ctx 'exit-local exp-s))
-  (values exp-s (datum->syntax #f ae)))
+  (log-expand ctx 'opaque-expr ae)
+  (log-expand ctx 'exit-local exp-s)
+  (values exp-s (flip-introduction-scopes (datum->syntax #f ae) ctx)))
 
 (define (syntax-local-expand-expression s)
   (do-syntax-local-expand-expression 'syntax-local-expand-expression s))

@@ -19,11 +19,9 @@
 (define (syntax-debug-info-string s ctx)
   (define info (syntax-debug-info s (expand-context-phase ctx) #t))
   (cond
-   [(not (or (for/or ([b (in-list (hash-ref info 'bindings null))])
-               (hash-ref b 'match? #f))
-             (for*/or ([fb-info (in-list (hash-ref info 'fallbacks null))]
-                       [b (in-list (hash-ref fb-info 'bindings null))])
-               (hash-ref b 'match? #f))))
+   [(not (or (pair? (hash-ref info 'bindings null))
+             (for*/or ([fb-info (in-list (hash-ref info 'fallbacks null))])
+               (pair? (hash-ref fb-info 'bindings null)))))
     ;; Don't show context if there's no binding to compare it to
     ""]
    [else

@@ -26,6 +26,7 @@
          syntax-e/no-taint ; like `syntax-e`, but doesn't explode a dye pack
          
          syntax-scope-set
+         syntax-any-scopes?
          syntax-any-macro-scopes?
          
          syntax-shift-phase-level
@@ -613,6 +614,9 @@
   (define bt (binding-table-add-bulk (scope-binding-table max-sc) scopes bulk-binding))
   (set-scope-binding-table! max-sc bt)
   (clear-resolve-cache!))
+
+(define (syntax-any-scopes? s)
+  (not (set-empty? (syntax-scopes s))))
 
 (define (syntax-any-macro-scopes? s)
   (for/or ([sc (in-set (syntax-scopes s))])

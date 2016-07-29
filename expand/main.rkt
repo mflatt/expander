@@ -170,9 +170,10 @@
 ;; An expression that is already fully expanded via `local-expand-expression`
 (define (expand-already-expanded s ctx)
   (define ae (syntax-e s))
-  (unless (bound-identifier=? (root-expand-context-all-scopes-stx ctx)
-                              (already-expanded-all-scopes-stx ae)
-                              (expand-context-phase ctx))
+  (unless (or (syntax-any-scopes? s)
+              (bound-identifier=? (root-expand-context-all-scopes-stx ctx)
+                                  (already-expanded-all-scopes-stx ae)
+                                  (expand-context-phase ctx)))
     (raise-syntax-error #f
                         (string-append "expanded syntax not in its original lexical context;\n"
                                        " extra bindings or scopes in the current context")
