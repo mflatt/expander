@@ -231,7 +231,6 @@
 ;; ----------------------------------------
 
 (define (namespace->module-instance ns name 0-phase
-                                    #:install!-namespace [install!-ns #f]
                                     #:complain-on-failure? [complain-on-failure? #f]
                                     #:check-available-at-phase-level [check-available-at-phase-level #f]
                                     #:unavailable-callback [unavailable-callback void])
@@ -264,6 +263,13 @@
   (cond
    [(module-cross-phase-persistent? m)
     (hash-set! (namespace-phase-to-namespace m-ns) 0 m-ns)
+    (hash-set! (namespace-phase-level-to-definitions m-ns)
+               0
+               (namespace->definitions existing-m-ns 0))
+    (hash-set! (namespace-phase-to-namespace m-ns) 1 (namespace->namespace-at-phase m-ns 1))
+    (hash-set! (namespace-phase-level-to-definitions m-ns)
+               1
+               (namespace->definitions existing-m-ns 1))
     (hash-set! (namespace-module-instances (or (namespace-root-namespace ns) ns))
                name
                mi)
@@ -440,10 +446,7 @@
                         phase
                         (lambda (l) (cons mi l))
                         null)
-          (hash-set! (module-instance-phase-level-to-state mi) phase-level 'available)
-          (define insp (module-inspector m))
-          (define prep (module-prepare-instance m))
-          (prep (module-instance-data-box mi) m-ns phase-shift mpi bulk-binding-registry insp)])))
+          (hash-set! (module-instance-phase-level-to-state mi) phase-level 'available)])))
 
     (when otherwise-available?
       (set-module-instance-made-available?! mi #t))
