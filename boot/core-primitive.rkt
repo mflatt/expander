@@ -77,10 +77,12 @@
                       syntax-taint
                       
                       raise-syntax-error
+                      struct:exn:fail:syntax
                       exn:fail:syntax
                       make-exn:fail:syntax
                       exn:fail:syntax?
                       exn:fail:syntax-exprs
+                      struct:exn:fail:syntax:unbound
                       exn:fail:syntax:unbound
                       make-exn:fail:syntax:unbound
                       exn:fail:syntax:unbound?
@@ -89,10 +91,12 @@
                       prop:missing-module
                       exn:missing-module?
                       exn:missing-module-accessor
+                      struct:exn:fail:filesystem:missing-module
                       exn:fail:filesystem:missing-module
                       make-exn:fail:filesystem:missing-module
                       exn:fail:filesystem:missing-module?
                       exn:fail:filesystem:missing-module-path
+                      struct:exn:fail:syntax:missing-module
                       exn:fail:syntax:missing-module
                       make-exn:fail:syntax:missing-module
                       exn:fail:syntax:missing-module?
