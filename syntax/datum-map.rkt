@@ -1,6 +1,5 @@
 #lang racket/base
-(require "../common/prefab.rkt"
-         "../common/inline.rkt")
+(require "../common/prefab.rkt")
 
 (provide datum-map
          datum-has-elements?)
@@ -17,7 +16,7 @@
 ;; discovered, the procedure attached to 'cycle-fail in the initial
 ;; table is called
 
-(define-inline (datum-map s f [seen #f])
+(define (datum-map s f [seen #f])
   (let loop ([tail? #f] [s s] [prev-depth 0] [prev-seen seen])
     (define depth (add1 prev-depth)) ; avoid cycle-checking overhead for shallow cases
     (define seen
