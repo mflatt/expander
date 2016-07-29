@@ -2,6 +2,7 @@
 (require "../compile/serialize-property.rkt"
          "../compile/serialize-state.rkt"
          "../common/set.rkt"
+         "../common/inline.rkt"
          "preserved.rkt"
          "tamper.rkt"
          "datum-map.rkt")
@@ -15,6 +16,7 @@
  datum->syntax
  
  syntax-map
+ non-syntax-map
  
  prop:propagation
  
@@ -139,11 +141,10 @@
             (and stx-c
                  (syntax-tamper stx-c)
                  (tamper-tainted-for-content content))))
-  (syntax-map s
-              (lambda (tail? x) (if tail? x (wrap x)))
-              #f
-              #f
-              disallow-cycles))
+  (non-syntax-map s
+                  (lambda (tail? x) (if tail? x (wrap x)))
+                  (lambda (s) s)
+                  disallow-cycles))
 
 ;; `(syntax-map s f d->s)` walks over `s`:
 ;; 
@@ -151,24 +152,33 @@
 ;;    indicates that the value is a pair/null in a `cdr` --- so that it
 ;;    doesn't need to be wrapped for `datum->syntax`, for example
 ;;
-;;  * if `d->s` is #f, then syntax object are returned as-is
-;;
-;;  * otherwise, `(d->s orig-s d)` is called for each syntax object,
+;;  * `(d->s orig-s d)` is called for each syntax object,
 ;;    and the second argument is result of traversing its datum
 ;; 
-;;  * the `s-e` function extrcts content of a syntax object; if it's
-;;    #f, then there's no loop over the content
+;;  * the `s-e` function extracts content of a syntax object
 ;;
-(define (syntax-map s f d->s s-e [seen #f])
+;; The optional `seen` argument is an `eq?`-based immutable hash table
+;; to detect and reject cycles. See `datum-map`.
+
+(define-inline (syntax-map s f d->s s-e [seen #f])
   (let loop ([s s])
     (datum-map s
                (lambda (tail? v)
                  (cond
-                  [(syntax? v) (if d->s
-                                   (d->s v (if s-e
-                                               (loop (s-e v))
-                                               (syntax-content v)))
-                                   v)]
+                  [(syntax? v) (d->s v (loop (s-e v)))]
+                  [else (f tail? v)]))
+               seen)))
+
+;; `(non-syntax-map s f s->)` is like `(syntax-map s f d->s)`, except that
+;;  when a syntax object is found, it is just passed to `d` --- so there's
+;;  no `d->s` or `s-e`, since they would not be called
+
+(define-inline (non-syntax-map s f [s-> (lambda (x) x)] [seen #f])
+  (let loop ([s s])
+    (datum-map s
+               (lambda (tail? v)
+                 (cond
+                  [(syntax? v) (s-> v)]
                   [else (f tail? v)]))
                seen)))
 

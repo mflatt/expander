@@ -17,11 +17,10 @@
     (case mode
       [(opaque) (proc s)]
       [(transparent)
-       (define c (syntax-map (or (syntax->list s)
-                                 (syntax-e s))
-                             (lambda (tail? d) d)
-                             (lambda (s d) (loop s (syntax-taint-mode-property s)))
-                             #f))
+       (define c (non-syntax-map (or (syntax->list s)
+                                     (syntax-e s))
+                                 (lambda (tail? d) d)
+                                 (lambda (s) (loop s (syntax-taint-mode-property s)))))
        (datum->syntax #f c s (if (syntax-any-macro-scopes? s)
                                  (syntax-property-remove s original-property-sym)
                                  s))]
@@ -39,10 +38,9 @@
            (datum->syntax s
                           (cons (loop (car c) (syntax-taint-mode-property s))
                                 (cons (loop (car d) 'transparent)
-                                      (syntax-map (syntax->list (cdr d))
-                                                  (lambda (tail? d) d)
-                                                  (lambda (s d) (loop s (syntax-taint-mode-property s)))
-                                                  #f)))
+                                      (non-syntax-map (syntax->list (cdr d))
+                                                      (lambda (tail? d) d)
+                                                      (lambda (s) (loop s (syntax-taint-mode-property s))))))
                           s
                           s)]
           [else (loop s 'transparent)])]

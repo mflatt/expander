@@ -19,14 +19,13 @@
     (set-syntax-tamper! s 'tainted)))
 
 (define (taint-content d)
-  (syntax-map d
-              (lambda (tail? x) x)
-              (lambda (sub-s d)
-                (cond
-                 [(tamper-tainted? (syntax-tamper sub-s)) sub-s]
-                 [else (struct-copy syntax sub-s
-                                    [tamper (tamper-tainted-for-content (syntax-content sub-s))])]))
-              #f))
+  (non-syntax-map d
+                  (lambda (tail? x) x)
+                  (lambda (sub-s)
+                    (cond
+                     [(tamper-tainted? (syntax-tamper sub-s)) sub-s]
+                     [else (struct-copy syntax sub-s
+                                        [tamper (tamper-tainted-for-content (syntax-content sub-s))])]))))
 
 (define (syntax-tainted? s)
   (tamper-tainted? (syntax-tamper s)))

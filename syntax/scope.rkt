@@ -302,24 +302,23 @@
   (define prop (syntax-scope-propagations s))
   (if prop
       (let ([new-content
-             (syntax-map (syntax-content s)
-                         (lambda (tail? x) x)
-                         (lambda (sub-s d)
-                           (struct-copy syntax sub-s
-                                        [scopes (propagation-apply
-                                                 prop
-                                                 (syntax-scopes sub-s)
-                                                 s)]
-                                        [shifted-multi-scopes (propagation-apply-shifted
-                                                               prop
-                                                               (syntax-shifted-multi-scopes sub-s)
-                                                               s)]
-                                        [scope-propagations (propagation-merge
-                                                             prop
-                                                             (syntax-scope-propagations sub-s)
-                                                             (syntax-scopes sub-s)
-                                                             (syntax-shifted-multi-scopes sub-s))]))
-                         #f)])
+             (non-syntax-map (syntax-content s)
+                             (lambda (tail? x) x)
+                             (lambda (sub-s)
+                               (struct-copy syntax sub-s
+                                            [scopes (propagation-apply
+                                                     prop
+                                                     (syntax-scopes sub-s)
+                                                     s)]
+                                            [shifted-multi-scopes (propagation-apply-shifted
+                                                                   prop
+                                                                   (syntax-shifted-multi-scopes sub-s)
+                                                                   s)]
+                                            [scope-propagations (propagation-merge
+                                                                 prop
+                                                                 (syntax-scope-propagations sub-s)
+                                                                 (syntax-scopes sub-s)
+                                                                 (syntax-shifted-multi-scopes sub-s))])))])
         (set-syntax-content! s new-content)
         (set-syntax-scope-propagations! s #f)
         new-content)
