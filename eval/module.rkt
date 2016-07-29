@@ -80,7 +80,7 @@
   (define create-root-expand-context-from-module ; might be used to create root-expand-context
     (make-create-root-expand-context-from-module requires phases-h))
   
-  (define (declare-submodules names declare-name pre?)
+  (define (declare-submodules ns names declare-name pre?)
     (when dh
       (if (compiled-in-memory? c)
           (for ([c (in-list (if pre?
@@ -178,7 +178,7 @@
       (define declare-name (substitute-module-declare-name default-name))
       
       (when with-submodules?
-        (declare-submodules pre-submodule-names declare-name #t))
+        (declare-submodules ns pre-submodule-names declare-name #t))
       
       (declare-module! ns
                        m
@@ -186,7 +186,7 @@
                        #:with-submodules? with-submodules?)
 
       (when with-submodules?
-        (declare-submodules post-submodule-names declare-name #f))))
+        (declare-submodules ns post-submodule-names declare-name #f))))
   
   ;; ----------------------------------------
   
