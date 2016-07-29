@@ -304,15 +304,19 @@
 
 (define (module-path-index-shift-cache! mpi)
   (or (module-path-index-shift-cache mpi)
-      (let ([cache (make-weak-hasheq)])
+      (let ([cache (make-weak-box (box #hasheq()))])
         (set-module-path-index-shift-cache! mpi cache)
         cache)))
 
 (define (shift-cache-ref cache v)
-  (and cache (hash-ref cache v #f)))
+  (and cache
+       (let ([b (weak-box-value cache)])
+         (and b (hash-ref (unbox b) v #f)))))
 
 (define (shift-cache-set! cache v r)
-  (hash-set! cache v r))
+  (define b (weak-box-value cache))
+  (when b
+    (set-box! b (hash-set (unbox b) v r))))
 
 ;; A constant module path index to represent the top level
 (define top-level-module-path-index
