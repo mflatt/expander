@@ -15,6 +15,7 @@
 (define (taint-dispatch s proc phase)
   (let loop ([s s] [mode (syntax-taint-mode-property s)])
     (case mode
+      [(none) s]
       [(opaque) (proc s)]
       [(transparent)
        (define c (non-syntax-map (or (syntax->list s)
