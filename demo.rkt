@@ -1343,8 +1343,8 @@
   (eval-expression '(call-with-values
                      (lambda () (module->exports ''one-of-each-provide-at-each-phase))
                      list)
-                   #:check '(((0 (one)) (1 (two)))
-                             ((0 (one-s)) (1 (two-s))))))
+                   #:check '(((0 (one ())) (1 (two ())))
+                             ((0 (one-s ())) (1 (two-s ()))))))
 
 (parameterize ([current-namespace demo-ns])
   (eval-expression '(module->indirect-exports ''one-of-each-provide-at-each-phase)
@@ -1354,8 +1354,8 @@
               (lambda () (module-compiled-exports
                      (compile one-of-each-provide-at-each-phase-expr demo-ns)))
               list)
-             '(((0 (one)) (1 (two)))
-               ((0 (one-s)) (1 (two-s)))))
+             '(((0 (one ())) (1 (two ())))
+               ((0 (one-s ())) (1 (two-s ())))))
 
 (check-value (module-compiled-indirect-exports
               (compile one-of-each-provide-at-each-phase-expr demo-ns))

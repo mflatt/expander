@@ -63,7 +63,7 @@
     (and (local-binding? bb)
          (eq? (local-binding-key ab)
               (local-binding-key bb)))]
-   [else (error "bad binding")]))
+   [else (error "bad binding" ab)]))
 
 (define (identifier-binding-symbol id phase)
   (define b (resolve+shift id phase #:unbound-sym? #t))

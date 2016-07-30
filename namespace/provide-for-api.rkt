@@ -1,6 +1,7 @@
 #lang racket/base
 (require "provided.rkt"
          "../common/phase.rkt"
+         "../common/module-path.rkt"
          "../syntax/module-binding.rkt")
 
 (provide provides->api-provides
@@ -14,19 +15,21 @@
                       (for/list ([(sym b/p) (in-hash at-phase)]
                                  #:when (ok? b/p))
                         (define b (provided-as-binding b/p))
-                        (cons sym
+                        (list sym
                               (cond
                                [(eq? self (module-binding-module b))
                                 null]
-                               [(and (zero-phase? (module-binding-phase b))
-                                     (zero-phase? (module-binding-nominal-phase b))
-                                     (eq? (module-binding-sym b) sym))
-                                (list (module-binding-module b))]
                                [else
-                                (list (module-binding-module b)
-                                      (module-binding-phase b)
-                                      (module-binding-sym b)
-                                      (module-binding-nominal-phase b))]))))]
+                                (for/list ([b (in-list (provided-all-nominal-bindings b/p))])
+                                  (cond
+                                   [(and (zero-phase? (module-binding-nominal-phase b))
+                                         (eq? (module-binding-sym b) sym))
+                                    (module-binding-nominal-module b)]
+                                   [else
+                                    (list (module-binding-nominal-module b)
+                                          (module-binding-phase b)
+                                          (module-binding-sym b)
+                                          (module-binding-nominal-phase b))]))]))))]
                   #:unless (null? l))
         (cons phase (sort l symbol<? #:key car))))
     (sort result-l < #:key car))

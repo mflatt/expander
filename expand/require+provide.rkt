@@ -10,7 +10,8 @@
          "../syntax/mapped-name.rkt"
          "../namespace/namespace.rkt"
          "../namespace/provided.rkt"
-         "../common/module-path.rkt")
+         "../common/module-path.rkt"
+         "binding-key.rkt")
 
 (provide make-requires+provides
          requires+provides-self
@@ -45,13 +46,18 @@
                            require-mpis/fast ; same table, but `eq?`-keyed for fast already-interned checks
                            require-mpis-in-order ; require-phase -> list of module-path-index
                            requires   ; mpi [interned] -> require-phase -> sym -> list of [bulk-]required
+                           binding-keys ; see "binding-keys.rkt"
+                           nominals   ; sym [binding-key] -> list of nominal
                            provides   ; phase -> sym -> binding or protected
                            phase-to-defined-syms ; phase -> sym -> boolean
                            [can-cross-phase-persistent? #:mutable]
                            [all-bindings-simple? #:mutable])) ; tracks whether bindings are easily reconstructed
 
 ;; A `required` represents an identifier required into a module
-(struct required (id phase can-be-shadowed? as-transformer?))
+(struct required (id phase binding-sym can-be-shadowed? as-transformer?))
+
+;; A `nominal` supports a reverse mapping of bindings to nominal info
+(struct nominal (module provide-phase require-phase sym) #:transparent)
 
 ;; A `bulk-required` can be converted into a `required` given the
 ;; module path, phase, and symbol that are mapped to it
@@ -66,6 +72,8 @@
                      (make-hasheq)  ; require-mpis/fast
                      (make-hasheqv) ; require-mpis-in-order
                      (make-hasheq)  ; requires
+                     (make-binding-keys) ; binding-keys
+                     (make-hasheq)  ; nominals
                      (make-hasheqv) ; provides
                      (make-hasheqv) ; phase-to-defined-syms
                      #t
@@ -114,21 +122,22 @@
 
 ;; Register a specific identifier that is required
 (define (add-defined-or-required-id! r+p id phase binding
-                                          #:can-be-shadowed? [can-be-shadowed? #f]
-                                          #:as-transformer? as-transformer?)
+                                     #:can-be-shadowed? [can-be-shadowed? #f]
+                                     #:as-transformer? as-transformer?)
   ;; Register specific required identifier
   (unless (equal? phase (phase+ (module-binding-nominal-phase binding)
                                 (module-binding-nominal-require-phase binding)))
     (error "internal error: binding phase does not match nominal info"))
-  (add-defined-or-required-id-at-nominal! r+p id phase
+  (add-defined-or-required-id-at-nominal! r+p id phase (module-binding-sym binding)
                                           #:nominal-module (module-binding-nominal-module binding)
                                           #:nominal-require-phase (module-binding-nominal-require-phase binding)
                                           #:can-be-shadowed? can-be-shadowed?
                                           #:as-transformer? as-transformer?))
+                         
 
 ;; The internals of `add-defined-or-required-id!` that consumes just
 ;; the needed part of the binding
-(define (add-defined-or-required-id-at-nominal! r+p id phase
+(define (add-defined-or-required-id-at-nominal! r+p id phase bind-sym
                                                 #:nominal-module nominal-module
                                                 #:nominal-require-phase nominal-require-phase
                                                 #:can-be-shadowed? can-be-shadowed?
@@ -138,8 +147,22 @@
                             make-hasheqv))
   (define sym-to-reqds (hash-ref! at-mod nominal-require-phase make-hasheq))
   (define sym (syntax-e id))
-  (hash-set! sym-to-reqds sym (cons (required id phase can-be-shadowed? as-transformer?)
-                                    (hash-ref sym-to-reqds sym null))))
+  ;; Record that the identifier is required
+  (hash-set! sym-to-reqds sym (cons (required id phase bind-sym can-be-shadowed? as-transformer?)
+                                    (hash-ref sym-to-reqds sym null)))
+  ;; Record a reverse mapping from binding to nominal info
+  (define binding-key (identifier->binding-key (requires+provides-binding-keys r+p) id phase bind-sym))
+  (add-nominal! r+p binding-key phase nominal-module nominal-require-phase (syntax-e id)))
+
+;; Add this nominal info for a reverse mapping, so that `provide` can report
+;; all nominal sources
+(define (add-nominal! r+p binding-key phase nominal-module nominal-require-phase nominal-sym)
+  (define nominals (requires+provides-nominals r+p))
+  (hash-set! nominals binding-key (cons (nominal nominal-module
+                                                 (phase- phase nominal-require-phase)
+                                                 nominal-require-phase
+                                                 nominal-sym)
+                                        (hash-ref nominals binding-key null))))
 
 ;; Like `add-defined-or-required-id!`, but faster for bindings that
 ;; all have the same scope, etc.
@@ -156,23 +179,30 @@
   (define at-mod (hash-ref! (requires+provides-requires r+p) mpi make-hasheqv))
   (define sym-to-reqds (hash-ref! at-mod phase-shift make-hasheq))
   (define br (bulk-required provides s provide-phase-level can-be-shadowed?))
+  (define (get-binding-for binding/p sym)
+    (provide-binding-to-require-binding binding/p
+                                        sym
+                                        #:self self
+                                        #:mpi mpi
+                                        #:provide-phase-level provide-phase-level
+                                        #:phase-shift phase-shift))
   (for ([(sym binding/p) (in-hash provides)])
     (when (and check-and-remove?
                (or (not shortcut-table)
                    (hash-ref shortcut-table sym #f)))
       (check-not-defined #:check-not-required? #t
                          r+p (datum->syntax s sym s) phase #:in orig-s
-                         #:unless-matches
-                         (lambda ()
-                           (provide-binding-to-require-binding binding/p
-                                                               sym
-                                                               #:self self
-                                                               #:mpi mpi
-                                                               #:provide-phase-level provide-phase-level
-                                                               #:phase-shift phase-shift))
+                         #:unless-matches (lambda () (get-binding-for binding/p sym))
                          #:remove-shadowed!? #t
                          #:who who))
-    (hash-set! sym-to-reqds sym (cons br (hash-ref sym-to-reqds sym null)))))
+    (hash-set! sym-to-reqds sym (cons br (hash-ref sym-to-reqds sym null)))
+    (define binding-key (delayed-binding->binding-key (requires+provides-binding-keys r+p)
+                                                      (lambda () (get-binding-for binding/p sym))
+                                                      phase
+                                                      ;; The binding sym is unaffected by shifting,
+                                                      ;; so we can get that directly:
+                                                      (module-binding-sym (provided-as-binding binding/p))))
+    (add-nominal! r+p binding-key phase mpi phase-shift sym)))
 
 ;; Convert a combination of a symbol and `bulk-required` to a
 ;; `required` on demand
@@ -180,6 +210,7 @@
   (define binding/p (hash-ref (bulk-required-provides br) sym))
   (required (datum->syntax (bulk-required-s br) sym)
             (phase+ phase (bulk-required-provide-phase-level br))
+            (module-binding-sym (provided-as-binding binding/p))
             (bulk-required-can-be-shadowed? br)
             (provided-as-transformer? binding/p)))
 
@@ -200,11 +231,12 @@
            [reqd/maybe-bulk (in-list reqds)])
       (define reqd (normalize-required reqd/maybe-bulk mod-name phase sym))
       (add-defined-or-required-id-at-nominal! r+p
-                                              (syntax-module-path-index-shift
+                                              (syntax-module-path-index-shift 
                                                (required-id reqd)
                                                (requires+provides-self enclosing-r+p)
                                                enclosing-mod)
                                               (phase+ (required-phase reqd) phase-shift)
+                                              (required-binding-sym reqd)
                                               #:nominal-module enclosing-mod
                                               #:nominal-require-phase phase-shift
                                               #:can-be-shadowed? #t
@@ -372,19 +404,49 @@
                   (define b (provided-as-binding b/p))
                   (cond
                    [(not b)
-                    (hash-set at-phase sym (if (or as-protected? as-transformer?)
-                                               (provided binding as-protected? as-transformer?)
+                    (define noms (find-extra-nominal-imports r+p binding phase))
+                    (hash-set at-phase sym (if (or as-protected? as-transformer? (pair? noms))
+                                               (provided binding as-protected? as-transformer? noms)
                                                binding))]
                    [(same-binding? b binding)
-                    ;; If `binding` has different nominal info (i.e., same binding
-                    ;; required from different syntactic sources), we keep only
-                    ;; the first once.
+                    ;; Since we process provides at the end, we assume that no new
+                    ;; nominal information has become available
                     at-phase]
                    [else
                     (raise-syntax-error #f
                                         "identifier already provided (as a different binding)"
                                         orig-s id)]))
                 #hasheq()))
+
+(define (find-extra-nominal-imports r+p binding phase)
+  (define binding-key
+    (delayed-binding->binding-key (requires+provides-binding-keys r+p)
+                                  binding phase
+                                  (module-binding-sym binding)))
+  (define noms (hash-ref (requires+provides-nominals r+p) binding-key null))
+  (cond
+   [(or (null? noms) ; shouldn't happen, since we should be able to re-find the binding
+        (null? (cdr noms))) ; likely --- just one import, so no extra nominals
+    null]
+   [else
+    (for/list ([nom (in-list noms)]
+                #:unless (same-nominal-info? binding nom))
+      (module-binding-update binding
+                             #:nominal-module (nominal-module nom)
+                             #:nominal-phase (nominal-provide-phase nom)
+                             #:nominal-require-phase (nominal-require-phase nom)
+                             #:nominal-sym (nominal-sym nom)))]))
+                                            
+;; Check whether two bindings that are `same-binding?` also provide
+;; the same nominal info (i.e., claim to be required through the same
+;; immediate path)
+(define (same-nominal-info? a nom)
+  (and (eq? (module-path-index-resolve (module-binding-nominal-module a))
+            (module-path-index-resolve (nominal-module nom)))
+       (eqv? (module-binding-nominal-require-phase a)
+             (nominal-require-phase nom))
+       (eqv? (module-binding-nominal-sym a)
+             (nominal-sym nom))))
 
 ;; ----------------------------------------
 
@@ -438,6 +500,8 @@
                            [(provided? binding)
                             (provided (loop (provided-binding binding))
                                       (provided-protected? binding)
-                                      (provided-syntax? binding))]
+                                      (provided-syntax? binding)
+                                      (map loop
+                                           (provided-extra-nominal-bindings binding)))]
                            [else
                             (binding-module-path-index-shift binding from-mpi to-mpi)]))))))]))
