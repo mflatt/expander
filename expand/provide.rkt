@@ -239,11 +239,11 @@
     (define phase (required-phase i))
     (unless (or (and matching-stx
                      ;; For `(all-defined-out)`, phase and binding context must match:
-                     (eqv? phase at-phase)
-                     (not (free-identifier=? id
-                                             (datum->syntax matching-stx (syntax-e id))
-                                             phase
-                                             phase)))
+                     (not (and (eqv? phase at-phase)
+                               (free-identifier=? id
+                                                  (datum->syntax matching-stx (syntax-e id))
+                                                  phase
+                                                  phase))))
                 (for/or ([except-id (in-list except-ids)])
                   (and (free-identifier=? id except-id phase phase)
                        (hash-set! found except-id #t))))

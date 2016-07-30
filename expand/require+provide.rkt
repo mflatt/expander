@@ -146,7 +146,8 @@
 (define (add-bulk-required-ids! r+p s self nominal-module phase-shift provides provide-phase-level
                                 #:in orig-s
                                 #:can-be-shadowed? can-be-shadowed?
-                                #:check-and-remove? check-and-remove?)
+                                #:check-and-remove? check-and-remove?
+                                #:who who)
   (define phase (phase+ provide-phase-level phase-shift))
   (define shortcut-table (and check-and-remove?
                               ((hash-count provides) . > . 64)
@@ -169,7 +170,8 @@
                                                                #:mpi mpi
                                                                #:provide-phase-level provide-phase-level
                                                                #:phase-shift phase-shift))
-                         #:remove-shadowed!? #t))
+                         #:remove-shadowed!? #t
+                         #:who who))
     (hash-set! sym-to-reqds sym (cons br (hash-ref sym-to-reqds sym null)))))
 
 ;; Convert a combination of a symbol and `bulk-required` to a
@@ -241,7 +243,8 @@
 (define (check-not-defined #:check-not-required? [check-not-required? #f]
                            r+p id phase #:in orig-s
                            #:unless-matches [ok-binding/delayed #f] ; binding or (-> binding)
-                           #:remove-shadowed!? [remove-shadowed!? #f])
+                           #:remove-shadowed!? [remove-shadowed!? #f]
+                           #:who who)
   (define b (resolve+shift id phase #:exactly? #t))
   (cond
    [(not b) (void)]
@@ -293,7 +296,7 @@
             ;; Shadowing --- ok, but non-simple
             (set-requires+provides-all-bindings-simple?! r+p #f)]
            [else
-            (raise-syntax-error #f
+            (raise-syntax-error who
                                 (string-append "identifier already "
                                                (if defined? "defined" "required")
                                                (cond
@@ -301,9 +304,6 @@
                                                 [(label-phase? phase) " for label"]
                                                 [(= 1 phase) " for syntax"]
                                                 [else (format " for phase ~a" phase)]))
-                                ;; FIXME: doesn't report in the right way;
-                                ;; part of the problem is that `parse-and-perofmr-requires`
-                                ;; sends along `#f` as the original form
                                 orig-s
                                 id)]))
         (when (and remove-shadowed!? (pair? reqds))

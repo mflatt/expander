@@ -65,7 +65,8 @@
                                 #:visit? #f
                                 (expand-context-namespace ctx)
                                 (expand-context-phase ctx)
-                                (make-requires+provides #f))
+                                (make-requires+provides #f)
+                                #:who 'require)
    ;; Nothing to expand
    s))
 

@@ -167,7 +167,8 @@
        (perform-initial-require! initial-require self
                                  all-scopes-s
                                  m-ns
-                                 requires+provides)]
+                                 requires+provides
+                                 #:who 'module)]
       [else
        ;; For `(module* name #f ....)`, just register the enclosing module
        ;; as an import and visit it
@@ -678,7 +679,8 @@
           (parse-and-perform-requires! (m 'req) exp-body #:self self
                                        m-ns phase #:run-phase phase
                                        requires+provides
-                                       #:declared-submodule-names declared-submodule-names)
+                                       #:declared-submodule-names declared-submodule-names
+                                       #:who 'module)
           (log-expand partial-body-ctx 'exit-prim)
           (cons exp-body
                 (loop tail? (cdr bodys)))]
@@ -992,7 +994,7 @@
 
 (define (check-ids-unbound ids phase requires+provides #:in s)
   (for ([id (in-list ids)])
-    (check-not-defined requires+provides id phase #:in s)))
+    (check-not-defined requires+provides id phase #:in s #:who 'module)))
 
 ;; ----------------------------------------
 
@@ -1104,4 +1106,5 @@
     (parse-and-perform-requires! (list (m 'req)) s #:self self
                                  m-ns phase #:run-phase phase
                                  requires+provides
-                                 #:declared-submodule-names declared-submodule-names)))
+                                 #:declared-submodule-names declared-submodule-names
+                                 #:who 'require)))

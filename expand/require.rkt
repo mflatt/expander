@@ -38,7 +38,8 @@
                                      ;; For `namespace-require/copy` and `namespace-require/constant`:
                                      #:copy-variable-phase-level [copy-variable-phase-level #f]
                                      #:copy-variable-as-constant? [copy-variable-as-constant? #f]
-                                     #:skip-variable-phase-level [skip-variable-phase-level #f])
+                                     #:skip-variable-phase-level [skip-variable-phase-level #f]
+                                     #:who who)
   (let loop ([reqs reqs]
              [top-req #f]
              [phase-shift phase-shift]
@@ -163,7 +164,7 @@
                         maybe-mp))
          (define mpi (module-path->mpi mp self
                                        #:declared-submodule-names declared-submodule-names))
-         (perform-require! mpi #f self
+         (perform-require! mpi req self
                            (or req top-req) m-ns
                            #:phase-shift phase-shift
                            #:run-phase run-phase
@@ -174,7 +175,8 @@
                            #:visit? visit?
                            #:copy-variable-phase-level copy-variable-phase-level
                            #:copy-variable-as-constant? copy-variable-as-constant?
-                           #:skip-variable-phase-level skip-variable-phase-level)]))))
+                           #:skip-variable-phase-level skip-variable-phase-level
+                           #:who who)]))))
 
 (define (ids->sym-set ids)
   (for/set ([id (in-list ids)])
@@ -184,14 +186,16 @@
 
 (define (perform-initial-require! mod-path self
                                   in-stx m-ns
-                                  requires+provides)
+                                  requires+provides
+                                  #:who who)
   (perform-require! (module-path->mpi mod-path self) #f self
                     in-stx m-ns
                     #:phase-shift 0
                     #:run-phase 0
                     #:requires+provides requires+provides
                     #:can-be-shadowed? #t
-                    #:initial-require? #t))
+                    #:initial-require? #t
+                    #:who who))
 
 ;; ----------------------------------------
 
@@ -209,7 +213,8 @@
                           ;; For `namespace-require/copy` and `namespace-require/constant`:
                           #:copy-variable-phase-level [copy-variable-phase-level #f]
                           #:copy-variable-as-constant? [copy-variable-as-constant? #f]
-                          #:skip-variable-phase-level [skip-variable-phase-level #f])
+                          #:skip-variable-phase-level [skip-variable-phase-level #f]
+                          #:who who)
   (define module-name (module-path-index-resolve mpi #t))
   (define bind-in-stx (if (adjust-rename? adjust)
                           (adjust-rename-to-id adjust)
@@ -250,7 +255,8 @@
                                               provide-phase-level
                                               #:can-be-shadowed? can-be-shadowed?
                                               #:check-and-remove? (not initial-require?)
-                                              #:in orig-s)))
+                                              #:in orig-s
+                                              #:who who)))
    #:filter (and
              (or (not can-bulk-bind?)
                  copy-variable-phase-level)
@@ -292,7 +298,8 @@
                                       s bind-phase
                                       #:unless-matches binding
                                       #:in orig-s
-                                      #:remove-shadowed!? #t))
+                                      #:remove-shadowed!? #t
+                                      #:who who))
                  (add-defined-or-required-id! requires+provides
                                               s bind-phase binding
                                               #:can-be-shadowed? can-be-shadowed?

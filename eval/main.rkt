@@ -276,4 +276,5 @@
     (define-match m (raw:syntax-disarm s) '(#%require req))
     (parse-and-perform-requires! (list (m 'req)) s
                                  ns phase #:run-phase phase
-                                 (make-requires+provides #f))))
+                                 (make-requires+provides #f)
+                                 #:who 'require)))

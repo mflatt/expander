@@ -126,7 +126,8 @@
                       #:run-phase (namespace-phase ns)
                       #:copy-variable-phase-level copy-variable-phase-level
                       #:copy-variable-as-constant? copy-variable-as-constant?
-                      #:skip-variable-phase-level skip-variable-phase-level)]
+                      #:skip-variable-phase-level skip-variable-phase-level
+                      #:who who)]
    [else
     ;; Slow way -- to allow renaming, check for conflicts, etc.
     (parse-and-perform-requires! #:run? run?
@@ -136,7 +137,8 @@
                                  ns
                                  (namespace-phase ns)
                                  (make-requires+provides #f)
-                                 #:skip-variable-phase-level skip-variable-phase-level)]))
+                                 #:skip-variable-phase-level skip-variable-phase-level
+                                 #:who who)]))
 
 (define (namespace-require req [ns (current-namespace)])
   (do-namespace-require 'namespace-require req ns))

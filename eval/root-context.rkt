@@ -35,7 +35,8 @@
         (perform-require! mpi s self
                           s ns
                           #:phase-shift (phase+ phase phase-shift)
-                          #:run-phase phase-shift)))
+                          #:run-phase phase-shift
+                          #:who 'module)))
     
     ;; Add bindings for `define`s, including registering symbols used
     ;; by those definitions (some of which might be macro-introduced)

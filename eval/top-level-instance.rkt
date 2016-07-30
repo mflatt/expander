@@ -38,4 +38,5 @@
                                   #f ; no syntax errors should happen
                                   ns
                                   (namespace-phase ns)
-                                  (make-requires+provides #f)))))
+                                  (make-requires+provides #f)
+                                  #:who 'require))))
