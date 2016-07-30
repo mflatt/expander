@@ -419,13 +419,19 @@
               (for/list ([mpi (in-list mpis)])
                 (module-path-index-shift mpi from-mpi to-mpi))))]))
 
+;; Also removes uninterned (uncluding unreadable) symbols from among
+;; provides, just in case something like a lifted identifier was
+;; provided. Since lifting generates a locally deterministic
+;; unreadable symbol that is intended to be specific to a particular
+;; module, exporting unreadable symbols can create collisions.
 (define (shift-provides-module-path-index provides from-mpi to-mpi)
   (cond
    [(eq? from-mpi to-mpi) provides]
    [else
     (for/hasheqv ([(phase at-phase) (in-hash provides)])
       (values phase
-              (for/hasheq ([(sym binding) (in-hash at-phase)])
+              (for/hasheq ([(sym binding) (in-hash at-phase)]
+                           #:when (symbol-interned? sym))
                 (values sym
                         (let loop ([binding binding])
                           (cond
