@@ -231,10 +231,12 @@
            [reqd/maybe-bulk (in-list reqds)])
       (define reqd (normalize-required reqd/maybe-bulk mod-name phase sym))
       (add-defined-or-required-id-at-nominal! r+p
-                                              (syntax-module-path-index-shift 
-                                               (required-id reqd)
-                                               (requires+provides-self enclosing-r+p)
-                                               enclosing-mod)
+                                              (syntax-shift-phase-level
+                                               (syntax-module-path-index-shift 
+                                                (required-id reqd)
+                                                (requires+provides-self enclosing-r+p)
+                                                enclosing-mod)
+                                               phase-shift)
                                               (phase+ (required-phase reqd) phase-shift)
                                               (required-binding-sym reqd)
                                               #:nominal-module enclosing-mod
@@ -396,7 +398,7 @@
                       #:as-transformer? as-transformer?)
   (when (and as-protected?
              (not (eq? (module-binding-module immed-binding) (requires+provides-self r+p))))
-    (raise-syntax-error #f "cannot protect imported identifier with re-provide" sym))
+    (raise-syntax-error #f "cannot protect required identifier in re-provide" sym))
   (hash-update! (requires+provides-provides r+p)
                 phase
                 (lambda (at-phase)
