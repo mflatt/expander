@@ -155,6 +155,10 @@
         (cond
          [(zero-phase? phase)
           instantiate]
+         [single-expression?
+          (lambda (tail?)
+            (parameterize ([current-namespace phase-ns])
+              (instantiate tail?)))]
          [else
           (define ns-1 (namespace->namespace-at-phase phase-ns (sub1 phase)))
           (lambda (tail?)
