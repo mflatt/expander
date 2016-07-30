@@ -22,7 +22,8 @@
          "set-bang-trans.rkt"
          "rename-trans.rkt"
          "reference-record.rkt"
-         "log.rkt")
+         "log.rkt"
+         "already-expanded.rkt")
 
 ;; ----------------------------------------
 
@@ -48,9 +49,7 @@
   (define body-ctx (struct-copy expand-context ctx
                                 [env body-env]
                                 [scopes (cons sc (expand-context-scopes ctx))]
-                                [all-scopes-stx
-                                 #:parent root-expand-context
-                                 (add-scope (root-expand-context-all-scopes-stx ctx) sc)]))
+                                [binding-layer (increment-binding-layer ids ctx)]))
   (define exp-body (expand-body sc-bodys body-ctx
                                 #:source s #:disarmed-source disarmed-s))
   ;; Return formals (with new scope) and expanded body:
@@ -65,7 +64,7 @@
       (lambda-clause-expander s disarmed-s (m 'formals) (m 'body) ctx 'lambda-renames))
     (rebuild
      s disarmed-s
-     `(,(get-lambda ctx (m 'lambda)) ,formals ,body))))
+     `(,(get-lambda ctx (m 'lambda)) ,formals ,@body))))
 
 (add-core-form!
  'lambda
@@ -91,12 +90,12 @@
     s disarmed-s
     `(,(m 'case-lambda)
       ,@(for/list ([formals (in-list (m 'formals))]
-                   [bodys (in-list (m 'body))]
+                   [body (in-list (m 'body))]
                    [clause (in-list (cm 'clause))])
           (log-expand ctx 'next)
           (define-values (exp-formals exp-body)
-            (lambda-clause-expander s disarmed-s formals bodys ctx 'case-lambda-renames))
-          (rebuild clause clause `[,exp-formals ,exp-body]))))))
+            (lambda-clause-expander s disarmed-s formals body ctx 'case-lambda-renames))
+          (rebuild clause clause `[,exp-formals ,@exp-body]))))))
 
 (define (parse-and-flatten-formals all-formals sc s)
   (let loop ([formals all-formals])
@@ -197,25 +196,20 @@
                                 [reference-records (if split-by-reference?
                                                        (cons frame-id orig-rrs)
                                                        orig-rrs)]
-                                [all-scopes-stx
-                                 #:parent root-expand-context
-                                 (add-scope (root-expand-context-all-scopes-stx ctx) sc)]))
+                                [binding-layer (increment-binding-layer
+                                                (cons trans-idss val-idss)
+                                                ctx)]))
    (define letrec-values-id
      (if syntaxes?
          (datum->syntax (syntax-shift-phase-level core-stx phase) 'letrec-values)
          (val-m 'let-values)))
    
-   (define (get-body track?)
+   (define (get-body)
      (log-expand ctx 'next-group)
      (define body-ctx (struct-copy expand-context rec-ctx
                                    [reference-records orig-rrs]))
-     (define exp-body (expand-body bodys (as-tail-context body-ctx #:wrt ctx)
-                                   #:source s #:disarmed-source disarmed-s))
-     (if track?
-         (let ([result-s (syntax-track-origin exp-body s)])
-           (log-expand ctx 'tag result-s)
-           result-s)
-         exp-body))
+     (expand-body bodys (as-tail-context body-ctx #:wrt ctx)
+                  #:source s #:disarmed-source disarmed-s))
    
    (define result-s
      (cond
@@ -230,7 +224,7 @@
                                                    (as-named-context rec-ctx ids))
                                            (expand rhs
                                                    (as-named-context expr-ctx ids)))])
-          ,(get-body #f)))]
+          ,@(get-body)))]
       [else
        (log-expand ctx 'next-group)
        (log-expand ctx 'letrec-values)
@@ -268,8 +262,11 @@
    (log-expand ctx 'prim-#%stratified)
    (define disarmed-s (syntax-disarm s))
    (define-match m disarmed-s '(#%stratified-body body ...+))
-   (expand-body (m 'body) ctx #:stratified? #t #:track? #t
-                #:source s #:disarmed-source disarmed-s)))
+   (rebuild
+    s disarmed-s
+    `(,(datum->syntax (syntax-shift-phase-level core-stx (expand-context-phase ctx)) 'begin)
+      ,@(expand-body (m 'body) ctx #:stratified? #t
+                     #:source s #:disarmed-source disarmed-s)))))
 
 ;; ----------------------------------------
 

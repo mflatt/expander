@@ -51,7 +51,7 @@
   ;; the scopes suitably flipped
   (define ae (already-expanded
               (flip-introduction-scopes exp-s ctx)
-              (root-expand-context-all-scopes-stx
+              (expand-context-binding-layer
                (get-current-expand-context 'syntax-local-expand-expression))))
   (log-expand ctx 'opaque-expr ae)
   (log-expand ctx 'exit-local exp-s)

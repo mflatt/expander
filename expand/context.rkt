@@ -31,6 +31,7 @@
                                             post-expansion-scope-action ; function to apply with `post-expansion-scope`
                                             scopes     ; list of scopes that should be pruned by `quote-syntax`
                                             def-ctx-scopes ; #f or box of list of scopes; transformer-created def-ctxes
+                                            binding-layer ; changed when a binding is nested; to check already-expanded
                                             reference-records ; list of reference records for enclosing
                                             only-immediate? ; #t => stop at core forms; #t => `def-ctx-scopes` is a box
                                             just-once? ; #t => stop (a given subform) after any expansion
@@ -69,6 +70,7 @@
                   push-scope ; post-expansion-scope-action
                   null ; scopes
                   #f   ; def-ctx-scopes
+                  (root-expand-context-frame-id root-ctx) ; binding-layer
                   null ; reference-records
                   #f   ; only-immediate?
                   #f   ; just-once?
@@ -98,7 +100,8 @@
                [defined-syms #:parent root-expand-context (root-expand-context-defined-syms root-ctx)]
                [frame-id #:parent root-expand-context (root-expand-context-frame-id root-ctx)]
                [counter #:parent root-expand-context (root-expand-context-counter root-ctx)]
-               [lift-key #:parent root-expand-context (root-expand-context-lift-key root-ctx)]))
+               [lift-key #:parent root-expand-context (root-expand-context-lift-key root-ctx)]
+               [binding-layer (root-expand-context-frame-id root-ctx)]))
 
 ;; An expand-context or a delayed expand context (so use `force`):
 (define current-expand-context (make-parameter #f))

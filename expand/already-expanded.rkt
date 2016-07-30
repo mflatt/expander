@@ -5,4 +5,4 @@
 
 (provide (struct-out already-expanded))
 
-(struct already-expanded (s all-scopes-stx))
+(struct already-expanded (s binding-layer))

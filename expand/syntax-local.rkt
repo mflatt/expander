@@ -415,9 +415,7 @@
 (define (syntax-local-get-shadower id [only-generated? #f])
   (check 'syntax-local-get-shadower identifier? id)
   (define ctx (get-current-expand-context 'syntax-local-get-shadower))
-  (define new-id (add-scopes id (set->list
-                                 (syntax-scope-set (root-expand-context-all-scopes-stx ctx)
-                                                   (expand-context-phase ctx)))))
+  (define new-id (add-scopes id (expand-context-scopes ctx)))
   (if (syntax-clean? id)
       new-id
       (syntax-taint new-id)))

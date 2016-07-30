@@ -213,12 +213,7 @@
                [just-once? #f]
                [preserve-#%expression-and-do-not-add-#%top? #t]
                [stops (free-id-set phase (or all-stop-ids null))]
-               [current-introduction-scopes null]
-               [all-scopes-stx #:parent root-expand-context
-                               (add-intdef-scopes
-                                (root-expand-context-all-scopes-stx ctx)
-                                intdefs
-                                #:always? #t)]))
+               [current-introduction-scopes null]))
 
 ;; ----------------------------------------
 

@@ -19,7 +19,7 @@
 (struct root-expand-context (module-scopes   ; list of scopes for enclosing module or top level; includes next two fields
                              post-expansion-scope  ; #f or scope to add to every expansion; often module's inside edge
                              top-level-bind-scope  ; #f or a scope to constrain expansion bindings; see "expand-bind-top.rkt"
-                             all-scopes-stx  ; all scopes from enclosing binding context
+                             all-scopes-stx  ; scopes like the initial import, which correspond to original forms
                              use-site-scopes ; #f or boxed list: scopes that should be pruned from binders
                              defined-syms    ; phase -> sym -> id; symbols picked for bindings
                              frame-id        ; #f or a gensym to identify a binding frame

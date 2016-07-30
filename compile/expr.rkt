@@ -49,7 +49,7 @@
         [(lambda)
          (cond
           [result-used?
-           (define-match m s '(lambda formals body))
+           (define-match m s '(lambda formals body ...+))
            (add-lambda-properties
             (correlate* s `(lambda ,@(compile-lambda (m 'formals) (m 'body) cctx)))
             name
@@ -58,7 +58,7 @@
         [(case-lambda)
          (cond
           [result-used?
-           (define-match m s '(case-lambda [formals body] ...))
+           (define-match m s '(case-lambda [formals body ...+] ...))
            (add-lambda-properties
             (correlate* s `(case-lambda ,@(for/list ([formals (in-list (m 'formals))]
                                                 [body (in-list (m 'body))])
@@ -86,15 +86,16 @@
                          ,(compile (m 'key) #f #t)
                          ,(compile (m 'val) #f #t)
                          ,(compile (m 'body) name result-used?)))]
-        [(begin begin0)
+        [(begin0)
+         (define-match m s '(begin0 e ...+))
+         (define es (m 'e))
+         (correlate* s `(begin0
+                         ,(compile (car es) name result-used?)
+                         ,@(for/list ([e (in-list (cdr es))])
+                             (compile e #f #f))))]
+        [(begin)
          (define-match m s '(begin e ...+))
-         (define used-pos (case core-sym
-                            [(begin0) 0]
-                            [else (sub1 (length (m 'e)))]))
-         (correlate* s `(,core-sym ,@(for/list ([e (in-list (m 'e))]
-                                                [i (in-naturals)])
-                                       (define used? (= i used-pos))
-                                       (compile e (and used? name) used?))))]
+         (correlate* s (compile-begin (m 'e) cctx name result-used?))]
         [(set!)
          (define-match m s '(set! id rhs))
          (correlate* s `(,@(compile-identifier (m 'id) cctx
@@ -140,7 +141,7 @@
      [else
       (error "bad syntax after expansion:" s)])))
 
-(define (compile-lambda formals body cctx)
+(define (compile-lambda formals bodys cctx)
   (define phase (compile-context-phase cctx))
   (define gen-formals
     (let loop ([formals formals])
@@ -150,7 +151,19 @@
        [(pair? formals) (cons (loop (car formals))
                               (loop (cdr formals)))]
        [else null])))
-  `(,gen-formals ,(compile body cctx #f)))
+  `(,gen-formals ,(compile-sequence bodys cctx #f #t)))
+
+(define (compile-sequence bodys cctx name result-used?)
+  (if (null? (cdr bodys))
+      (compile (car bodys) cctx name result-used?)
+      (compile-begin bodys cctx name result-used?)))
+
+(define (compile-begin es cctx name result-used?)
+  (define used-pos (sub1 (length es)))
+  `(begin ,@(for/list ([e (in-list es)]
+                       [i (in-naturals)])
+              (define used? (= i used-pos))
+              (compile e cctx (and used? name) (and used? result-used?)))))
 
 (define (add-lambda-properties s inferred-name orig-s)
   ;; Allow pairs formed by origin tracking to provide the
@@ -179,7 +192,7 @@
 
 (define (compile-let core-sym s cctx name #:rec? rec? result-used?)
   (define rec? (eq? core-sym 'letrec-values))
-  (define-match m s '(let-values ([(id ...) rhs] ...) body))
+  (define-match m s '(let-values ([(id ...) rhs] ...) body ...+))
   (define phase (compile-context-phase cctx))
   (define idss (m 'id))
   (define symss (for/list ([ids (in-list idss)])
@@ -195,7 +208,7 @@
                              `[,syms ,(compile rhs
                                                cctx
                                                (and (= 1 (length ids)) (car ids)))])
-                ,(compile (m 'body) cctx name result-used?))))
+                ,(compile-sequence (m 'body) cctx name result-used?))))
 
 (define (add-undefined-error-name-property sym orig-id)
   (define id (correlate* orig-id sym))
@@ -264,7 +277,6 @@
   (unless (local-binding? b)
     (error "bad binding:" id phase b))
   (local-key->symbol (local-binding-key b)))
-
 
 (define (compile-quote-syntax q cctx)
   (define pos (add-syntax-literal! (compile-context-header cctx) q))

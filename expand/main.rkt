@@ -47,6 +47,7 @@
          
          rebuild
          attach-disappeared-transformer-bindings
+         increment-binding-layer
          accumulate-def-ctx-scopes)
 
 ;; ----------------------------------------
@@ -170,10 +171,9 @@
 ;; An expression that is already fully expanded via `local-expand-expression`
 (define (expand-already-expanded s ctx)
   (define ae (syntax-e s))
-  (unless (or (syntax-any-scopes? s)
-              (bound-identifier=? (root-expand-context-all-scopes-stx ctx)
-                                  (already-expanded-all-scopes-stx ae)
-                                  (expand-context-phase ctx)))
+  (when (or (syntax-any-macro-scopes? s)
+            (not (eq? (expand-context-binding-layer ctx)
+                      (already-expanded-binding-layer ae))))
     (raise-syntax-error #f
                         (string-append "expanded syntax not in its original lexical context;\n"
                                        " extra bindings or scopes in the current context")
@@ -376,11 +376,7 @@
       ctx
       (struct-copy expand-context ctx
                    [scopes (append (unbox def-ctx-scopes)
-                                   (expand-context-scopes ctx))]
-                   [all-scopes-stx #:parent root-expand-context
-                                   (add-scopes (root-expand-context-all-scopes-stx ctx)
-                                               (let ([b (expand-context-def-ctx-scopes ctx)])
-                                                 (if b (unbox b) null)))])))
+                                   (expand-context-scopes ctx))])))
 
 ;; ----------------------------------------
 
@@ -569,3 +565,13 @@
                       (append (apply append trans-idss)
                               (or (syntax-property s 'disappeared-binding)
                                   null)))]))
+
+;; Generate a fresh binding-layer identity if `ids` contains any
+;; identifiers
+(define (increment-binding-layer ids ctx)
+  (if (let loop ([ids ids])
+        (or (identifier? ids)
+            (and (pair? ids)
+                 (or (loop (car ids)) (loop (cdr ids))))))
+      (gensym 'binding-layer)
+      (expand-context-binding-layer ctx)))
