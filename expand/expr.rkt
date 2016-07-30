@@ -470,8 +470,11 @@
         [(resolve tl-id (expand-context-phase ctx))
          ;; Expand to a reference to a top-level variable, instead of
          ;; a local or imported variable
-         (define-match m disarmed-s '(#%top . id))
-         (rebuild s disarmed-s (cons (m '#%top) tl-id))]
+         (cond
+          [implicit-omitted? tl-id]
+          [else
+           (define-match m disarmed-s '(#%top . id))
+           (rebuild s disarmed-s (cons (m '#%top) tl-id))])]
         [else s])])])))
 
 (add-core-form!
