@@ -256,7 +256,7 @@
     ;; A reference to a variable expands to itself
     (register-variable-referenced-if-local! binding)
     ;; If the variable is locally bound, replace the use's scopes with the binding's scopes
-    (define result-s (substitute-variable id t #:no-stops? (free-id-set-empty? (expand-context-stops ctx))))
+    (define result-s (substitute-variable id t #:no-stops? (free-id-set-empty-or-just-module*? (expand-context-stops ctx))))
     (log-expand ctx 'return result-s)
     result-s]))
 
@@ -307,7 +307,7 @@
   (log-expand ctx 'macro-pre-x cleaned-s)
   (define confine-def-ctx-scopes?
     (not (or (expand-context-only-immediate? ctx)
-             (not (free-id-set-empty? (expand-context-stops ctx))))))
+             (not (free-id-set-empty-or-just-module*? (expand-context-stops ctx))))))
   (define accum-ctx
     (if (and confine-def-ctx-scopes?
              (expand-context-def-ctx-scopes ctx)

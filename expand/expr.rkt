@@ -508,7 +508,7 @@
        (rebuild
         s disarmed-s
         (list (m 'set!)
-              (substitute-variable id t #:no-stops? (free-id-set-empty? (expand-context-stops ctx)))
+              (substitute-variable id t #:no-stops? (free-id-set-empty-or-just-module*? (expand-context-stops ctx)))
               (expand (m 'rhs) (as-expression-context ctx))))]
       [(not binding)
        (raise-unbound-syntax-error #f "unbound identifier" s id null

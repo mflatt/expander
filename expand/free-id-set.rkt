@@ -5,7 +5,7 @@
 (provide free-id-set
          empty-free-id-set
          free-id-set-member?
-         free-id-set-empty?)
+         free-id-set-empty-or-just-module*?)
 
 ;; A free-id-set is a hash: sym -> list of id
 
@@ -26,5 +26,8 @@
                                       null))])
         (free-identifier=? id given-id phase phase))))
 
-(define (free-id-set-empty? fs)
-  (zero? (hash-count fs)))
+(define (free-id-set-empty-or-just-module*? fs)
+  (define c (hash-count fs))
+  ;; If any identifier other than `module*` is present, then many
+  ;; identifiers are present
+  (c . <= . 1))
