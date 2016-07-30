@@ -238,7 +238,8 @@
     (define id (required-id i))
     (define phase (required-phase i))
     (unless (or (and matching-stx
-                     ;; For `(all-defined-out)`, binding context must match:
+                     ;; For `(all-defined-out)`, phase and binding context must match:
+                     (eqv? phase at-phase)
                      (not (free-identifier=? id
                                              (datum->syntax matching-stx (syntax-e id))
                                              phase
