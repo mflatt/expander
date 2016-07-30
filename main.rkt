@@ -88,7 +88,7 @@
 ;; Register core forms:
 (require "expand/expr.rkt"
          "expand/module.rkt"
-         "expand/top-level.rkt")
+         "expand/top.rkt")
 
 ;; Register core primitives:
 (require "boot/core-primitive.rkt")
