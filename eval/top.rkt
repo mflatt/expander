@@ -12,6 +12,7 @@
          "../compile/compiled-in-memory.rkt"
          "../compile/multi-top.rkt"
          "../compile/namespace-scope.rkt"
+         "../expand/context.rkt"
          "top-level-instance.rkt"
          "multi-top.rkt"
          "protect.rkt")
@@ -152,12 +153,14 @@
                                (not tail?)))
         ;; Return `instantiate` as the next thunk
         (cond
-         [(eqv? phase orig-phase)
-          (if (zero-phase? phase)
-              instantiate
-              (lambda (tail?) (parameterize ([current-namespace phase-ns])
-                           (instantiate tail?))))]
-         [else instantiate])]
+         [(zero-phase? phase)
+          instantiate]
+         [else
+          (define ns-1 (namespace->namespace-at-phase phase-ns (sub1 phase)))
+          (lambda (tail?)
+            (parameterize ([current-expand-context (make-expand-context ns-1)]
+                           [current-namespace phase-ns])
+              (instantiate tail?)))])]
        [else void])))
   
   ;; Call last thunk tail position --- maybe, since using a prompt if not `as-tail?`
