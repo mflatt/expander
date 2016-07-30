@@ -104,7 +104,7 @@
          (loop (m 'spec)
                (or top-req req)
                phase-shift
-               just-meta
+               p
                adjust
                for-meta-ok? #f 'raw)]
         [(only)
