@@ -482,12 +482,14 @@
        (cond
         [(resolve tl-id (expand-context-phase ctx))
          ;; Expand to a reference to a top-level variable, instead of
-         ;; a local or imported variable
+         ;; a local or imported variable; don't include the temporary
+         ;; binding scope in an expansion, though, in the same way that
+         ;; `define-values` expands without it
          (cond
-          [implicit-omitted? tl-id]
+          [implicit-omitted? id]
           [else
            (define-match m disarmed-s '(#%top . id))
-           (rebuild s disarmed-s (cons (m '#%top) tl-id))])]
+           (rebuild s disarmed-s (cons (m '#%top) id))])]
         [else s])])])))
 
 (add-core-form!

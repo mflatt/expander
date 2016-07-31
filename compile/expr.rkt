@@ -221,6 +221,8 @@
   (define normal-b (resolve+shift s phase))
   (define b
     (or normal-b
+        ;; Try adding the temporary scope for top-level expansion:
+        (resolve-with-top-level-bind-scope s phase cctx)
         ;; Assume a variable reference
         (make-module-binding (compile-context-self cctx)
                              phase
@@ -270,6 +272,14 @@
   (correlate* s (if rhs
                     `(set! ,sym ,rhs)
                     sym)))
+
+(define (resolve-with-top-level-bind-scope s phase cctx)
+  (define top-level-scope (compile-context-top-level-bind-scope cctx))
+  (cond
+   [top-level-scope
+    (define tl-s (add-scope s top-level-scope))
+    (resolve+shift tl-s phase)]
+   [else #f]))
 
 ;; Pick a symbol to represent a local binding, given the identifier
 (define (local-id->symbol id phase)
