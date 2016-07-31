@@ -24,8 +24,10 @@
   (define top-level-bind-scope (root-expand-context-top-level-bind-scope ctx))
   (define tl-ids
     (for/list ([id (in-list ids)])
-      (add-scope (remove-use-site-scopes id ctx)
-                 top-level-bind-scope)))
+      (remove-use-site-scopes id ctx)))
   (check-no-duplicate-ids tl-ids (expand-context-phase ctx) s)
-  (select-defined-syms-and-bind!/ctx tl-ids ctx)
+  (define tmp-bind-ids
+    (for/list ([id (in-list tl-ids)])
+      (add-scope id top-level-bind-scope)))
+  (select-defined-syms-and-bind!/ctx tmp-bind-ids ctx)
   tl-ids)

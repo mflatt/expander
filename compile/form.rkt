@@ -79,7 +79,7 @@
         (case (core-form-sym body phase)
           [(define-values)
            (define-match m body '(define-values (id ...) rhs))
-           (for ([sym (in-list (def-ids-to-binding-syms (m 'id) phase self))])
+           (for ([sym (in-list (def-ids-to-binding-syms (m 'id) phase self cctx))])
              (define def-sym (select-fresh sym header))
              (hash-set! (header-binding-sym-to-define-sym header)
                         sym
@@ -106,7 +106,7 @@
         [(define-values)
          (define-match m body '(define-values (id ...) rhs))
          (define ids (m 'id))
-         (define binding-syms (def-ids-to-binding-syms ids phase self))
+         (define binding-syms (def-ids-to-binding-syms ids phase self cctx))
          (define def-syms
            (cond
             [(compile-context-module-self cctx)
@@ -154,7 +154,7 @@
         [(define-syntaxes)
          (define-match m body '(define-syntaxes (id ...) rhs))
          (define ids (m 'id))
-         (define binding-syms (def-ids-to-binding-syms ids phase self))
+         (define binding-syms (def-ids-to-binding-syms ids phase self cctx))
          (define next-header (find-or-create-header! (add1 phase)))
          (define gen-syms (for/list ([binding-sym (in-list binding-syms)])
                             (select-fresh binding-sym next-header)))

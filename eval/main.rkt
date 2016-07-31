@@ -105,7 +105,9 @@
     (define disarmed-exp-s (raw:syntax-disarm exp-s))
     (case (core-form-sym disarmed-exp-s (namespace-phase ns))
       [(module)
-       (compile-module exp-s (make-compile-context #:namespace ns)
+       (compile-module exp-s (make-compile-context #:namespace ns
+                                                   #:top-level-bind-scope (root-expand-context-top-level-bind-scope
+                                                                           (namespace-get-root-expand-ctx ns)))
                        #:serializable? serializable?
                        #:to-source? to-source?)]
       [(begin)
@@ -116,7 +118,9 @@
           (loop e))
         #:to-source? to-source?)]
       [else
-       (compile-top exp-s (make-compile-context #:namespace ns)
+       (compile-top exp-s (make-compile-context #:namespace ns
+                                                   #:top-level-bind-scope (root-expand-context-top-level-bind-scope
+                                                                           (namespace-get-root-expand-ctx ns)))
                     #:serializable? serializable?
                     #:to-source? to-source?)])))
 
