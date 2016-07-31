@@ -29,17 +29,16 @@
        (define c (syntax-e s))
        (cond
         [(pair? c)
-         (define cd (if (syntax? (cdr c))
-                        (syntax-e (cdr c))
-                        (cdr c)))
+         (define cd (cdr c))
          (cond
           [(or (pair? cd)
                (and (syntax? cd) (pair? (syntax-e cd))))
            (define d (if (syntax? cd) (syntax-e cd) cd))
            (datum->syntax s
-                          (cons (loop (car c) (syntax-taint-mode-property s))
+                          (cons (loop (car c) (syntax-taint-mode-property (car c)))
                                 (cons (loop (car d) 'transparent)
-                                      (non-syntax-map (syntax->list (cdr d))
+                                      (non-syntax-map (or (syntax->list (cdr d))
+                                                          (cdr d))
                                                       (lambda (tail? d) d)
                                                       (lambda (s) (loop s (syntax-taint-mode-property s))))))
                           s
