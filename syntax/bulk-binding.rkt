@@ -56,7 +56,8 @@
                          #:nominal-require-phase phase-shift
                          #:frame-id #f
                          #:extra-inspector (and (not (provided-as-protected? binding/p)) ; see [*] below
-                                                (module-binding-extra-inspector binding))))
+                                                (module-binding-extra-inspector binding))
+                         #:extra-nominal-bindings null))
 
 ;; [*] If a binding has an extra inspector, it's because the binding
 ;; was provided as a rename transformer with a module (and the rename

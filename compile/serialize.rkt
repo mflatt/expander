@@ -646,7 +646,8 @@
                    nominal-sym
                    nominal-require-phase
                    free=id
-                   extra-inspector)]
+                   extra-inspector
+                   extra-nominal-bindings)]
          [(deserialize-simple-module-binding)
           (decode* deserialize-simple-module-binding module sym phase nominal-module)]
          [(deserialize-full-local-binding)

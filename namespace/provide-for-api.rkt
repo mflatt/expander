@@ -20,7 +20,7 @@
                                [(eq? self (module-binding-module b))
                                 null]
                                [else
-                                (for/list ([b (in-list (provided-all-nominal-bindings b/p))])
+                                (for/list ([b (in-list (cons b (module-binding-extra-nominal-bindings b)))])
                                   (cond
                                    [(and (zero-phase? (module-binding-nominal-phase b))
                                          (eq? (module-binding-sym b) sym))

@@ -21,6 +21,7 @@
 
  free-identifier=?
  same-binding?
+ same-binding-nominals?
  identifier-binding
  identifier-binding-symbol
  
@@ -64,6 +65,17 @@
          (eq? (local-binding-key ab)
               (local-binding-key bb)))]
    [else (error "bad binding" ab)]))
+
+;; Check whether two bindings that are `same-binding?` also provide
+;; the same nominal info (i.e., claim to be required through the same
+;; immediate path):
+(define (same-binding-nominals? ab bb)
+  (and (eq? (module-path-index-resolve (module-binding-nominal-module ab))
+            (module-path-index-resolve (module-binding-nominal-module bb)))
+       (eqv? (module-binding-nominal-require-phase ab)
+             (module-binding-nominal-require-phase bb))
+       (eqv? (module-binding-nominal-sym ab)
+             (module-binding-nominal-sym bb))))
 
 (define (identifier-binding-symbol id phase)
   (define b (resolve+shift id phase #:unbound-sym? #t))
@@ -167,13 +179,17 @@
                                       (apply-syntax-shifts nominal-mod mpi-shifts)))
       (if (and (eq? mod shifted-mod)
                (eq? nominal-mod shifted-nominal-mod)
-               (not (binding-free=id b)))
+               (not (binding-free=id b))
+               (null? (module-binding-extra-nominal-bindings b)))
           b
           (module-binding-update b
                                  #:module shifted-mod
                                  #:nominal-module shifted-nominal-mod
                                  #:free=id (and (binding-free=id b)
-                                                (syntax-transfer-shifts (binding-free=id b) s))))])]
+                                                (syntax-transfer-shifts (binding-free=id b) s))
+                                 #:extra-nominal-bindings
+                                 (for/list ([b (in-list (module-binding-extra-nominal-bindings b))])
+                                   (apply-syntax-shifts-to-binding b mpi-shifts))))])]
    [(and (not b) unbound-sym?)
     (syntax-e s)]
    [else b]))
@@ -185,6 +201,14 @@
    [else
     (define shifted-mpi (apply-syntax-shifts mpi (cdr shifts)))
     (module-path-index-shift shifted-mpi (caar shifts) (cdar shifts))]))
+
+;; Apply accumulated module path index shifts to a module binding
+(define (apply-syntax-shifts-to-binding b shifts)
+  (cond
+   [(null? shifts) b]
+   [else
+    (define shifted-b (apply-syntax-shifts-to-binding b (cdr shifts)))
+    (binding-module-path-index-shift shifted-b (caar shifts) (cdar shifts))]))
 
 ;; Apply a syntax object's shifts to a given module path index
 (define (syntax-apply-shifts s mpi)
@@ -200,7 +224,9 @@
                                                              to-mpi)
                            #:nominal-module (module-path-index-shift (module-binding-nominal-module b)
                                                                      from-mpi
-                                                                     to-mpi))]
+                                                                     to-mpi)
+                           #:extra-nominal-bindings (for/list ([b (in-list (module-binding-extra-nominal-bindings b))])
+                                                      (binding-module-path-index-shift b from-mpi to-mpi)))]
    [else b]))
 
 (define (syntax-transfer-shifts to-s from-s)

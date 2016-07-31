@@ -235,6 +235,7 @@
     ;; make the module available:
     (namespace-module-make-available! m-ns interned-mpi phase-shift #:visit-phase run-phase))
   (define can-bulk-bind? (and (not adjust) (not skip-variable-phase-level)))
+  (define update-nominals-box (and can-bulk-bind? (box null)))
   (bind-all-provides!
    m
    bind-in-stx phase-shift m-ns interned-mpi
@@ -256,6 +257,7 @@
                                               #:can-be-shadowed? can-be-shadowed?
                                               #:check-and-remove? (not initial-require?)
                                               #:in orig-s
+                                              #:accum-update-nominals update-nominals-box
                                               #:who who)))
    #:filter (and
              (or (not can-bulk-bind?)
@@ -310,6 +312,10 @@
                           (equal? provide-phase copy-variable-phase-level))
                  (copy-namespace-value m-ns adjusted-sym binding copy-variable-phase-level phase-shift))
                adjusted-sym)))
+  ;; Now that a bulk binding is in place, update to merge nominals:
+  (when update-nominals-box
+    (for ([update! (in-list (unbox update-nominals-box))])
+      (update!)))
   ;; check that we covered all expected ids:
   (define need-syms (cond
                     [(adjust-only? adjust)

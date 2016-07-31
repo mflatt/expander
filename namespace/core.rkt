@@ -67,7 +67,7 @@
                                         #:when #t
                                         [sym (in-hash-keys syms)])
                              (define b (make-module-binding core-mpi 0 sym))
-                             (values sym (if syntax? (provided b #f #t null) b))))
+                             (values sym (if syntax? (provided b #f #t) b))))
                 #:instantiate-phase-callback
                 (lambda (data-box ns phase phase-level self bulk-binding-registry insp)
                   (case phase-level

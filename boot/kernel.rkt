@@ -75,7 +75,7 @@
                              (values sym
                                      (if (or protected?
                                              (member sym protected-syms))
-                                         (provided binding #t #f null)
+                                         (provided binding #t #f)
                                          binding))))
                 #:instantiate-phase-callback
                 (lambda (data-box ns phase-shift phase-level self bulk-binding-registry insp)
