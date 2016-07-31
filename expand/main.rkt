@@ -432,12 +432,13 @@
 (define (expand/capture-lifts s ctx
                               #:expand-lifts? [expand-lifts? #f]
                               #:begin-form? [begin-form? #f]
-                              #:lift-key [lift-key (generate-lift-key)])
+                              #:lift-key [lift-key (generate-lift-key)]
+                              #:always-wrap? [always-wrap? #f])
   (define context (expand-context-context ctx))
   (define phase (expand-context-phase ctx))
   (define local? (not begin-form?)) ;; see "[*]" below
   ;; Expand `s`, but loop to handle lifted expressions
-  (let loop ([s s])
+  (let loop ([s s] [always-wrap? always-wrap?])
     (define lift-env (and local? (box empty-env)))
     (define lift-ctx (make-lift-context
                       (if local?
@@ -457,20 +458,21 @@
                                                        lift-ctx)]))
     (define exp-s (expand s capture-ctx))
     (define lifts (get-and-clear-lifts! (expand-context-lifts capture-ctx)))
-    (cond
-     [(null? lifts)
-      ;; No lifts, so expansion is done
-      exp-s]
-     [else
-      ;; Have lifts, so wrap as `let-values` and expand again
-      (define with-lifts-s
+    (define with-lifts-s
+      (cond
+       [(or (pair? lifts) always-wrap?)
         (if begin-form?
             (wrap-lifts-as-begin lifts exp-s s phase)
-            (wrap-lifts-as-let lifts exp-s s phase)))
+            (wrap-lifts-as-let lifts exp-s s phase))]
+       [else exp-s]))
+    (cond
+     [(or (not expand-lifts?) (null? lifts))
+      ;; Expansion is done
+      with-lifts-s]
+     [else
+      ;; Expand again...
       (log-expand ctx 'lift-loop with-lifts-s)
-      (if expand-lifts?
-          (loop with-lifts-s)
-          with-lifts-s)])))
+      (loop with-lifts-s #f)])))
 
 ;; [*] Although `(memq context '(top-level module))` makes more sense
 ;;     than `(not begin-form?)`, the latter was used historically; the
@@ -486,7 +488,8 @@
                             #:context [context 'expression]
                             #:begin-form? [begin-form? #f]
                             #:expand-lifts? [expand-lifts? #t]
-                            #:lift-key [lift-key (generate-lift-key)])
+                            #:lift-key [lift-key (generate-lift-key)]
+                            #:always-wrap? [always-wrap? #f])
   (define phase (add1 (expand-context-phase ctx)))
   (define ns (namespace->namespace-at-phase (expand-context-namespace ctx)
                                             phase))
@@ -503,7 +506,8 @@
   (expand/capture-lifts s trans-ctx
                         #:expand-lifts? expand-lifts?
                         #:begin-form? begin-form?
-                        #:lift-key lift-key))
+                        #:lift-key lift-key
+                        #:always-wrap? always-wrap?))
 
 ;; Expand and evaluate `s` as a compile-time expression, ensuring that
 ;; the number of returned values matches the number of target

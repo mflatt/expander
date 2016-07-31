@@ -132,8 +132,10 @@
                     [(and as-transformer? capture-lifts?)
                      (expand-transformer input-s local-ctx
                                          #:context context
+                                         #:expand-lifts? #f
                                          #:begin-form? #t
-                                         #:lift-key lift-key)]
+                                         #:lift-key lift-key
+                                         #:always-wrap? #t)]
                     [as-transformer?
                      (expand-transformer input-s local-ctx
                                          #:context context
@@ -143,7 +145,8 @@
                     [capture-lifts?
                      (expand/capture-lifts input-s local-ctx
                                            #:begin-form? #t
-                                         #:lift-key lift-key)]
+                                           #:lift-key lift-key
+                                           #:always-wrap? #t)]
                     [else
                      (expand input-s local-ctx)]))
   

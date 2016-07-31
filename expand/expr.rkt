@@ -408,7 +408,20 @@
 
 (add-core-form!
  'begin
- (make-begin 'prim-begin0 #:list-start-index 0))
+ (let ([nonempty-begin (make-begin 'prim-begin0 #:list-start-index 0)])
+   (lambda (s ctx)
+     ;; Empty `begin` allowed in 'top-level and 'module contexts,
+     ;; which might get here via `local-expand`:
+     (define context (expand-context-context ctx))
+     (cond
+      [(or (eq? context 'top-level) (eq? context 'module))
+       (define disarmed-s (syntax-disarm s))
+       (define-match m disarmed-s #:try '(begin))
+       (if (m)
+           s
+           (nonempty-begin s ctx))]
+      [else
+       (nonempty-begin s ctx)]))))
 
 (add-core-form!
  'begin0
