@@ -244,6 +244,7 @@
            [(adjust-only? adjust) (set->list (adjust-only-syms adjust))]
            [(adjust-rename? adjust) (list (adjust-rename-from-sym adjust))]
            [else #f])
+   #:just-meta just-meta
    #:can-bulk? can-bulk-bind?
    #:bulk-callback (and
                     requires+provides
@@ -267,9 +268,6 @@
                (define provide-phase (module-binding-nominal-phase binding))
                (define adjusted-sym
                  (cond
-                  [(and (not (eq? just-meta 'all))
-                        (not (equal? provide-phase just-meta)))
-                   #f]
                   [(and skip-variable-phase-level
                         (not as-transformer?)
                         (equal? provide-phase skip-variable-phase-level))
@@ -336,11 +334,14 @@
 (define (bind-all-provides! m in-stx phase-shift ns mpi
                             #:in orig-s
                             #:only only-syms
+                            #:just-meta just-meta
                             #:can-bulk? can-bulk?
                             #:filter filter
                             #:bulk-callback bulk-callback)
   (define self (module-self m))
-  (for ([(provide-phase-level provides) (in-hash (module-provides m))])
+  (for ([(provide-phase-level provides) (in-hash (module-provides m))]
+        #:when (or (eq? just-meta 'all)
+                   (eqv? just-meta provide-phase-level)))
     (define phase (phase+ phase-shift provide-phase-level))
     (when bulk-callback
       (bulk-callback provides provide-phase-level))

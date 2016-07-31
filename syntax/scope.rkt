@@ -629,6 +629,7 @@
 (define (resolve s phase
                  #:ambiguous-value [ambiguous-value #f]
                  #:exactly? [exactly? #f]
+                 #:get-scopes? [get-scopes? #f] ; gets scope set instead of binding
                  ;; For resolving bulk bindings in `free-identifier=?` chains:
                  #:extra-shifts [extra-shifts null])
   (unless (identifier? s)
@@ -640,6 +641,7 @@
     (define sym (syntax-content s))
     (cond
      [(and (not exactly?)
+           (not get-scopes?)
            (resolve-cache-get sym phase scopes))
       => (lambda (b) b)]
      [else
@@ -667,7 +669,9 @@
           (and (or (not exactly?)
                    (equal? (set-count scopes)
                            (set-count (car max-candidate))))
-               (cdr max-candidate))])]
+               (if get-scopes?
+                   (car max-candidate)
+                   (cdr max-candidate)))])]
        [else
         (if (fallback? smss)
             (fallback-loop (fallback-rest smss))
