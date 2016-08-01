@@ -22,17 +22,18 @@
                                [else
                                 (for/list ([b (in-list (cons b (module-binding-extra-nominal-bindings b)))])
                                   (cond
-                                   [(and (zero-phase? (module-binding-nominal-phase b))
-                                         (eq? (module-binding-sym b) sym))
+                                   [(and (eqv? (module-binding-nominal-phase b)
+                                               phase)
+                                         (eq? (module-binding-nominal-sym b) sym))
                                     (module-binding-nominal-module b)]
                                    [else
                                     (list (module-binding-nominal-module b)
                                           (module-binding-phase b)
-                                          (module-binding-sym b)
+                                          (module-binding-nominal-sym b)
                                           (module-binding-nominal-phase b))]))]))))]
                   #:unless (null? l))
         (cons phase (sort l symbol<? #:key car))))
-    (sort result-l < #:key car))
+    (sort result-l phase<? #:key car))
   (values (extract (lambda (b/p) (not (provided-as-transformer? b/p))))
           (extract provided-as-transformer?)))
 
@@ -49,4 +50,4 @@
                        var-sym)))]
                #:unless (null? l))
       (cons phase (sort l symbol<?))))
-  (sort result-l < #:key car))
+  (sort result-l phase<? #:key car))
