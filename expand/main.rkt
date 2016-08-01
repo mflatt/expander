@@ -344,9 +344,8 @@
 (define (maybe-add-use-site-scope s ctx binding)
   (cond
    [(and (root-expand-context-use-site-scopes ctx)
-         (root-expand-context-frame-id ctx)
-         (eq? (root-expand-context-frame-id ctx)
-              (binding-frame-id binding)))
+         (matching-frame? (root-expand-context-frame-id ctx)
+                          (binding-frame-id binding)))
     ;; We're in a recursive definition context where use-site scopes
     ;; are needed, so create one, record it, and add to the given
     ;; syntax
@@ -355,6 +354,11 @@
     (set-box! b (cons sc (unbox b)))
     (values (add-scope s sc) (list sc))]
    [else (values s null)]))
+
+(define (matching-frame? current-frame-id bind-frame-id)
+  (and current-frame-id
+       (or (eq? current-frame-id bind-frame-id)
+           (eq? current-frame-id 'all))))
 
 (define (maybe-add-post-expansion-scope s ctx)
   (cond

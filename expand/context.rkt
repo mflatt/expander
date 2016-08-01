@@ -139,9 +139,7 @@
    [else (struct-copy expand-context ctx
                       [context 'expression]
                       [name #f]
-                      [use-site-scopes #:parent root-expand-context #f]
-                      [post-expansion-scope #:parent root-expand-context #f]
-                      [frame-id #:parent root-expand-context #f])]))
+                      [post-expansion-scope #:parent root-expand-context #f])]))
 
 ;; Adjusts `ctx` (which should be an expression context) to make it
 ;; suitable for a subexpression in tail position

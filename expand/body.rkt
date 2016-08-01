@@ -222,7 +222,7 @@
   ;; As we finish expanding, we're no longer in a definition context
   (define finish-ctx (struct-copy expand-context (accumulate-def-ctx-scopes body-ctx def-ctx-scopes)
                                   [context 'expression]
-                                  [use-site-scopes #:parent root-expand-context #f]
+                                  [use-site-scopes #:parent root-expand-context (box null)]
                                   [scopes (append
                                            (unbox (root-expand-context-use-site-scopes body-ctx))
                                            (expand-context-scopes body-ctx))]

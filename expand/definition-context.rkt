@@ -38,8 +38,13 @@
 
 ;; syntax-local-make-definition-context
 (define (syntax-local-make-definition-context [parent-ctx #f] [add-scope? #t])
+  (unless (or (not parent-ctx)
+              (internal-definition-context? parent-ctx))
+    (raise-argument-error 'syntax-local-make-definition-context "(or/c #f internal-definition-context?)" parent-ctx))
   (define ctx (get-current-expand-context 'syntax-local-make-definition-context))
-  (define frame-id (or (root-expand-context-frame-id ctx) (gensym)))
+  (define frame-id (or (root-expand-context-frame-id ctx)
+                       (and parent-ctx (internal-definition-context-frame-id parent-ctx))
+                       (gensym)))
   (define sc (new-scope 'intdef))
   (define def-ctx-scopes (expand-context-def-ctx-scopes ctx))
   (unless def-ctx-scopes (error "internal error: no box to accumulate definition-context scopes"))
@@ -189,11 +194,16 @@
                      (or (root-expand-context-use-site-scopes ctx)
                          (box null)))]
                [frame-id #:parent root-expand-context
-                         (cond
-                          [same-kind? (root-expand-context-frame-id ctx)]
-                          [(pair? intdefs)
-                           (internal-definition-context-frame-id (car intdefs))]
-                          [else #f])]
+                         ;; If there are multiple definition contexts in `intdefs`
+                         ;; and if they have different frame IDs, then we conservatively
+                         ;; turn on use-site scopes for all frame IDs
+                         (for/fold ([frame-id (root-expand-context-frame-id ctx)]) ([intdef (in-intdefs intdefs)])
+                           (define i-frame-id (internal-definition-context-frame-id intdef))
+                           (cond
+                            [(and frame-id i-frame-id (not (eq? frame-id i-frame-id)))
+                             ;; Special ID 'all means "use-site scopes for all expansions"
+                             'all]
+                            [else (or frame-id i-frame-id)]))]
                [post-expansion-scope
                 #:parent root-expand-context
                 (if intdefs

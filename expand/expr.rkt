@@ -49,7 +49,8 @@
   (define body-ctx (struct-copy expand-context ctx
                                 [env body-env]
                                 [scopes (cons sc (expand-context-scopes ctx))]
-                                [binding-layer (increment-binding-layer ids ctx)]))
+                                [binding-layer (increment-binding-layer ids ctx)]
+                                [frame-id #:parent root-expand-context #f]))
   (define exp-body (expand-body sc-bodys body-ctx
                                 #:source s #:disarmed-source disarmed-s))
   ;; Return formals (with new scope) and expanded body:
@@ -138,7 +139,7 @@
         body ...+))
    (define sc (new-scope 'local))
    (define phase (expand-context-phase ctx))
-   (define frame-id (and split-by-reference?
+   (define frame-id (and syntaxes?
                          (make-reference-record))) ; accumulates info on referenced variables
    ;; Add the new scope to each binding identifier:
    (define trans-idss (for/list ([ids (in-list (if syntaxes? (stx-m 'id:trans) null))])
@@ -153,7 +154,7 @@
    (define counter (root-expand-context-counter ctx))
    (define trans-keyss (for/list ([ids (in-list trans-idss)])
                          (for/list ([id (in-list ids)])
-                           (add-local-binding! id phase counter #:in s))))
+                           (add-local-binding! id phase counter #:frame-id frame-id #:in s))))
    (define val-keyss (for/list ([ids (in-list val-idss)])
                        (for/list ([id (in-list ids)])
                          (add-local-binding! id phase counter #:frame-id frame-id #:in s))))

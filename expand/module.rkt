@@ -287,7 +287,6 @@
          (define body-ctx (struct-copy expand-context (accumulate-def-ctx-scopes partial-body-ctx def-ctx-scopes)
                                        [only-immediate? #f]
                                        [def-ctx-scopes #f]
-                                       [frame-id #:parent root-expand-context #f]
                                        [post-expansion-scope #:parent root-expand-context #f]
                                        [to-module-lifts (make-to-module-lift-context phase
                                                                                      #:shared-module-ends module-ends
