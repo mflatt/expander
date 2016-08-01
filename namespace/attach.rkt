@@ -26,7 +26,9 @@
                           src-namespace mod-path dest-namespace
                           #:attach-instances? [attach-instances? #f])
   (check who namespace? src-namespace)
-  (check who module-path? mod-path)
+  (unless (or (module-path? mod-path)
+              (resolved-module-path? mod-path))
+    (raise-argument-error who "(or/c module-path? resolved-module-path?)" mod-path))
   (check who namespace? dest-namespace)
 
   (define phase (namespace-phase src-namespace))
@@ -41,7 +43,11 @@
   (define missing (gensym 'missing))
 
   ;; Loop to check and decide what to transfer
-  (let loop ([mpi (module-path-index-join mod-path #f)]
+  (let loop ([mpi (module-path-index-join
+                   (if (resolved-module-path? mod-path)
+                       (resolved-module-path->module-path mod-path)
+                       mod-path)
+                   #f)]
              [phase phase]
              [attach-instances? attach-instances?]
              [attach-phase phase])
