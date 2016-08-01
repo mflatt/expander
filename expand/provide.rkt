@@ -150,7 +150,11 @@
            (define-match ex-m disarmed-spec '(expand (id . datum))) ; just check syntax
            (define-match m disarmed-spec '(expand form)) ; get form to expand
            (define exp-spec (expand (m 'form) (struct-copy expand-context ctx
-                                                           [only-immediate? #t])))
+                                                           [only-immediate? #t]
+                                                           ;; Discarding definition-context scopes is ok,
+                                                           ;; because the scopes won't be captured by
+                                                           ;; any `quote-syntax`:
+                                                           [def-ctx-scopes (box null)])))
            (unless (and (pair? (syntax-e exp-spec))
                         (identifier? (car (syntax-e exp-spec)))
                         (eq? 'begin (core-form-sym exp-spec at-phase)))
