@@ -82,7 +82,7 @@
             b)
           (error 'link "missing binding: ~s" sym))))
 
-(define (instance-set-variable-value! i sym val)
+(define (instance-set-variable-value! i sym val [constant? #f])
   (set-box! (instance-variable-box i sym #t) val))
 
 (define (instance-unset-variable! i sym)

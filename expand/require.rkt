@@ -308,7 +308,8 @@
                           copy-variable-phase-level
                           (not as-transformer?)
                           (equal? provide-phase copy-variable-phase-level))
-                 (copy-namespace-value m-ns adjusted-sym binding copy-variable-phase-level phase-shift))
+                 (copy-namespace-value m-ns adjusted-sym binding copy-variable-phase-level phase-shift
+                                       copy-variable-as-constant?))
                adjusted-sym)))
   ;; Now that a bulk binding is in place, update to merge nominals:
   (when update-nominals-box
@@ -407,7 +408,7 @@
 
 ;; ----------------------------------------
 
-(define (copy-namespace-value m-ns adjusted-sym binding phase-level phase-shift)
+(define (copy-namespace-value m-ns adjusted-sym binding phase-level phase-shift as-constant?)
   (define i-ns (namespace->module-namespace m-ns
                                             (module-path-index-resolve (module-binding-module binding))
                                             (phase- (module-binding-phase binding) phase-level)
@@ -421,4 +422,4 @@
                                                                    "  phase level: ~s")
                                                     (module-binding-sym binding)
                                                     (module-binding-phase binding))))))
-  (namespace-set-variable! m-ns (phase+ phase-shift phase-level) adjusted-sym val))
+  (namespace-set-variable! m-ns (phase+ phase-shift phase-level) adjusted-sym val as-constant?))

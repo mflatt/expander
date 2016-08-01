@@ -161,9 +161,9 @@
         (hash-set! (namespace-phase-level-to-definitions ns) phase-level d)
         d)))
 
-(define (namespace-set-variable! ns phase-level name val)
+(define (namespace-set-variable! ns phase-level name val [as-constant? #f])
   (define d (namespace->definitions ns phase-level))
-  (instance-set-variable-value! (definitions-variables d) name val))
+  (instance-set-variable-value! (definitions-variables d) name val as-constant?))
 
 (define (namespace-unset-variable! ns phase-level name)
   (define d (namespace->definitions ns phase-level))

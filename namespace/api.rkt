@@ -149,12 +149,12 @@
 (define (namespace-require/constant req [ns (current-namespace)])
   (do-namespace-require 'namespace-require/constant req ns
                         #:copy-variable-phase-level 0
-                        #:skip-variable-phase-level 0))
+                        #:copy-variable-as-constant? #t))
 
 (define (namespace-require/copy req [ns (current-namespace)])
-  (do-namespace-require 'namespace-require/constant req ns
+  (do-namespace-require 'namespace-require/copy req ns
                         #:copy-variable-phase-level 0
-                        #:copy-variable-as-constant? #t))
+                        #:skip-variable-phase-level 0))
 
 ;; ----------------------------------------
 
@@ -222,10 +222,11 @@
 (define (namespace-set-variable-value! sym	 	 	 	 
                                        val
                                        [map? #f]
-                                       [ns (current-namespace)])
+                                       [ns (current-namespace)]
+                                       [as-constant? #f])
   (check 'namespace-variable-value symbol? sym)
   (check 'namespace-variable-value namespace? ns)
-  (namespace-set-variable! ns (namespace-phase ns) sym val)
+  (namespace-set-variable! ns (namespace-phase ns) sym val as-constant?)
   (when map?
     (namespace-unset-transformer! ns (namespace-phase ns) sym)
     (define id (datum->syntax #f sym))
