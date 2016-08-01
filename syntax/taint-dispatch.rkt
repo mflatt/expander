@@ -48,7 +48,7 @@
       [else
        (define c (syntax-e s))
        (case (core-form-sym c phase)
-         [(begin begin-for-syntax module #%module-begin)
+         [(begin begin-for-syntax #%module-begin)
           (loop s 'transparent)]
          [(define-values define-syntaxes)
           (loop s 'transparent-binding)]
