@@ -15,6 +15,7 @@
          set=?
          set-subtract
          set-union
+         set-intersect
          set-partition
          set->list
          list->set
@@ -66,6 +67,14 @@
       (set-union s2 s1)
       (for/fold ([s1 s1]) ([k (in-set s2)])
         (hash-set s1 k #t))))
+
+(define (set-intersect s1 s2)
+  (if ((set-count s1) . < . (set-count s2))
+      (set-union s2 s1)
+      (for/fold ([s s2]) ([k (in-set s2)])
+        (if (hash-ref s1 k #f)
+            s
+            (hash-remove s k)))))
 
 (define (set-partition s pred empty-y-set empty-n-set)
   (for/fold ([y empty-y-set] [n empty-n-set]) ([v (in-set s)])
