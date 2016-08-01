@@ -483,7 +483,7 @@
        (cond
         [(resolve tl-id (expand-context-phase ctx))
          ;; Expand to a reference to a top-level variable, instead of
-         ;; a local or imported variable; don't include the temporary
+         ;; a local or required variable; don't include the temporary
          ;; binding scope in an expansion, though, in the same way that
          ;; `define-values` expands without it
          (cond
@@ -518,7 +518,7 @@
        (when (and (module-binding? binding)
                   (not (eq? (module-binding-module binding)
                             (namespace-mpi (expand-context-namespace ctx)))))
-         (raise-syntax-error #f "cannot mutate imported identifier" s id))
+         (raise-syntax-error #f "cannot mutate module-required identifier" s id))
        (log-expand ctx 'next)
        (register-variable-referenced-if-local! binding)
        (rebuild
