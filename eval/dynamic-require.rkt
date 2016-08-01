@@ -123,6 +123,6 @@
 
 (define (dynamic-require-for-syntax mod-path sym [fail-k default-dynamic-require-fail-thunk])
   (parameterize ([current-namespace
-                  (let ([ns current-namespace])
+                  (let ([ns (current-namespace)])
                     (namespace->namespace-at-phase ns (add1 (namespace-phase ns))))])
     (do-dynamic-require 'dynamic-require-for-syntax mod-path sym fail-k)))
