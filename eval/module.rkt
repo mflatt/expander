@@ -39,6 +39,11 @@
                                    data-instance
                                    (make-declaration-context-instance ns)))))
   
+  (when (not (load-on-demand-enabled))
+    ;; Since on-demand loading is disabled, force deserialization
+    (let ([deserialize-syntax (instance-variable-value syntax-literals-data-instance deserialize-syntax-id)])
+      (when deserialize-syntax (deserialize-syntax))))
+
   (define (decl key)
     (instance-variable-value declaration-instance key))
   

@@ -38,7 +38,18 @@
 
 ;; ----------------------------------------
 
-(struct resolved-module-path (name)
+(struct resolved-module-path (name debug)
+        #:property prop:equal+hash
+        ;; Although equal resolved module paths are `eq?` externally,
+        ;; we need this equality predicate to hash them for the
+        ;; interning table
+        (list (lambda (a b eql?)
+                (eql? (resolved-module-path-name a)
+                      (resolved-module-path-name b)))
+              (lambda (a hash-code)
+                (hash-code (resolved-module-path-name a)))
+              (lambda (a hash-code)
+                (hash-code (resolved-module-path-name a))))
         #:property prop:custom-write
         (lambda (r port mode)
           (when mode
@@ -90,11 +101,12 @@
                            "              (non-empty-listof symbol?)))")
                           p))
   ;; FIXME: make atomic
-  (or (let ([e (hash-ref resolved-module-paths p #f)])
-        (and e (ephemeron-value e)))
-      (let ([r (resolved-module-path p)])
-        (hash-set! resolved-module-paths p (make-ephemeron p r))
-        r)))
+  (define rp (resolved-module-path p (make-will-executor)))
+  (or (let ([wb (hash-ref resolved-module-paths rp #f)])
+        (and wb (weak-box-value wb)))
+      (begin
+        (hash-set! resolved-module-paths rp (make-weak-box rp))
+        rp)))
 
 (define (resolved-module-path->module-path r)
   (define name (resolved-module-path-name r))
