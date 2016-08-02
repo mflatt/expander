@@ -11,6 +11,7 @@
          "../namespace/namespace.rkt"
          "../namespace/provided.rkt"
          "../common/module-path.rkt"
+         "../common/module-path-intern.rkt"
          "env.rkt")
 
 (provide make-requires+provides
@@ -42,8 +43,7 @@
 ;; ----------------------------------------
 
 (struct requires+provides (self       ; module-path-index to recognize definitions among requires
-                           require-mpis ; module-path-index to itself as interned
-                           require-mpis/fast ; same table, but `eq?`-keyed for fast already-interned checks
+                           require-mpis ; intern table
                            require-mpis-in-order ; require-phase -> list of module-path-index
                            requires   ; mpi [interned] -> require-phase -> sym -> list of [bulk-]required
                            provides   ; phase -> sym -> binding or protected
@@ -60,14 +60,14 @@
 ;; A `bulk-required` can be converted into a `required` given the
 ;; module path, phase, and symbol that are mapped to it
 (struct bulk-required (provides ; extract binding info based on the sym
+                       prefix-len ; length of a prefix to remove
                        s        ; combine with the sym to create an identifier
                        provide-phase-level ; phase of `provide` in immediately providing module
                        can-be-shadowed?))  ; shadowed because, e.g., an initial import
 
 (define (make-requires+provides self)
   (requires+provides self
-                     (make-hash)    ; require-mpis
-                     (make-hasheq)  ; require-mpis/fast
+                     (make-module-path-index-intern-table)
                      (make-hasheqv) ; require-mpis-in-order
                      (make-hasheq)  ; requires
                      (make-hasheqv) ; provides
@@ -84,16 +84,7 @@
 ;; ----------------------------------------
 
 (define (intern-mpi r+p mpi)
-  (or (hash-ref (requires+provides-require-mpis/fast r+p)
-                mpi
-                #f)
-      (hash-ref (requires+provides-require-mpis r+p)
-                mpi
-                #f)
-      (begin
-        (hash-set! (requires+provides-require-mpis r+p) mpi mpi)
-        (hash-set! (requires+provides-require-mpis/fast r+p) mpi mpi)
-        mpi)))
+  (intern-module-path-index! (requires+provides-require-mpis r+p) mpi))
 
 ;; ----------------------------------------
 
@@ -150,6 +141,9 @@
 ;; Like `add-defined-or-required-id!`, but faster for bindings that
 ;; all have the same scope, etc.
 (define (add-bulk-required-ids! r+p s self nominal-module phase-shift provides provide-phase-level
+                                #:prefix bulk-prefix
+                                #:excepts bulk-excepts
+                                #:symbols-accum symbols-accum 
                                 #:in orig-s
                                 #:can-be-shadowed? can-be-shadowed?
                                 #:check-and-remove? check-and-remove?
@@ -162,30 +156,40 @@
   (define mpi (intern-mpi r+p nominal-module))
   (define at-mod (hash-ref! (requires+provides-requires r+p) mpi make-hasheqv))
   (define sym-to-reqds (hash-ref! at-mod phase-shift make-hasheq))
-  (define br (bulk-required provides s provide-phase-level can-be-shadowed?))
-  (for ([(sym binding/p) (in-hash provides)])
-    (when (and check-and-remove?
-               (or (not shortcut-table)
-                   (hash-ref shortcut-table sym #f)))
-      (check-not-defined #:check-not-required? #t
-                         r+p (datum->syntax s sym s) phase #:in orig-s
-                         #:unless-matches
-                         (lambda ()
-                           (provide-binding-to-require-binding binding/p
-                                                               sym
-                                                               #:self self
-                                                               #:mpi mpi
-                                                               #:provide-phase-level provide-phase-level
-                                                               #:phase-shift phase-shift))
-                         #:remove-shadowed!? #t
-                         #:accum-update-nominals accum-update-nominals
-                         #:who who))
-    (hash-set! sym-to-reqds sym (cons br (hash-ref sym-to-reqds sym null)))))
+  (define prefix-len (if bulk-prefix (string-length (symbol->string bulk-prefix)) 0))
+  (define br (bulk-required provides prefix-len s provide-phase-level can-be-shadowed?))
+  (for ([(out-sym binding/p) (in-hash provides)])
+    (when symbols-accum (hash-set! symbols-accum out-sym #t))
+    (unless (hash-ref bulk-excepts out-sym #f)
+      (define sym (cond
+                   [(not bulk-prefix) out-sym]
+                   [else (string->symbol (format "~a~a" bulk-prefix out-sym))]))
+      (when (and check-and-remove?
+                 (or (not shortcut-table)
+                     (hash-ref shortcut-table sym #f)))
+        (check-not-defined #:check-not-required? #t
+                           r+p (datum->syntax s sym s) phase #:in orig-s
+                           #:unless-matches
+                           (lambda ()
+                             (provide-binding-to-require-binding binding/p
+                                                                 sym
+                                                                 #:self self
+                                                                 #:mpi mpi
+                                                                 #:provide-phase-level provide-phase-level
+                                                                 #:phase-shift phase-shift))
+                           #:remove-shadowed!? #t
+                           #:accum-update-nominals accum-update-nominals
+                           #:who who))
+      (hash-set! sym-to-reqds sym (cons br (hash-ref sym-to-reqds sym null))))))
 
 ;; Convert a combination of a symbol and `bulk-required` to a
 ;; `required` on demand
 (define (bulk-required->required br nominal-module phase sym)
-  (define binding/p (hash-ref (bulk-required-provides br) sym))
+  (define prefix-len (bulk-required-prefix-len br))
+  (define out-sym (if (zero? prefix-len)
+                      sym
+                      (string->symbol (substring (symbol->string sym) prefix-len))))
+  (define binding/p (hash-ref (bulk-required-provides br) out-sym))
   (required (datum->syntax (bulk-required-s br) sym)
             (phase+ phase (bulk-required-provide-phase-level br))
             (bulk-required-can-be-shadowed? br)

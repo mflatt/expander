@@ -11,6 +11,7 @@
          "../syntax/local-binding.rkt"
          "../syntax/bulk-binding.rkt"
          "../common/module-path.rkt"
+         "../common/module-path-intern.rkt"
          "module-use.rkt"
          "../host/linklet.rkt"
          "built-in-symbol.rkt"
@@ -84,10 +85,13 @@
 ;; ----------------------------------------
 ;; Module path index serialization
 
+(struct module-path-index-table (positions intern))
+
 (define mpi-vector-id (make-built-in-symbol! 'mpi-vector))
 
 (define (make-module-path-index-table)
-  (make-hasheq)) ; module path index -> pos
+  (module-path-index-table (make-hasheq) ; module-path-index -> pos
+                           (make-module-path-index-intern-table)))
 
 (define (add-module-path-index! mpis mpi)
   (define pos
@@ -99,19 +103,22 @@
   (cond
    [(not mpi) #f]
    [mpi
-    (or (hash-ref mpis mpi #f)
-        (let ([pos (hash-count mpis)])
-          (hash-set! mpis mpi pos)
-          pos))]))
+    (let ([mpi (intern-module-path-index! (module-path-index-table-intern mpis) mpi)]
+          [positions (module-path-index-table-positions mpis)])
+      (or (hash-ref positions mpi #f)
+          (let ([pos (hash-count positions)])
+            (hash-set! positions mpi pos)
+            pos)))]))
 
 (define (generate-module-path-index-deserialize mpis)
+  (define positions (module-path-index-table-positions mpis))
   (define gen-order (make-hasheqv))
-  (define rev-mpis
-    (for/hasheqv ([(k v) (in-hash mpis)])
+  (define rev-positions
+    (for/hasheqv ([(k v) (in-hash positions)])
       (values v k)))
   ;; Create mpis used earlier first:
-  (for ([i (in-range (hash-count rev-mpis))])
-    (define mpi (hash-ref rev-mpis i))
+  (for ([i (in-range (hash-count rev-positions))])
+    (define mpi (hash-ref rev-positions i))
     (let loop ([mpi mpi])
       (unless (hash-ref gen-order mpi #f)
         (define-values (name base) (module-path-index-split mpi))
@@ -141,8 +148,8 @@
     ;; must be constructed first:
     ',gens
     ;; Vector of reordering to match reference order:
-    ',(for/vector ([i (in-range (hash-count rev-mpis))])
-        (hash-ref gen-order (hash-ref rev-mpis i)))))
+    ',(for/vector ([i (in-range (hash-count rev-positions))])
+        (hash-ref gen-order (hash-ref rev-positions i)))))
 
 (define (deserialize-module-path-indexes gen-vec order-vec)
   (define gen (make-vector (vector-length gen-vec) #f))
@@ -162,8 +169,9 @@
               (vector-ref gen p)))
 
 (define (mpis-as-vector mpis)
-  (define vec (make-vector (hash-count mpis) #f))
-  (for ([(mpi pos) (in-hash mpis)])
+  (define positions (module-path-index-table-positions mpis))
+  (define vec (make-vector (hash-count positions) #f))
+  (for ([(mpi pos) (in-hash positions)])
     (vector-set! vec pos mpi))
   vec)
 
@@ -201,8 +209,7 @@
       (and (fixnum? v)
            (v . < . (sub1 (expt 2 30)))
            (v . > . (- (expt 2 30))))
-      (and (symbol? v)
-           (symbol-interned? v))
+      (symbol? v)
       (char? v)
       (keyword? v)))
 
@@ -653,7 +660,7 @@
          [(deserialize-full-local-binding)
           (decode* deserialize-full-local-binding key free=id)]
          [(deserialize-bulk-binding)
-          (decode* deserialize-bulk-binding mpi provide-phase-level phase-shift bulk-binding-registry)]
+          (decode* deserialize-bulk-binding prefix excepts mpi provide-phase-level phase-shift bulk-binding-registry)]
          [else
           (if (not (symbol? (car d)))
               ;; Non-symbol start => list

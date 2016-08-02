@@ -72,21 +72,23 @@
 ;; ----------------------------------------
 
 (struct bulk-binding ([provides #:mutable] ; mutable so table can be found lazily on unmarshal
+                      prefix               ; #f or a prefix for the import
+                      excepts              ; hash table of excluded symbols (before adding prefix)
                       [self #:mutable]     ; the providing module's self
                       mpi                  ; this binding's view of the providing module
                       provide-phase-level  ; providing module's import phase
                       phase-shift          ; providing module's instantiation phase
-                      bulk-binding-registry) ; a registry for findingbulk bindings lazily
+                      bulk-binding-registry) ; a registry for finding bulk bindings lazily
         #:property prop:bulk-binding
         (bulk-binding-class
          (lambda (b mpi-shifts)
            (or (bulk-binding-provides b)
                ;; Here's where we find provided bindings for unmarshaled syntax
                (let ([mod-name (module-path-index-resolve
-                               (apply-syntax-shifts
-                                (bulk-binding-mpi b)
-                                mpi-shifts))])
-                 (unless (bulk-binding-registry b)
+                                (apply-syntax-shifts
+                                 (bulk-binding-mpi b)
+                                 mpi-shifts))])
+                 (unless (bulk-binding-bulk-binding-registry b)
                    (error "namespace mismatch: no bulk-binding registry available:"
                           mod-name))
                  (define table (bulk-binding-registry-table (bulk-binding-bulk-binding-registry b)))
@@ -98,13 +100,31 @@
                  (set-bulk-binding-self! b (bulk-provide-self bulk-provide))
                  (define provides (hash-ref (bulk-provide-provides bulk-provide)
                                             (bulk-binding-provide-phase-level b)))
-                 (set-bulk-binding-provides! b provides)
-                 provides)))
+                 ;; Remove exceptions and add prefix
+                 (define excepts (bulk-binding-excepts b))
+                 (define prefix (bulk-binding-prefix b))
+                 (define adjusted-provides
+                   (cond
+                    [(or prefix (positive? (hash-count excepts)))
+                     (for/hash ([(sym val) (in-hash provides)]
+                                #:unless (hash-ref excepts sym #f))
+                       (values (if prefix
+                                   (string->symbol (format "~a~a" prefix sym))
+                                   sym)
+                               val))]
+                    [else provides]))
+                 ;; Record the adjusted `provides` table for quick future access:
+                 (set-bulk-binding-provides! b adjusted-provides)
+                 adjusted-provides)))
          (lambda (b binding sym)
            ;; Convert the provided binding to a required binding on
            ;; demand during binding resolution
            (provide-binding-to-require-binding
-            binding sym
+            binding (if (bulk-binding-prefix b)
+                        (string->symbol
+                         (substring (symbol->string sym)
+                                    (string-length (symbol->string (bulk-binding-prefix b)))))
+                        sym)
             #:self (bulk-binding-self b)
             #:mpi (bulk-binding-mpi b)
             #:provide-phase-level (bulk-binding-provide-phase-level b)
@@ -113,13 +133,15 @@
         ;; Serialization drops the `provides` table and the providing module's `self`
         (lambda (b ser reachable-scopes)
           `(deserialize-bulk-binding
+            ,(ser (bulk-binding-prefix b))
+            ,(ser (bulk-binding-excepts b))
             ,(ser (bulk-binding-mpi b))
             ,(ser (bulk-binding-provide-phase-level b))
             ,(ser (bulk-binding-phase-shift b))
             #:bulk-binding-registry)))
 
-(define (deserialize-bulk-binding mpi provide-phase-level phase-shift bulk-binding-registry)
-  (bulk-binding #f #f mpi provide-phase-level phase-shift bulk-binding-registry))
+(define (deserialize-bulk-binding prefix excepts mpi provide-phase-level phase-shift bulk-binding-registry)
+  (bulk-binding #f prefix excepts #f mpi provide-phase-level phase-shift bulk-binding-registry))
 
 ;; ----------------------------------------
 

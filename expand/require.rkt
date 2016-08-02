@@ -234,7 +234,17 @@
   (when (not (or visit? run?))
     ;; make the module available:
     (namespace-module-make-available! m-ns interned-mpi phase-shift #:visit-phase run-phase))
-  (define can-bulk-bind? (and (not adjust) (not skip-variable-phase-level)))
+  (define can-bulk-bind? (and (or (not adjust)
+                                  (adjust-prefix? adjust)
+                                  (adjust-all-except? adjust))
+                              (not skip-variable-phase-level)))
+  (define bulk-prefix (cond
+                       [(adjust-prefix? adjust) (adjust-prefix-sym adjust)]
+                       [(adjust-all-except? adjust) (adjust-all-except-prefix-sym adjust)]
+                       [else #f]))
+  (define bulk-excepts (cond
+                        [(adjust-all-except? adjust) (adjust-all-except-syms adjust)]
+                        [else #hasheq()]))
   (define update-nominals-box (and can-bulk-bind? (box null)))
   (bind-all-provides!
    m
@@ -246,6 +256,8 @@
            [else #f])
    #:just-meta just-meta
    #:can-bulk? can-bulk-bind?
+   #:bulk-prefix bulk-prefix
+   #:bulk-excepts bulk-excepts
    #:bulk-callback (and
                     requires+provides
                     can-bulk-bind?
@@ -255,6 +267,10 @@
                                               (module-self m) mpi phase-shift
                                               provides
                                               provide-phase-level
+                                              #:prefix bulk-prefix
+                                              #:excepts bulk-excepts
+                                              #:symbols-accum (and (positive? (hash-count bulk-excepts))
+                                                                   done-syms)
                                               #:can-be-shadowed? can-be-shadowed?
                                               #:check-and-remove? (not initial-require?)
                                               #:in orig-s
@@ -328,7 +344,7 @@
              (not (= (set-count need-syms) (hash-count done-syms))))
     (for ([sym (in-set need-syms)])
       (unless (hash-ref done-syms sym #f)
-        (raise-syntax-error #f "not in nested spec" orig-s sym)))))
+        (raise-syntax-error who "not in nested spec" orig-s sym)))))
 
 ;; ----------------------------------------
 
@@ -337,6 +353,8 @@
                             #:only only-syms
                             #:just-meta just-meta
                             #:can-bulk? can-bulk?
+                            #:bulk-prefix bulk-prefix
+                            #:bulk-excepts bulk-excepts
                             #:filter filter
                             #:bulk-callback bulk-callback)
   (define self (module-self m))
@@ -363,7 +381,11 @@
     ;; Add bulk binding after all filtering
     (when can-bulk?
       (add-bulk-binding! in-stx
-                         (bulk-binding provides self mpi provide-phase-level phase-shift
+                         (bulk-binding (and (not bulk-prefix)
+                                            (zero? (hash-count bulk-excepts))
+                                            provides)
+                                       bulk-prefix bulk-excepts
+                                       self mpi provide-phase-level phase-shift
                                        (namespace-bulk-binding-registry ns))
                          phase
                          #:in orig-s))))

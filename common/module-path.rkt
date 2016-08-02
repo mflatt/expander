@@ -36,9 +36,12 @@
          
          deserialize-module-path-index)
 
+(module+ for-intern
+  (provide (struct-out module-path-index)))
+
 ;; ----------------------------------------
 
-(struct resolved-module-path (name debug)
+(struct resolved-module-path (name)
         #:property prop:equal+hash
         ;; Although equal resolved module paths are `eq?` externally,
         ;; we need this equality predicate to hash them for the
@@ -101,7 +104,7 @@
                            "              (non-empty-listof symbol?)))")
                           p))
   ;; FIXME: make atomic
-  (define rp (resolved-module-path p (make-will-executor)))
+  (define rp (resolved-module-path p))
   (or (let ([wb (hash-ref resolved-module-paths rp #f)])
         (and wb (weak-box-value wb)))
       (begin
