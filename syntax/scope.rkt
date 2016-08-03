@@ -603,9 +603,9 @@
         sc
         max-sc)))
 
-(define (add-binding-in-scopes! scopes sym binding)
+(define (add-binding-in-scopes! scopes sym binding #:just-for-nominal? [just-for-nominal? #f])
   (define max-sc (find-max-scope scopes))
-  (define bt (binding-table-add (scope-binding-table max-sc) scopes sym binding))
+  (define bt (binding-table-add (scope-binding-table max-sc) scopes sym binding just-for-nominal?))
   (set-scope-binding-table! max-sc bt)
   (clear-resolve-cache! sym))
 

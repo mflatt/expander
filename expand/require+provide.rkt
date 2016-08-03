@@ -302,6 +302,7 @@
           ;; Need to accumulate nominals
           (define (update!)
             (add-binding!
+             #:just-for-nominal? #t
              id
              (module-binding-update b
                                     #:extra-nominal-bindings

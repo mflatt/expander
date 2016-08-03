@@ -80,9 +80,10 @@
 
 ;; ---------------------------------------- 
 
-(define (add-binding! id binding phase #:in [in-s #f])
+(define (add-binding! id binding phase #:in [in-s #f] #:just-for-nominal? [just-for-nominal? #f])
   (check-id-taint id in-s)
-  (add-binding-in-scopes! (syntax-scope-set id phase) (syntax-e id) binding))
+  (add-binding-in-scopes! (syntax-scope-set id phase) (syntax-e id) binding
+                          #:just-for-nominal? just-for-nominal?))
 
 (define (add-bulk-binding! s binding phase #:in [in-s #f])
   (when (syntax-tainted? s)
