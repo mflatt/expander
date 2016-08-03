@@ -101,8 +101,7 @@
                   syntax-literals
                   root-ctx-pos)
     (compile-forms bodys body-cctx mpis
-                   #:body-imports `([,syntax-literals-id
-                                     ,get-syntax-literal!-id]
+                   #:body-imports `([,get-syntax-literal!-id]
                                     [,set-transformer!-id])
                    #:body-suffix-forms '((void)) ; otherwise, compiler always preserves last form
                    #:force-phases '(0) ; minor hack for more consistent compilation
@@ -188,8 +187,7 @@
                     '())]
              ,instance-imports)
             ;; exports
-            (,syntax-literals-id
-             ,get-syntax-literal!-id
+            (,get-syntax-literal!-id
              get-encoded-root-expand-ctx)
             ;; body
             ,@(generate-lazy-syntax-literals! syntax-literals mpis self

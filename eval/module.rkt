@@ -332,13 +332,11 @@
 
 (define empty-syntax-literals-instance
   (make-instance 'empty-stx #f
-                 syntax-literals-id (vector)
                  get-syntax-literal!-id (lambda (pos) #f)
                  'get-encoded-root-expand-ctx #f))
 
 (define empty-syntax-literals-instance/empty-namespace
   (make-instance 'empty-stx/empty-ns #f
-                 syntax-literals-id (vector)
                  get-syntax-literal!-id (lambda (pos) #f)
                  'get-encoded-root-expand-ctx 'empty))
 

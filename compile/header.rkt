@@ -105,22 +105,25 @@
       (make-vector ,(syntax-literals-count sl) #f))
     (define-values (,get-syntax-literal!-id)
       (lambda (pos)
-        (begin
-          ,@(if skip-deserialize?
-                null
-                `((if (vector-ref ,deserialized-syntax-vector-id 0)
-                      (void)
-                      (,deserialize-syntax-id))))
-          (let-values ([(stx)
-                        (syntax-module-path-index-shift
-                         (syntax-shift-phase-level
-                          (vector-ref ,deserialized-syntax-vector-id pos)
-                          ,phase-shift-id)
-                         ,(add-module-path-index! mpis self)
-                         ,self-id)])
-            (begin
-              (vector-set! ,syntax-literals-id pos stx)
-              stx)))))))
+        (let-values ([(ready-stx) (vector-ref ,syntax-literals-id pos)])
+          (if ready-stx
+              ready-stx
+              (begin
+                ,@(if skip-deserialize?
+                      null
+                      `((if (vector-ref ,deserialized-syntax-vector-id 0)
+                            (void)
+                            (,deserialize-syntax-id))))
+                (let-values ([(stx)
+                              (syntax-module-path-index-shift
+                               (syntax-shift-phase-level
+                                (vector-ref ,deserialized-syntax-vector-id pos)
+                                ,phase-shift-id)
+                               ,(add-module-path-index! mpis self)
+                               ,self-id)])
+                  (begin
+                    (vector-set! ,syntax-literals-id pos stx)
+                    stx)))))))))
 
 ;; Generate on-demand deserialization (shared across instances); the
 ;; result defines `deserialize-syntax-id`
@@ -145,10 +148,7 @@
             (set! ,deserialize-syntax-id #f)))))]))
 
 (define (generate-lazy-syntax-literal-lookup pos)
-  `(let-values ([(stx) ,(generate-eager-syntax-literal-lookup pos)])
-    (if stx
-        stx
-        (,get-syntax-literal!-id ',pos))))
+  `(,get-syntax-literal!-id ',pos))
 
 ;; Generate immediate deserializartion and shifting of a set of syntax
 ;; objects across multiple phases; the result is an expression for a
