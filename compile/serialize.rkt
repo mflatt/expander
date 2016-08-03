@@ -631,7 +631,7 @@
 (define (decode-shell vec pos mpis inspector bulk-binding-registry shared)
   (case (vector-ref vec pos)
     [(#:box) (values (box #f) (add1 pos))]
-    [(#:vector) (make-vector (vector-ref vec (add1 pos))) (+ pos 2)]
+    [(#:vector) (values (make-vector (vector-ref vec (add1 pos))) (+ pos 2))]
     [(#:hash) (values (make-hasheq) (add1 pos))]
     [(#:hasheq) (values (make-hasheq) (add1 pos))]
     [(#:hasheqv) (values (make-hasheqv) (add1 pos))]
