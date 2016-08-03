@@ -43,7 +43,7 @@
           (fprintf port " ~.s" (syntax->datum s))
           (write-string ">" port))
         #:property prop:serialize
-        (lambda (s ser state)
+        (lambda (s ser-push! state)
           (define prop (syntax-scope-propagations s))
           (define content
             (if prop
@@ -64,20 +64,19 @@
                                    (intern-shifted-multi-scopes (syntax-shifted-multi-scopes s) state)
                                    (intern-mpi-shifts (syntax-mpi-shifts s) state)
                                    state))
-          ;; Value that is interpreted for deserialization --- based
-          ;; on the length of the vector, so make sure changes don't
-          ;; create an ambiguity!
           (cond
            [(or properties tamper)
-            `#(,(ser content)
-               ,(ser context-triple #t)
-               ,(ser (syntax-srcloc s) #t)
-               ,(ser properties)
-               ,(ser tamper))]
+            (ser-push! 'tag '#:syntax+props)
+            (ser-push! content)
+            (ser-push! 'reference context-triple)
+            (ser-push! 'reference (syntax-srcloc s))
+            (ser-push! properties)
+            (ser-push! tamper)]
            [else
-            `#(,(ser content)
-               ,(ser context-triple #t)
-               ,(ser (syntax-srcloc s) #t))]))
+            (ser-push! 'tag '#:syntax)
+            (ser-push! content)
+            (ser-push! 'reference context-triple)
+            (ser-push! 'reference (syntax-srcloc s))]))
         #:property prop:reach-scopes
         (lambda (s reach)
           (define prop (syntax-scope-propagations s))

@@ -80,22 +80,23 @@
           (display (scope-kind sc) port)
           (write-string ">" port))
         #:property prop:serialize
-        (lambda (s ser state)
-          ;; The result here looks like an expression, but it's
-          ;; treated as data and interpreted for deserialization
+        (lambda (s ser-push! state)
           (unless (set-member? (serialize-state-reachable-scopes state) s)
             (error "internal error: found supposedly unreachable scope"))
-          (if (eq? s top-level-common-scope)
-              `(deserialize-scope)
-              `(deserialize-scope . ,(scope-kind s))))
+          (cond
+           [(eq? s top-level-common-scope)
+            (ser-push! 'tag '#:scope)]
+           [else
+            (ser-push! 'tag '#:scope+kind)
+            (ser-push! (scope-kind s))]))
         #:property prop:serialize-fill!
-        (lambda (s ser state)
-          ;; Like the main serialization result, this result
-          ;; is data that is interpreted
-          (if (binding-table-empty? (scope-binding-table s))
-              #f
-              `(deserialize-scope-fill!
-                ,(ser (binding-table-prune-to-reachable (scope-binding-table s) state)))))
+        (lambda (s ser-push! state)
+          (cond
+           [(binding-table-empty? (scope-binding-table s))
+            (ser-push! 'tag #f)]
+           [else
+            (ser-push! 'tag '#:scope-fill!)
+            (ser-push! (binding-table-prune-to-reachable (scope-binding-table s) state))]))
         #:property prop:reach-scopes
         (lambda (s reach)
           ;; the `bindings` field is handled via `prop:scope-with-bindings`
@@ -134,11 +135,10 @@
                      shifted  ; interned shifted-multi-scopes for non-label phases
                      label-shifted) ; interned shifted-multi-scopes for label phases
         #:property prop:serialize
-        (lambda (ms ser state)
-          ;; Data that is interpreted by the deserializer:
-          `(deserialize-multi-scope
-            ,(ser (multi-scope-name ms))
-            ,(ser (multi-scope-scopes ms))))
+        (lambda (ms ser-push! state)
+          (ser-push! 'tag '#:multi-scope)
+          (ser-push! (multi-scope-name ms))
+          (ser-push! (multi-scope-scopes ms)))
         #:property prop:reach-scopes
         (lambda (ms reach)
           (reach (multi-scope-scopes ms))))
@@ -160,23 +160,23 @@
           (display (representative-scope-phase sc) port)
           (write-string ">" port))
         #:property prop:serialize
-        (lambda (s ser state)
-          ;; Data that is interpreted by the deserializer:
-          `(deserialize-representative-scope
-            ,(ser (scope-kind s))
-            ,(ser (representative-scope-phase s))))
+        (lambda (s ser-push! state)
+          (ser-push! 'tag '#:representative-scope)
+          (ser-push! (scope-kind s))
+          (ser-push! (representative-scope-phase s)))
         #:property prop:serialize-fill!
-        (lambda (s ser state)
-          `(deserialize-representative-scope-fill!
-            ,(ser (binding-table-prune-to-reachable (scope-binding-table s) state))
-            ,(ser (representative-scope-owner s))))
+        (lambda (s ser-push! state)
+          (ser-push! 'tag '#:representative-scope-fill!)
+          (ser-push! (binding-table-prune-to-reachable (scope-binding-table s) state))
+          (ser-push! (representative-scope-owner s)))
         #:property prop:reach-scopes
         (lambda (s reach)
           ;; the inherited `bindings` field is handled via `prop:scope-with-bindings`
           (reach (representative-scope-owner s))))
 
 (define (deserialize-representative-scope kind phase)
-  (representative-scope (new-deserialize-scope-id!) kind #f #f phase))
+  (define v (representative-scope (new-deserialize-scope-id!) kind #f #f phase))
+  v)
 
 (define (deserialize-representative-scope-fill! s bt owner)
   (deserialize-scope-fill! s bt)
@@ -192,11 +192,10 @@
           (display (shifted-multi-scope-phase sms) port)
           (write-string ">" port))
         #:property prop:serialize
-        (lambda (sms ser state)
-          ;; Data that is interpreted by the deserializer:
-          `(deserialize-shifted-multi-scope
-            ,(ser (shifted-multi-scope-phase sms))
-            ,(ser (shifted-multi-scope-multi-scope sms))))
+        (lambda (sms ser-push! state)
+          (ser-push! 'tag '#:shifted-multi-scope)
+          (ser-push! (shifted-multi-scope-phase sms))
+          (ser-push! (shifted-multi-scope-multi-scope sms)))
         #:property prop:reach-scopes
         (lambda (sms reach)
           (reach (shifted-multi-scope-multi-scope sms))))

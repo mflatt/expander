@@ -131,14 +131,14 @@
             #:phase-shift (bulk-binding-phase-shift b))))
         #:property prop:serialize
         ;; Serialization drops the `provides` table and the providing module's `self`
-        (lambda (b ser reachable-scopes)
-          `(deserialize-bulk-binding
-            ,(ser (bulk-binding-prefix b))
-            ,(ser (bulk-binding-excepts b))
-            ,(ser (bulk-binding-mpi b))
-            ,(ser (bulk-binding-provide-phase-level b))
-            ,(ser (bulk-binding-phase-shift b))
-            #:bulk-binding-registry)))
+        (lambda (b ser-push! reachable-scopes)
+          (ser-push! 'tag '#:bulk-binding)
+          (ser-push! (bulk-binding-prefix b))
+          (ser-push! (bulk-binding-excepts b))
+          (ser-push! (bulk-binding-mpi b))
+          (ser-push! (bulk-binding-provide-phase-level b))
+          (ser-push! (bulk-binding-phase-shift b))
+          (ser-push! 'tag '#:bulk-binding-registry)))
 
 (define (deserialize-bulk-binding prefix excepts mpi provide-phase-level phase-shift bulk-binding-registry)
   (bulk-binding #f prefix excepts #f mpi provide-phase-level phase-shift bulk-binding-registry))

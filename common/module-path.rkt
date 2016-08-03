@@ -61,9 +61,9 @@
           (when mode
             (write-string ">" port)))
         #:property prop:serialize
-        (lambda (r ser state)
-          `(deserialize-resolved-module-path
-            ,(ser (resolved-module-path-name r)))))
+        (lambda (r ser-push! state)
+          (ser-push! 'tag '#:resolved-module-path)
+          (ser-push! (resolved-module-path-name r))))
 
 (define (deserialize-resolved-module-path n)
   (make-resolved-module-path n))

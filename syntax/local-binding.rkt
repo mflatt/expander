@@ -23,11 +23,11 @@
 ;; trigger use-site scopes as needed
 (struct full-local-binding full-binding (key)
         #:property prop:serialize
-        (lambda (b ser state)
+        (lambda (b ser-push! state)
           ;; Data that is interpreted by the deserializer:
-          `(deserialize-full-local-binding
-            ,(ser (full-local-binding-key b))
-            ,(ser (full-binding-free=id b)))))
+          (ser-push! 'tag '#:local-binding)
+          (ser-push! (full-local-binding-key b))
+          (ser-push! (full-binding-free=id b))))
 
 (define (deserialize-full-local-binding key free=id)
   (full-local-binding #f free=id key))

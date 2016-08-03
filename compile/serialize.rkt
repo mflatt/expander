@@ -10,6 +10,7 @@
          "../syntax/module-binding.rkt"
          "../syntax/local-binding.rkt"
          "../syntax/bulk-binding.rkt"
+         "../namespace/provided.rkt"
          "../common/module-path.rkt"
          "../common/module-path-intern.rkt"
          "module-use.rkt"
@@ -236,7 +237,10 @@
   
   ;; Build table of sharing and mutable values
   (define frontier null)
-  (define (add-frontier! v) (set! frontier (cons v frontier)))
+  (define add-frontier!
+    (case-lambda
+      [(v) (set! frontier (cons v frontier))]
+      [(kind v) (add-frontier! v)]))
   (let frontier-loop ([v v])
     (let loop ([v v])
       (cond
@@ -254,7 +258,11 @@
           (hash-set! mutables v (hash-count mutables))
           ((serialize-fill!-ref v) v add-frontier! state)]
          [(serialize? v)
-          ((serialize-ref v) v (lambda (v [ref? #f]) (loop v)) state)]
+          ((serialize-ref v) v 
+           (case-lambda
+             [(v) (loop v)]
+             [(kind v) (loop v)])
+           state)]
          [(pair? v)
           (loop (car v))
           (loop (cdr v))]
@@ -309,141 +317,221 @@
       (for/hasheqv ([step (in-list (sort share-steps <))]
                     [pos (in-naturals num-mutables)])
         (values step pos))))
+  
+  ;; Accumulate the serialized stream:
+  (define stream null)
+  (define stream-size 0)
+
+  (define (next-push-position) stream-size)
+  
+  (define (quoted? pos)
+    (define v (list-ref stream (- stream-size (add1 pos))))
+    (or (not (keyword? v))
+        (eq? '#:quote v)))
+  
+  (define (ser-reset! pos)
+    (set! stream (list-tail stream (- stream-size pos)))
+    (set! stream-size pos))
+  
+  (define (reap-stream!)
+    (begin0
+     (list->vector (reverse stream))
+     (set! stream null)
+     (set! stream-size 0)))
 
   ;; Handle a reference to an object that may be shared
   ;; or mutable
-  (define (ser v [reference? #f])
-    (cond
-     [(hash-ref shares v #f)
-      (define n (hash-ref share-step-positions (hash-ref objs v)))
-      (if reference?
-          n
-          (box-immutable n))]
-     [(hash-ref mutables v #f)
-      => (lambda (n) (if reference?
-                    n
-                    (box-immutable n)))]
-     [else
-      (do-ser v)]))
+  (define ser-push!
+    (case-lambda
+      [(v)
+       (cond
+        [(hash-ref shares v #f)
+         (define n (hash-ref share-step-positions (hash-ref objs v)))
+         (ser-push! 'tag '#:ref)
+         (ser-push! 'exact n)]
+        [(hash-ref mutables v #f)
+         => (lambda (n)
+              (ser-push! 'tag '#:ref)
+              (ser-push! 'exact n))]
+        [else (ser-push-encoded! v)])]
+      [(kind v)
+       (case kind
+         [(exact)
+          (set! stream (cons v stream))
+          (set! stream-size (add1 stream-size))]
+         [(tag)
+          (ser-push! 'exact v)]
+         [(reference)
+          (cond
+           [(hash-ref shares v #f)
+            (define n (hash-ref share-step-positions (hash-ref objs v)))
+            (ser-push! 'exact n)]
+           [(hash-ref mutables v #f)
+            => (lambda (n)
+                 (ser-push! 'exact n))]
+           [else
+            (ser-push! v)])]
+         [else (ser-push! v)])]))
   
   ;; Handle an immutable, not-shared (or on RHS of binding) value
-  (define (do-ser v)
+  (define (ser-push-encoded! v)
     (cond
+     [(keyword? v)
+      (ser-push! 'tag '#:quote)
+      (ser-push! 'exact v)]
      [(module-path-index? v)
-      `(mpi . ,(add-module-path-index!/pos mpis v))]
+      (ser-push! 'tag '#:mpi)
+      (ser-push! 'exact (add-module-path-index!/pos mpis v))]
      [(serialize? v)
-      ((serialize-ref v) v ser state)]
+      ((serialize-ref v) v ser-push! state)]
+     [(and (list? v)
+           (pair? v)
+           (pair? (cdr v)))
+      (define start-pos (next-push-position))
+      (ser-push! 'tag '#:list)
+      (ser-push! 'exact (length v))
+      (define all-quoted?
+        (for/fold ([all-quoted? #t]) ([i (in-list v)])
+          (define i-pos (next-push-position))
+          (ser-push! i)
+          (and all-quoted?
+               (quoted? i-pos))))
+      (when all-quoted?
+        (ser-reset! start-pos)
+        (ser-push-optional-quote!)
+        (ser-push! 'exact v))]
      [(pair? v)
-      (define a (ser (car v)))
-      (define d (ser (cdr v)))
-      (cond
-       [(and (quoted? a) (quoted? d))
-        (quoted v)]
-       [(and (pair? d)
-             (eq? 'list (car d)))
-        (if (symbol? a)
-            (list* 'list a (cdr d))
-            ;; Non-symbol => 'list
-            (cons a (cdr d)))]
-       [(and (pair? d)
-             (not (symbol? (car d))))
-        ;; Non-symbol => 'list
-        (if (symbol? a)
-            (list* 'list a d)
-            (cons a d))]
-       [(and (pair? d)
-             (eq? 'quote (car d))
-             (eq? '() (cdr d)))
-        (if (symbol? a)
-            (list 'list a)
-            ;; Non-symbol => 'list
-            (list a))]
-       [else
-        `(cons ,a ,d)])]
-     [(null? v) (quoted '())]
+      (define start-pos (next-push-position))
+      (ser-push! 'tag '#:cons)
+      (define a-pos (next-push-position))
+      (ser-push! (car v))
+      (define d-pos (next-push-position))
+      (ser-push! (cdr v))
+      (when (and (quoted? a-pos) (quoted? d-pos))
+        (ser-reset! start-pos)
+        (ser-push-optional-quote!)
+        (ser-push! 'exact v))]
      [(box? v)
-      (define content (ser (unbox v)))
-      (if (quoted? content)
-          (quoted v)
-          `(box-immutable . ,content))]
+      (define start-pos (next-push-position))
+      (ser-push! 'tag '#:box)
+      (define v-pos (next-push-position))
+      (ser-push! (unbox v))
+      (when (quoted? v-pos)
+        (ser-reset! start-pos)
+        (ser-push-optional-quote!)
+        (ser-push! 'exact v))]
      [(vector? v)
-      (define content (for/list ([e (in-vector v)])
-                        (ser e)))
-      (if (andmap quoted? content)
-          (quoted v)
-          (cons 'vector-immutable (list->vector content)))]
+      (define start-pos (next-push-position))
+      (ser-push! 'tag '#:vector)
+      (ser-push! 'exact (vector-length v))
+      (define all-quoted?
+        (for/fold ([all-quoted? #t]) ([i (in-vector v)])
+          (define i-pos (next-push-position))
+          (ser-push! i)
+          (and all-quoted?
+               (quoted? i-pos))))
+      (when all-quoted?
+        (ser-reset! start-pos)
+        (ser-push-optional-quote!)
+        (ser-push! 'exact v))]
      [(hash? v)
+      (define start-pos (next-push-position))
+      (define as-set? (for/and ([val (in-hash-values v)])
+                        (eq? val #t)))
+      (ser-push! 'tag (if as-set?
+                          (cond
+                           [(hash-eq? v) '#:seteq]
+                           [(hash-eqv? v) '#:seteqv]
+                           [else '#:set])
+                          (cond
+                           [(hash-eq? v) '#:hasheq]
+                           [(hash-eqv? v) '#:hasheqv]
+                           [else '#:hash])))
+      (ser-push! 'exact (hash-count v))
       (define ks (sorted-hash-keys v))
-      (define k-content (for/list ([k (in-list ks)])
-                          (ser k)))
-      (define v-content (for/list ([k (in-list ks)])
-                          (ser (hash-ref v k))))
-      (cond
-       [(and (andmap quoted? k-content)
-             (andmap quoted? v-content))
-        (quoted v)]
-       [(for/and ([v (in-list v-content)])
-          (eq? v #t))
-        `(,(cond
-            [(hash-eq? v) 'seteq]
-            [(hash-eqv? v) 'seteqv]
-            [else 'set])
-          . ,(list->vector k-content))]
-       [else
-        `(,(cond
-            [(hash-eq? v) 'hasheq]
-            [(hash-eqv? v) 'hasheqv]
-            [else 'hash])
-          ,(list->vector k-content)
-          ,(list->vector v-content))])]
+      (define all-quoted?
+        (for/fold ([all-quoted? #t]) ([k (in-list ks)])
+          (define k-pos (next-push-position))
+          (ser-push! k)
+          (define v-pos (next-push-position))
+          (unless as-set?
+            (ser-push! (hash-ref v k)))
+          (and all-quoted?
+               (quoted? k-pos)
+               (or as-set? (quoted? v-pos)))))
+      (when all-quoted?
+        (ser-reset! start-pos)
+        (ser-push-optional-quote!)
+        (ser-push! 'exact v))]
      [(prefab-struct-key v)
       => (lambda (k)
-           (define content
-             (for/list ([e (in-vector (struct->vector v) 1)])
-               (ser e)))
-           (if (andmap quoted? content)
-               (quoted v)
-               `(make-prefab-struct ,k ,@content)))]
+           (define vec (struct->vector v))
+           (define start-pos (next-push-position))
+           (ser-push! 'tag '#:prefab)
+           (ser-push! 'exact k)
+           (ser-push! 'exact (sub1 (vector-length vec)))
+           (define all-quoted?
+             (for/fold ([all-quoted? #t]) ([i (in-vector vec 1)])
+               (define i-pos (next-push-position))
+               (ser-push! i)
+               (and all-quoted?
+                    (quoted? i-pos))))
+           (when all-quoted?
+             (ser-reset! start-pos)
+             (ser-push-optional-quote!)
+             (ser-push! 'exact v)))]
      [(srcloc? v)
-      ;; This version length must be distinct from other things
-      ;; represented by a vector
-      (for/vector #:length 6 ([e (in-vector (struct->vector v))]
-                              [i (in-naturals)])
-                  (if (zero? i)
-                      #t ; filler, to make the vector length distinct
-                      (ser e)))]
-     [else (quoted v)]))
+      (ser-push! 'tag '#:srcloc)
+      (ser-push! (srcloc-source v))
+      (ser-push! (srcloc-line v))
+      (ser-push! (srcloc-column v))
+      (ser-push! (srcloc-position v))
+      (ser-push! (srcloc-span v))]
+     [else
+      (ser-push-optional-quote!)
+      (ser-push! 'exact v)]))
+
+  ;; A no-op, but can be made to push '#:quote as a debugging aid
+  (define (ser-push-optional-quote!)
+    ;; (ser-push! 'tag '#:quote)
+    (void))
   
   ;; Generate the shell of a mutable value --- uses a different
   ;; encoding then the one for most other purposes
-  (define (ser-shell v)
+  (define (ser-shell! v)
     (cond
-     [(serialize-fill!? v) ((serialize-ref v) v ser state)]
-     [(box? v) 'box]
-     [(vector? v) (vector-length v)]
-     [(hash? v) (cond
-                 [(hash-eq? v) 'hasheq]
-                 [(hash-eqv? v) 'hasheqv]
-                 [else 'hash])]
+     [(serialize-fill!? v) ((serialize-ref v) v ser-push! state)]
+     [(box? v) (ser-push! 'tag '#:box)]
+     [(vector? v)
+      (ser-push! 'tag '#:vector)
+      (ser-push! 'exact (vector-length v))]
+     [(hash? v) (ser-push! 'tag (cond
+                                 [(hash-eq? v) '#:hasheq]
+                                 [(hash-eqv? v) '#:hasheqv]
+                                 [else '#:hash]))]
      [else
       (error 'ser-shell "unknown mutable: ~e" v)]))
   
   ;; Fill in the content of a mutable shell --- also a different
   ;; encoding
-  (define (ser-shell-fill v)
+  (define (ser-shell-fill! v)
     (cond
-     [(serialize-fill!? v) ((serialize-fill!-ref v) v ser state)]
-     [(box? v) `(set-box! ,(ser (unbox v)))]
-     [(vector? v) `(set-vector!
-                    ,(list->vector
-                      (for/list ([v (in-vector v)]) (ser v))))]
+     [(serialize-fill!? v) ((serialize-fill!-ref v) v ser-push! state)]
+     [(box? v)
+      (ser-push! 'tag '#:set-box!)
+      (ser-push! (unbox v))]
+     [(vector? v)
+      (ser-push! 'tag '#:set-vector!)
+      (ser-push! 'exact (vector-length v))
+      (for ([v (in-vector v)])
+        (ser-push! v))]
      [(hash? v)
+      (ser-push! 'tag '#:set-hash!)
+      (ser-push! 'exact (hash-count v))
       (define ks (sorted-hash-keys v))
-      `(hash-set!
-        ,(list->vector
-          (for/list ([k (in-list ks)]) (ser k)))
-        ,(list->vector
-          (for/list ([k (in-list ks)]) (ser (hash-ref v k)))))]
+      (for ([k (in-list ks)])
+        (ser-push! k)
+        (ser-push! (hash-ref v k)))]
      [else
       (error 'ser-shell-fill "unknown mutable: ~e" v)]))
   
@@ -451,43 +539,41 @@
   (define rev-mutables (for/hasheqv ([(k v) (in-hash mutables)])
                          (values v k)))
   (define mutable-shell-bindings
-    (for/vector #:length (hash-count mutables) ([i (in-range (hash-count mutables))])
-                (ser-shell (hash-ref rev-mutables i))))
+    (begin
+      (for ([i (in-range (hash-count mutables))])
+        (ser-shell! (hash-ref rev-mutables i)))
+      (reap-stream!)))
   
   ;; Prepare shared values:
   (define rev-shares (for/hasheqv ([obj (in-hash-keys shares)])
                        (values (hash-ref share-step-positions (hash-ref objs obj))
                                obj)))
   (define shared-bindings
-    (for/vector #:length (hash-count shares) ([i (in-range num-mutables (+ num-mutables (hash-count shares)))])
-                (do-ser (hash-ref rev-shares i))))
+    (begin
+      (for ([i (in-range num-mutables (+ num-mutables (hash-count shares)))])
+        (ser-push-encoded! (hash-ref rev-shares i)))
+      (reap-stream!)))
   
   ;; Fill in mutable values
   (define mutable-fills
-    (for/vector #:length (hash-count mutables) ([i (in-range (hash-count mutables))])
-                (ser-shell-fill (hash-ref rev-mutables i))))
+    (begin
+      (for ([i (in-range (hash-count mutables))])
+        (ser-shell-fill! (hash-ref rev-mutables i)))
+      (reap-stream!)))
   
   ;; Put it all together:
   `(deserialize
     ,mpi-vector-id
     ,(if syntax-support? inspector-id #f)
     ,(if syntax-support? bulk-binding-registry-id #f)
+    ',(hash-count mutables)
     ',mutable-shell-bindings
+    ',(hash-count shares)
     ',shared-bindings
     ',mutable-fills
-    ',(ser v)))
-
-  
-(define (quoted? v)
-  (or (number? v)
-      (boolean? v)
-      (symbol? v)
-      (and (pair? v) (eq? 'quote (car v)))))
-
-(define (quoted v)
-  (if (or (number? v) (boolean? v) (symbol? v))
-      v
-      `(quote . ,v)))
+    ',(begin
+        (ser-push! v)
+        (reap-stream!))))
 
 (define (sorted-hash-keys ht)
   (define ks (hash-keys ht))
@@ -513,184 +599,207 @@
 ;; serialization (with hardwired calls to various deserialization
 ;; functions provided by other modules)
 
-(define (deserialize mpis inspector bulk-binding-registry mutable-vec shared-vec mutable-fill-vec result)
-  (define num-mutables  (vector-length mutable-vec))
-  (define shared (make-vector (+ num-mutables (vector-length shared-vec))
-                              'uninit))
+(define (deserialize mpis inspector bulk-binding-registry
+                     num-mutables mutable-vec 
+                     num-shared shared-vec
+                     mutable-fill-vec
+                     result-vec)
+  (define shared (make-vector (+ num-mutables num-shared) 'uninit))
   ;; Make mutable shells
-  (for ([d (in-vector mutable-vec)]
-        [i (in-naturals)])
-    (vector-set! shared i (decode-shell d mpis inspector bulk-binding-registry shared)))
+  (for/fold ([pos 0]) ([i (in-range num-mutables)])
+    (define-values (d next-pos)
+      (decode-shell mutable-vec pos mpis inspector bulk-binding-registry shared))
+    (vector-set! shared i d)
+    next-pos)
   ;; Construct shared values; note that later constructions can refer
   ;; to earlier ones
-  (for ([d (in-vector shared-vec)]
-        [i (in-naturals num-mutables)])
-    (vector-set! shared i (decode d mpis inspector bulk-binding-registry shared)))
+  (for/fold ([pos 0]) ([i (in-range num-mutables (+ num-mutables num-shared))])
+    (define-values (d next-pos)
+      (decode shared-vec pos mpis inspector bulk-binding-registry shared))
+    (vector-set! shared i d)
+    next-pos)
   ;; Fill in mutable shells
-  (for ([d (in-vector mutable-fill-vec)]
-        [v (in-vector shared)]
-        [i (in-naturals)])
-    (decode-fill! v d mpis inspector bulk-binding-registry shared))
+  (for/fold ([pos 0]) ([i (in-range num-mutables)]
+                       [v (in-vector shared)])
+    (decode-fill! v mutable-fill-vec pos mpis inspector bulk-binding-registry shared))
   ;; Construct the final result
-  (decode result mpis inspector bulk-binding-registry shared))
+  (define-values (result done-pos)
+    (decode result-vec 0 mpis inspector bulk-binding-registry shared))
+  result)
 
 ;; Decode the construction of a mutable variable
-(define (decode-shell d mpis inspector bulk-binding-registry shared)
-  (case d
-    [(box) (box #f)]
-    [(hash) (make-hasheq)]
-    [(hasheq) (make-hasheq)]
-    [(hasheqv) (make-hasheqv)]
-    [else
-     (cond
-      [(exact-integer? d) (make-vector d)]
-      [else (decode d mpis inspector bulk-binding-registry shared)])]))
+(define (decode-shell vec pos mpis inspector bulk-binding-registry shared)
+  (case (vector-ref vec pos)
+    [(#:box) (values (box #f) (add1 pos))]
+    [(#:vector) (make-vector (vector-ref vec (add1 pos))) (+ pos 2)]
+    [(#:hash) (values (make-hasheq) (add1 pos))]
+    [(#:hasheq) (values (make-hasheq) (add1 pos))]
+    [(#:hasheqv) (values (make-hasheqv) (add1 pos))]
+    [else (decode vec pos mpis inspector bulk-binding-registry shared)]))
 
 ;; The decoder that is used for most purposes
-(define (decode d mpis inspector bulk-binding-registry shared)
-  (let decode ([d d])
-    (define-syntax (decode* stx)
-      (syntax-case stx ()
-        [(_ constr field ...)
-         (with-syntax ([(pos ...) (for/list ([f (in-list (syntax->list #'(field ...)))]
-                                             [i (in-naturals 1)])
-                                    i)])
-           #`(constr (decode (list-ref d pos)) ...))]))
-    (define (decode-reference v)
-      (if (number? v)
-          (vector-ref shared v)
-          (decode v)))
-    (cond
-      [(eq? d '#:inspector) inspector]
-      [(eq? d '#:bulk-binding-registry) bulk-binding-registry]
-      [(number? d) d]
-      [(boolean? d) d]
-      [(box? d) (vector-ref shared (unbox d))]
-      [(symbol? d) d]
-      [(vector? d)
-       (case (vector-length d)
-         [(3)
-          (deserialize-syntax (decode (vector-ref d 0))
-                              (decode-reference (vector-ref d 1))
-                              (decode-reference (vector-ref d 2))
-                              #f
-                              #f
-                              inspector)]
-         [(5)
-          (deserialize-syntax (decode (vector-ref d 0))
-                              (decode-reference (vector-ref d 1))
-                              (decode-reference (vector-ref d 2))
-                              (decode (vector-ref d 3))
-                              (decode (vector-ref d 4))
-                              inspector)]
-         [(6)
-          (srcloc (decode (vector-ref d 1))
-                  (decode (vector-ref d 2))
-                  (decode (vector-ref d 3))
-                  (decode (vector-ref d 4))
-                  (decode (vector-ref d 5)))]
-         [(else)
-          (error 'deserialize "bad encoding: ~e" d)])]
-      [else
-       (case (car d)
-         [(quote) (cdr d)]
-         [(mpi) (vector-ref mpis (cdr d))]
-         [(cons) (cons (decode (cadr d))
-                       (decode (caddr d)))]
-         [(list) (for/list ([d (in-list (cdr d))])
-                   (decode d))]
-         [(box-immutable)
-          (box-immutable (decode (cdr d)))]
-         [(vector-immutable)
-          (vector->immutable-vector
-           (for/vector #:length (vector-length (cdr d)) ([d (in-vector (cdr d))])
-                       (decode d)))]
-         [(hash)
-          (for/hash ([k (in-vector (cadr d))]
-                     [v (in-vector (caddr d))])
-            (values (decode k) (decode v)))]
-         [(hasheq)
-          (for/hasheq ([k (in-vector (cadr d))]
-                       [v (in-vector (caddr d))])
-            (values (decode k) (decode v)))]
-         [(hasheqv)
-          (for/hasheqv ([k (in-vector (cadr d))]
-                        [v (in-vector (caddr d))])
-            (values (decode k) (decode v)))]
-         [(set)
-          (for/set ([k (in-vector (cdr d))])
-            (decode k))]
-         [(seteq)
-          (for/seteq ([k (in-vector (cdr d))])
-            (decode k))]
-         [(seteqv)
-          (for/seteqv ([k (in-vector (cdr d))])
-                      (decode k))]
-         [(make-prefab-struct)
-          (apply make-prefab-struct
-                 (cadr d)
-                 (for/list ([d (in-list (cddr d))])
-                   (decode d)))]
-         [(deserialize-scope)
-          (if (null? (cdr d))
-              (deserialize-scope)
-              (deserialize-scope (cdr d)))]
-         [(deserialize-multi-scope)
-          (decode* deserialize-multi-scope name scopes)]
-         [(deserialize-shifted-multi-scope)
-          (decode* deserialize-shifted-multi-scope phase multi-scope)]
-         [(deserialize-table-with-bulk-bindings)
-          (decode* deserialize-table-with-bulk-bindings syms bulk-bindings)]
-         [(deserialize-bulk-binding-at)
-          (decode* deserialize-bulk-binding-at scopes bulk)]
-         [(deserialize-representative-scope)
-          (decode* deserialize-representative-scope kind phase)]
-         [(deserialize-full-module-binding)
-          (decode* deserialize-full-module-binding
-                   module sym phase
-                   nominal-module
-                   nominal-phase
-                   nominal-sym
-                   nominal-require-phase
-                   free=id
-                   extra-inspector
-                   extra-nominal-bindings)]
-         [(deserialize-simple-module-binding)
-          (decode* deserialize-simple-module-binding module sym phase nominal-module)]
-         [(deserialize-full-local-binding)
-          (decode* deserialize-full-local-binding key free=id)]
-         [(deserialize-bulk-binding)
-          (decode* deserialize-bulk-binding prefix excepts mpi provide-phase-level phase-shift bulk-binding-registry)]
-         [else
-          (if (not (symbol? (car d)))
-              ;; Non-symbol start => list
-              (for/list ([d (in-list d)])
-                (decode d))
-              (error 'deserialize "bad encoding: ~v" d))])])))
+(define (decode vec pos mpis inspector bulk-binding-registry shared)
+  (define-syntax decodes
+    (syntax-rules ()
+      [(_ (id ...) rhs) (decodes #:pos (add1 pos) (id ...) rhs)]
+      [(_ #:pos pos () rhs) (values rhs pos)]
+      [(_ #:pos pos ([#:ref id0] id ...) rhs)
+       (let-values ([(id0 next-pos) (let ([i (vector-ref vec pos)])
+                                      (if (exact-integer? i)
+                                          (values (vector-ref shared i) (add1 pos))
+                                          (decode vec pos mpis inspector bulk-binding-registry shared)))])
+         (decodes #:pos next-pos (id ...) rhs))]
+      [(_ #:pos pos (id0 id ...) rhs)
+       (let-values ([(id0 next-pos) (decode vec pos mpis inspector bulk-binding-registry shared)])
+         (decodes #:pos next-pos (id ...) rhs))]))
+  (define-syntax-rule (decode* (deser id ...))
+    (decodes (id ...) (deser id ...)))
+  (case (vector-ref vec pos)
+    [(#:ref)
+     (values (vector-ref shared (vector-ref vec (add1 pos)))
+             (+ pos 2))]
+    [(#:inspector) (values inspector (add1 pos))]
+    [(#:bulk-binding-registry) (values bulk-binding-registry (add1 pos))]
+    [(#:syntax)
+     (decodes
+      (content [#:ref context] [#:ref srcloc])
+      (deserialize-syntax content
+                          context
+                          srcloc
+                          #f
+                          #f
+                          inspector))]
+    [(#:syntax+props)
+     (decodes
+      (content [#:ref context] [#:ref srcloc] props tamper)
+      (deserialize-syntax content
+                          context
+                          srcloc
+                          props
+                          tamper
+                          inspector))]
+    [(#:srcloc)
+     (decode* (srcloc source line column position span))]
+    [(#:quote)
+     (values (vector-ref vec (add1 pos)) (+ pos 2))]
+    [(#:mpi)
+     (values (vector-ref mpis (vector-ref vec (add1 pos)))
+             (+ pos 2))]
+    [(#:box)
+     (decode* (box-immutable v))]
+    [(#:cons)
+     (decode* (cons a d))]
+    [(#:list #:vector)
+     (define len (vector-ref vec (add1 pos)))
+     (define r (make-vector len))
+     (define next-pos
+       (for/fold ([pos (+ pos 2)]) ([i (in-range len)])
+         (define-values (v next-pos) (decodes #:pos pos (v) v))
+         (vector-set! r i v)
+         next-pos))
+     (values (if (eq? (vector-ref vec pos) '#:list)
+                 (vector->list r)
+                 (vector->immutable-vector r))
+             next-pos)]
+    [(#:hash #:hasheq #:hasheqv)
+     (define ht (case (vector-ref vec pos)
+                  [(#:hash) (hash)]
+                  [(#:hasheq) (hasheq)]
+                  [(#:hasheqv) (hasheqv)]))
+     (define len (vector-ref vec (add1 pos)))
+     (for/fold ([ht ht] [pos (+ pos 2)]) ([i (in-range len)])
+       (decodes #:pos pos (k v) (hash-set ht k v)))]
+    [(#:set #:seteq #:seteqv)
+     (define s (case (vector-ref vec pos)
+                 [(#:set) (set)]
+                 [(#:seteq) (seteq)]
+                 [(#:seteqv) (seteqv)]))
+     (define len (vector-ref vec (add1 pos)))
+     (for/fold ([s s] [pos (+ pos 2)]) ([i (in-range len)])
+       (decodes #:pos pos (k) (set-add s k)))]
+    [(#:prefab)
+     (define-values (key next-pos) (decodes #:pos (add1 pos) (k) k))
+     (define len (vector-ref vec next-pos))
+     (define-values (r done-pos)
+       (for/fold ([r null] [pos (add1 next-pos)]) ([i (in-range len)])
+         (decodes #:pos pos (v) (cons v r))))
+     (values (apply make-prefab-struct key (reverse r))
+             done-pos)]
+    [(#:scope)
+     (decode* (deserialize-scope))]
+    [(#:scope+kind)
+     (decode* (deserialize-scope kind))]
+    [(#:multi-scope)
+     (decode* (deserialize-multi-scope name scopes))]
+    [(#:shifted-multi-scope)
+     (decode* (deserialize-shifted-multi-scope phase multi-scope))]
+    [(#:table-with-bulk-bindings)
+     (decode* (deserialize-table-with-bulk-bindings syms bulk-bindings))]
+    [(#:bulk-binding-at)
+     (decode* (deserialize-bulk-binding-at scopes bulk))]
+    [(#:representative-scope)
+     (decode* (deserialize-representative-scope kind phase))]
+    [(#:module-binding)
+     (decode* (deserialize-full-module-binding
+               module sym phase
+               nominal-module
+               nominal-phase
+               nominal-sym
+               nominal-require-phase
+               free=id
+               extra-inspector
+               extra-nominal-bindings))]
+    [(#:simple-module-binding)
+     (decode* (deserialize-simple-module-binding module sym phase nominal-module))]
+    [(#:local-binding)
+     (decode* (deserialize-full-local-binding key free=id))]
+    [(#:bulk-binding)
+     (decode* (deserialize-bulk-binding prefix excepts mpi provide-phase-level phase-shift bulk-binding-registry))]
+    [(#:provided)
+     (decode* (deserialize-provided binding protected? syntax?))]
+    [else
+     (values (vector-ref vec pos) (add1 pos))]))
 
 ;; Decode the filling of mutable values, which has its own encoding
 ;; variant
-(define (decode-fill! v d mpis inspector bulk-binding-registry shared)
-  (when d
-    (case (car d)
-      [(set-box!) (set-box! v (decode (cadr d) mpis inspector bulk-binding-registry shared))]
-      [(set-vector!) (for ([vv (in-vector (cdr d))]
-                           [i (in-naturals)])
-                       (vector-set! v i (decode vv mpis inspector bulk-binding-registry shared)))]
-      [(hash-set!) (for ([hk (in-vector (cadr d))]
-                         [hv (in-vector (caddr d))])
-                     (hash-set! v
-                                (decode hk mpis inspector bulk-binding-registry shared)
-                                (decode hv mpis inspector bulk-binding-registry shared)))]
-      [(deserialize-scope-fill!)
-       (deserialize-scope-fill! v
-                                (decode (cadr d) mpis inspector bulk-binding-registry shared))]
-      [(deserialize-representative-scope-fill!)
-       (deserialize-representative-scope-fill! v
-                                               (decode (cadr d) mpis inspector bulk-binding-registry shared)
-                                               (decode (caddr d) mpis inspector bulk-binding-registry shared))]
-      [else
-       (error 'deserialize "bad fill encoding: ~v" d)])))
+(define (decode-fill! v vec pos mpis inspector bulk-binding-registry shared)
+  (case (vector-ref vec pos)
+    [(#f) (add1 pos)]
+    [(#:set-box!)
+     (define-values (c next-pos)
+       (decode vec (add1 pos) mpis inspector bulk-binding-registry shared))
+     (set-box! v c)
+     next-pos]
+    [(#:set-vector!)
+     (define len (vector-ref vec (add1 pos)))
+     (for/fold ([pos (+ pos 2)]) ([i (in-range len)])
+       (define-values (c next-pos)
+         (decode vec pos mpis inspector bulk-binding-registry shared))
+       (vector-set! v i c)
+       next-pos)]
+    [(#:set-hash!)
+     (define len (vector-ref vec (add1 pos)))
+     (for/fold ([pos (+ pos 2)]) ([i (in-range len)])
+       (define-values (key next-pos)
+         (decode vec pos mpis inspector bulk-binding-registry shared))
+       (define-values (val done-pos)
+         (decode vec next-pos mpis inspector bulk-binding-registry shared))
+       (hash-set! v key val)
+       done-pos)]
+    [(#:scope-fill!)
+     (define-values (c next-pos)
+       (decode vec (add1 pos) mpis inspector bulk-binding-registry shared))
+     (deserialize-scope-fill! v c)
+     next-pos]
+    [(#:representative-scope-fill!)
+     (define-values (a next-pos)
+       (decode vec (add1 pos) mpis inspector bulk-binding-registry shared))
+     (define-values (d done-pos)
+       (decode vec next-pos mpis inspector bulk-binding-registry shared))
+     (deserialize-representative-scope-fill! v a d)
+     done-pos]
+    [else
+     (error 'deserialize "bad fill encoding: ~v" (vector-ref vec pos))]))
  
 ;; ----------------------------------------
 ;; For pruning unreachable scopes in serialization

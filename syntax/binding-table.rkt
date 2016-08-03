@@ -42,10 +42,10 @@
                                   syms/serialize ; copy of `syms`, but maybe with less nominal info
                                   bulk-bindings)
         #:property prop:serialize
-        (lambda (twbb ser state)
-          `(deserialize-table-with-bulk-bindings
-            ,(ser (table-with-bulk-bindings-syms/serialize twbb))
-            ,(ser (table-with-bulk-bindings-bulk-bindings twbb)))))
+        (lambda (twbb ser-push! state)
+          (ser-push! 'tag '#:table-with-bulk-bindings)
+          (ser-push! (table-with-bulk-bindings-syms/serialize twbb))
+          (ser-push! (table-with-bulk-bindings-bulk-bindings twbb))))
 
 (define (deserialize-table-with-bulk-bindings syms bulk-bindings)
   (table-with-bulk-bindings syms syms bulk-bindings))
@@ -55,11 +55,11 @@
 (struct bulk-binding-at (scopes ; scope set
                          bulk)  ; bulk-binding
         #:property prop:serialize
-        (lambda (bba ser state)
+        (lambda (bba ser-push! state)
           ;; Data that is interpreted by the deserializer:
-          `(deserialize-bulk-binding-at
-            ,(ser (bulk-binding-at-scopes bba))
-            ,(ser (bulk-binding-at-bulk bba))))
+          (ser-push! 'tag '#:bulk-binding-at)
+          (ser-push! (bulk-binding-at-scopes bba))
+          (ser-push! (bulk-binding-at-bulk bba)))
         #:property prop:reach-scopes
         (lambda (sms reach)
           ;; bulk bindings are pruned dependong on whether all scopes

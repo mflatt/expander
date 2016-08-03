@@ -86,7 +86,7 @@
                                            extra-nominal-bindings)
         #:transparent
         #:property prop:serialize
-        (lambda (b ser state)
+        (lambda (b ser-push! state)
           ;; Dropping the frame id may simplify the representation:
           (define simplified-b
             (if (full-binding-frame-id b)
@@ -94,34 +94,31 @@
                 b))
           (cond
            [(full-module-binding? simplified-b)
-            ;; The result here looks like an expression, but it's
-            ;; treated as data and interpreted for deserialization
-            `(deserialize-full-module-binding
-              ,(ser (full-module-binding-module b))
-              ,(ser (full-module-binding-sym b))
-              ,(ser (full-module-binding-phase b))
-              ,(ser (full-module-binding-nominal-module b))
-              ,(ser (full-module-binding-nominal-phase b))
-              ,(ser (full-module-binding-nominal-sym b))
-              ,(ser (full-module-binding-nominal-require-phase b))
-              ,(ser (full-binding-free=id b))
-              ,(if (full-module-binding-extra-inspector b)
-                   '#:inspector
-                   (ser #f))
-              ,(ser (full-module-binding-extra-nominal-bindings b)))]
+            (ser-push! 'tag '#:module-binding)
+            (ser-push! (full-module-binding-module b))
+            (ser-push! (full-module-binding-sym b))
+              (ser-push! (full-module-binding-phase b))
+              (ser-push! (full-module-binding-nominal-module b))
+              (ser-push! (full-module-binding-nominal-phase b))
+              (ser-push! (full-module-binding-nominal-sym b))
+              (ser-push! (full-module-binding-nominal-require-phase b))
+              (ser-push! (full-binding-free=id b))
+              (if (full-module-binding-extra-inspector b)
+                  (ser-push! 'tag '#:inspector)
+                  (ser-push! #f))
+              (ser-push! (full-module-binding-extra-nominal-bindings b))]
            [else
-            (ser simplified-b)])))
+            (ser-push! simplified-b)])))
 
 (struct simple-module-binding (module phase sym nominal-module)
         #:transparent
         #:property prop:serialize
-        (lambda (b ser state)
-          ;; Data that is interpreted by the deserializer:
-          `(deserialize-simple-module-binding
-            ,(ser (simple-module-binding-module b))
-            ,(ser (simple-module-binding-sym b))
-            ,(ser (simple-module-binding-phase b))
-            ,(ser (simple-module-binding-nominal-module b)))))
+        (lambda (b ser-push! state)
+          (ser-push! 'tag '#:simple-module-binding)
+          (ser-push! (simple-module-binding-module b))
+          (ser-push! (simple-module-binding-sym b))
+          (ser-push! (simple-module-binding-phase b))
+          (ser-push! (simple-module-binding-nominal-module b))))
 
 (define (deserialize-full-module-binding module sym phase
                                          nominal-module
