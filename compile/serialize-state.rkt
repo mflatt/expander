@@ -7,7 +7,11 @@
          intern-shifted-multi-scopes
          intern-mpi-shifts
          intern-context-triple
-         intern-properties)
+         intern-properties
+         
+         push-syntax-context!
+         get-syntax-context
+         pop-syntax-context!)
 
 ;; A `serialize-state` record is threaded through the construction of
 ;; a deserialization expression
@@ -20,7 +24,9 @@
                          mpi-shifts             ; interned module path index shifts
                          context-triples        ; combinations of the previous three
                          props                  ; map full props to previously calculated
-                         interned-props))       ; intern filtered props
+                         interned-props         ; intern filtered props
+                         syntax-context         ; used to collapse encoding of syntax literals
+                         sharing-syntaxes))     ; record which syntax objects are `datum->syntax` form
 
 (define (make-serialize-state reachable-scopes)
   (serialize-state reachable-scopes
@@ -31,7 +37,9 @@
                    (make-hasheq)   ; mpi-shifts
                    (make-hasheq)   ; context-triples
                    (make-hasheq)   ; props
-                   (make-hash)))   ; interned-props
+                   (make-hash)     ; interned-props
+                   (box null)      ; syntax-context
+                   (make-hasheq))) ; sharing-syntaxes
 
 (define (intern-scopes scs state)
   (or (hash-ref (serialize-state-scopes state) scs #f)
@@ -89,3 +97,17 @@
     (hash-set! (serialize-state-props state) all-props p)
     p]
    [else v]))
+
+(define (push-syntax-context! state v)
+  (define b (serialize-state-syntax-context state))
+  (set-box! b (cons v (unbox b))))
+
+(define (get-syntax-context state)
+  (define b (serialize-state-syntax-context state))
+  (if (null? (unbox b))
+      #f
+      (car (unbox b))))
+
+(define (pop-syntax-context! state)
+  (define b (serialize-state-syntax-context state))
+  (set-box! b (cdr (unbox b))))

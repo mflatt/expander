@@ -20,6 +20,7 @@
  prop:propagation
  
  deserialize-syntax
+ deserialize-datum->syntax
  current-arm-inspectors)
 
 (struct syntax ([content #:mutable] ; datum and nested syntax objects; mutated for lazy propagation
@@ -64,19 +65,54 @@
                                    (intern-shifted-multi-scopes (syntax-shifted-multi-scopes s) state)
                                    (intern-mpi-shifts (syntax-mpi-shifts s) state)
                                    state))
+          (define stx-state (get-syntax-context state))
           (cond
            [(or properties tamper)
             (ser-push! 'tag '#:syntax+props)
+            (push-syntax-context! state #f)
             (ser-push! content)
+            (pop-syntax-context! state)
             (ser-push! 'reference context-triple)
             (ser-push! 'reference (syntax-srcloc s))
             (ser-push! properties)
-            (ser-push! tamper)]
+            (ser-push! tamper)
+            (when stx-state (set-syntax-state-all-sharing?! stx-state #f))]
            [else
-            (ser-push! 'tag '#:syntax)
-            (ser-push! content)
+            ;; We rely on two passes to reach a fixpoint on sharing:
+            (define sharing-mode (hash-ref (serialize-state-sharing-syntaxes state) s 'unknown))
+            (cond
+             [(eq? sharing-mode 'share)
+              (ser-push! 'tag '#:datum->syntax)
+              (ser-push! (syntax->datum s))]
+             [(eq? sharing-mode 'unknown)
+              (ser-push! 'tag '#:syntax)
+              ;; Communicate to nested syntax objects the info that they might share
+              (define this-state (and (no-pair-syntax-in-cdr? content)
+                                      (syntax-state #t context-triple (syntax-srcloc s))))
+              (push-syntax-context! state this-state)
+              ;; Serialize content
+              (ser-push! content)
+              ;; Check whether we're sharing for all nested syntax objects
+              (pop-syntax-context! state)
+              (define new-sharing-mode
+                (if (and this-state (syntax-state-all-sharing? this-state))
+                    'share
+                    'none))
+              (hash-set! (serialize-state-sharing-syntaxes state) s new-sharing-mode)
+              (when (and stx-state (eq? new-sharing-mode 'none))
+                (set-syntax-state-all-sharing?! stx-state #f))]
+             [else
+              (ser-push! 'tag '#:syntax)
+              (push-syntax-context! state #f)
+              (ser-push! content)
+              (pop-syntax-context! state)])
+            ;; Finish up
             (ser-push! 'reference context-triple)
-            (ser-push! 'reference (syntax-srcloc s))]))
+            (ser-push! 'reference (syntax-srcloc s))
+            (when stx-state
+              (unless (and (eq? context-triple (syntax-state-context-triple stx-state))
+                           (equal? (syntax-srcloc s) (syntax-state-srcloc stx-state)))
+                (set-syntax-state-all-sharing?! stx-state #f)))]))
         #:property prop:reach-scopes
         (lambda (s reach)
           (define prop (syntax-scope-propagations s))
@@ -189,7 +225,29 @@
 
 ;; ----------------------------------------
 
+;; When serializing syntax objects, let nested objects know the
+;; content of an enclosing syntax object, so sharing is enabled if the
+;; nested syntax objects have the same context and source location.
+(struct syntax-state ([all-sharing? #:mutable] context-triple srcloc))
+
+;; When sharing syntax information in serialization, we have to be
+;; careful not to lose syntax objects that wrap a pair in a `cdr` (and
+;; therefore would not be restored by `datum->syntax`).
+(define (no-pair-syntax-in-cdr? content)
+  (cond
+   [(pair? content) (let loop ([content (cdr content)])
+                      (cond
+                       [(and (syntax? content)
+                             (pair? (syntax-content content)))
+                        #f]
+                       [(pair? content) (loop (cdr content))]
+                       [else #t]))]
+   [else #t]))
+
+;; ----------------------------------------
+
 ;; Called by the deserializer
+
 (define (deserialize-syntax content context-triple srcloc props tamper inspector)
   (syntax content
           (vector-ref context-triple 0)
@@ -203,3 +261,7 @@
               empty-props)
           inspector
           (deserialize-tamper tamper)))
+
+(define (deserialize-datum->syntax content context-triple srcloc inspector)
+  (define s (deserialize-syntax #f context-triple srcloc #f #f inspector))
+  (datum->syntax s content s s))

@@ -669,6 +669,13 @@
                           #f
                           #f
                           inspector))]
+    [(#:datum->syntax)
+     (decodes
+      (content [#:ref context] [#:ref srcloc])
+      (deserialize-datum->syntax content
+                                 context
+                                 srcloc
+                                 inspector))]
     [(#:syntax+props)
      (decodes
       (content [#:ref context] [#:ref srcloc] props tamper)
