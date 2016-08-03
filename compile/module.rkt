@@ -151,14 +151,9 @@
   ;; information for each phase
   (define declaration-body
     `((define-values (self-mpi) ,(add-module-path-index! mpis self))
-      (define-values (cross-phase-persistent?) ,cross-phase-persistent?)
       (define-values (requires) ,(generate-deserialize requires mpis #:syntax-support? #f))
       (define-values (provides) ,(generate-deserialize provides mpis #:syntax-support? #f))
-      (define-values (side-effects) ',(sort (hash-keys side-effects) <))
-      (define-values (min-phase) ,min-phase)
-      (define-values (max-phase) ,max-phase)
-      (define-values (phase-to-link-modules) ,phase-to-link-module-uses-expr)
-      (define-values (language-info) ',language-info)))
+      (define-values (phase-to-link-modules) ,phase-to-link-module-uses-expr)))
 
   ;; Assemble the declaration linking unit, which is instanted
   ;; once for a module declaration and shared among instances
@@ -172,15 +167,8 @@
        (self-mpi
         requires
         provides
-        variables
-        side-effects
-        cross-phase-persistent?
-        min-phase
-        max-phase
-        phase-to-link-modules
-        language-info)
+        phase-to-link-modules)
        ;; body
-       (define-values (,inspector-id) (current-code-inspector))
        ,@declaration-body)))
   
   ;; Assemble a linklet that shifts syntax objects on demand.
@@ -188,32 +176,36 @@
   ;; `module->namespace` can have the same scopes as literal syntax
   ;; objects in the module.
   (define syntax-literals-linklet
-    ((if to-source? values (lambda (s) (compile-linklet s 'syntax-literals)))
-     `(linklet
-       ;; imports
-       (,deserialize-imports
-        [,mpi-vector-id]
-        [,deserialized-syntax-vector-id
-         ,@(if serializable?
-               `(,deserialize-syntax-id)
-               '())]
-        ,instance-imports)
-       ;; exports
-       (,syntax-literals-id
-        ,get-syntax-literal!-id
-        get-encoded-root-expand-ctx)
-       ;; body
-       ,@(generate-lazy-syntax-literals! syntax-literals mpis self
-                                         #:skip-deserialize? (not serializable?))
-       (define-values (get-encoded-root-expand-ctx)
-         ,(cond
-           [root-ctx-pos
-            `(lambda ()
-              ,(generate-lazy-syntax-literal-lookup root-ctx-pos))]
-           [empty-result-for-module->namespace?
-            `'empty]
-           [else
-            `'#f])))))
+    (and (not (syntax-literals-empty? syntax-literals))
+         ((if to-source? values (lambda (s) (compile-linklet s 'syntax-literals)))
+          `(linklet
+            ;; imports
+            (,deserialize-imports
+             [,mpi-vector-id]
+             [,deserialized-syntax-vector-id
+              ,@(if serializable?
+                    `(,deserialize-syntax-id)
+                    '())]
+             ,instance-imports)
+            ;; exports
+            (,syntax-literals-id
+             ,get-syntax-literal!-id
+             get-encoded-root-expand-ctx)
+            ;; body
+            ,@(generate-lazy-syntax-literals! syntax-literals mpis self
+                                              #:skip-deserialize? (not serializable?))
+            (define-values (get-encoded-root-expand-ctx)
+              ,(cond
+                [root-ctx-pos
+                 `(lambda ()
+                   ,(generate-lazy-syntax-literal-lookup root-ctx-pos))]
+                [empty-result-for-module->namespace?
+                 ;; We also attach this information directly to the bundle,
+                 ;; in case this linklet is not included (due to an empty
+                 ;; set of syntax literals)
+                 `'empty]
+                [else
+                 `'#f]))))))
   
   ;; Assemble a linklet that deserializes unshifted syntax objects on
   ;; demand. An instance of this linklet is shared for all
@@ -223,6 +215,7 @@
   ;; indexes, such as required modules.
   (define syntax-literals-data-linklet
     (and serializable?
+         (not (syntax-literals-empty? syntax-literals))
          ((if to-source? values (lambda (s) (compile-linklet s 'syntax-literals-data)))
           `(linklet
             ;; imports
@@ -254,19 +247,44 @@
             (define-values (,mpi-vector-id)
               ,(generate-module-path-index-deserialize mpis))))))
   
+  ;; Combine linklets with other metadata as the bundle:
   (define bundle
-    (let* ([linklets (hash-set body-linklets 'decl declaration-linklet)]
-           [linklets (if data-linklet
-                         (hash-set linklets 'data data-linklet)
-                         linklets)]
-           [linklets (hash-set linklets 'stx syntax-literals-linklet)]
-           [linklets (if syntax-literals-data-linklet
-                         (hash-set linklets 'stx-data syntax-literals-data-linklet)
-                         linklets)]
-           [linklets (hash-set linklets 'pre (map car pre-submodules))]
-           [linklets (hash-set linklets 'post (map car post-submodules))]
-           [linklets (hash-set linklets 'name full-module-name)])
-      (hash->linklet-bundle linklets)))
+    (let* ([bundle (hash-set body-linklets 'name full-module-name)]
+           [bundle (hash-set bundle 'decl declaration-linklet)]
+           [bundle (if data-linklet
+                       (hash-set bundle 'data data-linklet)
+                       bundle)]
+           [bundle (if syntax-literals-linklet
+                       (hash-set bundle 'stx syntax-literals-linklet)
+                       bundle)]
+           [bundle (if syntax-literals-data-linklet
+                       (hash-set bundle 'stx-data syntax-literals-data-linklet)
+                       bundle)]
+           [bundle (if (null? pre-submodules)
+                       bundle
+                       (hash-set bundle 'pre (map car pre-submodules)))]
+           [bundle (if (null? post-submodules)
+                       bundle
+                       (hash-set bundle 'post (map car post-submodules)))]
+           [bundle (if cross-phase-persistent?
+                       (hash-set bundle 'cross-phase-persistent? #t)
+                       bundle)]
+           [bundle (if language-info
+                       (hash-set bundle 'language-info language-info)
+                       bundle)]
+           [bundle (if (zero? min-phase)
+                       bundle
+                       (hash-set bundle 'min-phase min-phase))]
+           [bundle (if (zero? max-phase)
+                       bundle
+                       (hash-set bundle 'max-phase max-phase))]
+           [bundle (if (hash-count side-effects)
+                       (hash-set bundle 'side-effects (sort (hash-keys side-effects) <))
+                       bundle)]
+           [bundle (if empty-result-for-module->namespace?
+                       (hash-set bundle 'module->namespace 'empty)
+                       bundle)])
+      (hash->linklet-bundle bundle)))
 
   ;; Combine with submodules in a linklet directory
   (define ld

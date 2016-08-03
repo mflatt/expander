@@ -33,8 +33,9 @@
 
       ;; Extract the relevant linklet (i.e., at a given phase)
       ;; from the compiled module
+      (define h (compiled-module-phase-to-linklet comp-mod))
       (define linklet
-        (hash-ref (compiled-module-phase-to-linklet comp-mod) phase #f))
+        (hash-ref h phase #f))
 
       ;; Extract other metadata at the module level:
       (define reqs (instance-variable-value (compiled-module-declaration comp-mod) 'requires))
@@ -49,10 +50,8 @@
                           (skip-abi-imports (linklet-import-variables linklet))
                           null))
       ;; Extract phase-specific info on side effects:
-      (define side-effects? (and
-                             (member phase (instance-variable-value (compiled-module-declaration comp-mod)
-                                                                    'side-effects))
-                             #t))
+      (define side-effects? (and (member phase (hash-ref h 'side-effects '()))
+                                 #t))
       ;; Extract phase-specific mapping of the linklet arguments to modules
       (define uses
         (hash-ref (instance-variable-value (compiled-module-declaration comp-mod) 'phase-to-link-modules)

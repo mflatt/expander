@@ -34,10 +34,16 @@
   (define syntax-literals-data-instance
     (if (compiled-in-memory? c)
         (make-syntax-literal-data-instance-from-compiled-in-memory c)
-        (instantiate-linklet (eval-linklet (hash-ref h 'stx-data))
-                             (list deserialize-instance
-                                   data-instance
-                                   (make-declaration-context-instance ns)))))
+        (let ([l (hash-ref h 'stx-data #f)])
+          (cond
+           [l (instantiate-linklet (eval-linklet l)
+                                   (list deserialize-instance
+                                         data-instance
+                                         (make-declaration-context-instance ns)))]
+           [(eq? (hash-ref h 'module->namespace #f) 'empty)
+            empty-syntax-literals-instance/empty-namespace]
+           [else
+            empty-syntax-literals-data-instance]))))
   
   (when (not (load-on-demand-enabled))
     ;; Since on-demand loading is disabled, force deserialization
@@ -59,8 +65,11 @@
                       (null? post-submodule-names)
                       (hash-ref h 'hash-code #f))))
 
-  (define min-phase (decl 'min-phase))
-  (define max-phase (decl 'max-phase))
+  (define cross-phase-persistent? (hash-ref h 'cross-phase-persistent? #f))
+  (define min-phase (hash-ref h 'min-phase 0))
+  (define max-phase (hash-ref h 'max-phase 0))
+  (define language-info (hash-ref h 'language-info #f))
+  
   ;; Evaluate linklets, so that they're JITted just once (on demand).
   ;; Also, filter the bundle hash to just the phase-specific linklets, so that
   ;; we don't retain other info --- especially the syntax-literals linklet.
@@ -68,8 +77,9 @@
                                [v (in-value (hash-ref h phase-level #f))]
                                #:when v)
                      (values phase-level (eval-linklet v))))
-  (define syntax-literals-linklet (eval-linklet (hash-ref h 'stx)))
-  
+  (define syntax-literals-linklet (let ([l (hash-ref h 'stx #f)])
+                                    (and l (eval-linklet l))))
+
   (define extra-inspector (and (compiled-in-memory? c)
                                (compiled-in-memory-compile-time-inspector c)))
   (define phase-to-link-extra-inspectorsss
@@ -107,10 +117,10 @@
                              #:self original-self
                              #:requires requires
                              #:provides provides
-                             #:language-info (decl 'language-info)
+                             #:language-info language-info
                              #:min-phase-level min-phase
                              #:max-phase-level max-phase
-                             #:cross-phase-persistent? (decl 'cross-phase-persistent?)
+                             #:cross-phase-persistent? cross-phase-persistent?
                              #:submodule-names (append pre-submodule-names post-submodule-names)
                              #:supermodule-name supermodule-name
                              #:get-all-variables (lambda () (get-all-variables phases-h))
@@ -220,11 +230,13 @@
      #:set-transformer! (lambda (name val) (error "shouldn't get here for the root-ctx linklet"))))
   
   (define syntax-literals-instance
-    (instantiate-linklet syntax-literals-linklet
-                         (list deserialize-instance
-                               data-instance
-                               syntax-literals-data-instance
-                               inst)))
+    (if syntax-literals-linklet
+        (instantiate-linklet syntax-literals-linklet
+                             (list deserialize-instance
+                                   data-instance
+                                   syntax-literals-data-instance
+                                   inst))
+        empty-syntax-literals-instance))
 
   (set-box! data-box (instance-data syntax-literals-instance cache-key))
   
@@ -312,6 +324,23 @@
   (make-instance 'declaration-context #f
                  inspector-id (current-code-inspector)
                  bulk-binding-registry-id (namespace-bulk-binding-registry ns)))
+
+(define empty-syntax-literals-data-instance
+  (make-instance 'empty-stx-data #f
+                 deserialized-syntax-vector-id (vector)
+                 deserialize-syntax-id void))
+
+(define empty-syntax-literals-instance
+  (make-instance 'empty-stx #f
+                 syntax-literals-id (vector)
+                 get-syntax-literal!-id (lambda (pos) #f)
+                 'get-encoded-root-expand-ctx #f))
+
+(define empty-syntax-literals-instance/empty-namespace
+  (make-instance 'empty-stx/empty-ns #f
+                 syntax-literals-id (vector)
+                 get-syntax-literal!-id (lambda (pos) #f)
+                 'get-encoded-root-expand-ctx 'empty))
 
 ;; ----------------------------------------
 
