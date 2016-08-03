@@ -76,10 +76,17 @@
            (compile s #f #t))]
         [(if)
          (define-match m s '(if tst thn els))
-         (correlate* s `(if
-                         ,(compile (m 'tst) #f #f)
-                         ,(compile (m 'thn) name result-used?)
-                         ,(compile (m 'els) name result-used?)))]
+         (define tst-e (compile (m 'tst) #f #f))
+         ;; Ad hoc optimization of `(if #t ... ...)` or `(if #f ... ...)`
+         ;; happens to help avoid syntax literals in pattern matching.
+         (cond
+          [(eq? (correlated-e tst-e) #t) (compile (m 'thn) name result-used?)]
+          [(eq? (correlated-e tst-e) #f) (compile (m 'els) name result-used?)]
+          [else
+           (correlate* s `(if
+                           ,tst-e
+                           ,(compile (m 'thn) name result-used?)
+                           ,(compile (m 'els) name result-used?)))])]
         [(with-continuation-mark)
          (define-match m s '(if key val body))
          (correlate* s `(with-continuation-mark
