@@ -125,6 +125,7 @@
                         #:phase-shift phase-shift
                         #:self (namespace-mpi ns)
                         #:inspector (namespace-inspector ns)
+                        #:bulk-binding-registry (namespace-bulk-binding-registry ns)
                         #:set-transformer! (lambda (name val)
                                              (namespace-set-transformer! ns
                                                                          (phase+ (sub1 phase) phase-shift)

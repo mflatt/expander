@@ -218,9 +218,7 @@
           `(linklet
             ;; imports
             (,deserialize-imports
-             [,mpi-vector-id]
-             [,inspector-id
-              ,bulk-binding-registry-id])
+             [,mpi-vector-id])
             ;; exports
             (,deserialized-syntax-vector-id
              ,deserialize-syntax-id)

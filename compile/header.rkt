@@ -113,14 +113,15 @@
                       null
                       `((if (vector-ref ,deserialized-syntax-vector-id 0)
                             (void)
-                            (,deserialize-syntax-id))))
+                            (,deserialize-syntax-id ,bulk-binding-registry-id))))
                 (let-values ([(stx)
                               (syntax-module-path-index-shift
                                (syntax-shift-phase-level
                                 (vector-ref ,deserialized-syntax-vector-id pos)
                                 ,phase-shift-id)
                                ,(add-module-path-index! mpis self)
-                               ,self-id)])
+                               ,self-id
+                               ,inspector-id)])
                   (begin
                     (vector-set! ,syntax-literals-id pos stx)
                     stx)))))))))
@@ -134,17 +135,25 @@
    [else
     `((define-values (,deserialize-syntax-id)
         ;; Put deserialization under a `lambda` so that it's loaded
-        ;; from bytecode on demand, and in a separate function
-        ;; that can be discarded via `set!` after deserialization
-        (lambda ()
+        ;; from bytecode on demand, and in a function that can be
+        ;; discarded via `set!` after deserialization. Since this
+        ;; deserialized form is shared via the module cache across
+        ;; module instances and even module declarations, it must not
+        ;; depend on anything namespace-, declaration-, or
+        ;; instance-specific. As an exception, however, a bulk-binding
+        ;; registry can be namespace- or declaration-specific
+        ;; declaration on the grounds that all declarations should
+        ;; provide the same information for bulk bindings.
+        (lambda (,bulk-binding-registry-id)
           (begin
             (vector-copy!
              ,deserialized-syntax-vector-id
              '0
-             ,(generate-deserialize (vector->immutable-vector
-                                     (list->vector
-                                      (reverse (syntax-literals-stxes sl))))
-                                    mpis))
+             (let-values ([(,inspector-id) #f])
+               ,(generate-deserialize (vector->immutable-vector
+                                       (list->vector
+                                        (reverse (syntax-literals-stxes sl))))
+                                      mpis)))
             (set! ,deserialize-syntax-id #f)))))]))
 
 (define (generate-lazy-syntax-literal-lookup pos)

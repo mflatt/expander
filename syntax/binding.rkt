@@ -123,9 +123,11 @@
 ; ----------------------------------------
 
 ;; Adjust `s` (recursively) so that if `resolve+shift` would
-;;  report `form-mpi`, the same operation on the result will
-;;  report `to-mpi`
-(define (syntax-module-path-index-shift s from-mpi to-mpi)
+;; report `form-mpi`, the same operation on the result will
+;; report `to-mpi`. A non-#f `inspector` is provided when shifting
+;; syntax literals in a module to match the module's declaration-time
+;; inspector.
+(define (syntax-module-path-index-shift s from-mpi to-mpi [inspector #f])
   (if (eq? from-mpi to-mpi)
       s
       (let ([shift (cons from-mpi to-mpi)])
@@ -136,7 +138,9 @@
                     (lambda (s d)
                       (struct-copy syntax s
                                    [content d]
-                                   [mpi-shifts (add-shift (syntax-mpi-shifts s))]))
+                                   [mpi-shifts (add-shift (syntax-mpi-shifts s))]
+                                   [inspector (or inspector
+                                                  (syntax-inspector s))]))
                     syntax-e/no-taint))))
 
 ;; Use `resolve` instead of `resolve+shift` when the module of a

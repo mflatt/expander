@@ -13,19 +13,22 @@
   `(,ns-id
     ,phase-shift-id
     ,self-id
-    ,inspector-id
+    ,inspector-id               ; declaration-time inspector to grant to syntax objects
+    ,bulk-binding-registry-id   ; declaration-time registry to connect to bulk bindings
     ,set-transformer!-id))
 
 (define (make-instance-instance #:namespace ns
                                 #:phase-shift phase-shift
                                 #:self self 
                                 #:inspector inspector
+                                #:bulk-binding-registry bulk-binding-registry
                                 #:set-transformer! set-transformer!)
   (make-instance 'instance #f
                  ns-id ns
                  phase-shift-id phase-shift
                  self-id self
                  inspector-id inspector
+                 bulk-binding-registry-id bulk-binding-registry
                  set-transformer!-id set-transformer!))
 
 (define (make-module-body-instance-instance #:set-transformer! set-transformer!)

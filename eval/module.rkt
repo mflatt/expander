@@ -38,8 +38,7 @@
           (cond
            [l (instantiate-linklet (eval-linklet l)
                                    (list deserialize-instance
-                                         data-instance
-                                         (make-declaration-context-instance ns)))]
+                                         data-instance))]
            [(eq? (hash-ref h 'module->namespace #f) 'empty)
             empty-syntax-literals-instance/empty-namespace]
            [else
@@ -227,6 +226,7 @@
      #:phase-shift phase-shift
      #:self self 
      #:inspector insp
+     #:bulk-binding-registry bulk-binding-registry
      #:set-transformer! (lambda (name val) (error "shouldn't get here for the root-ctx linklet"))))
   
   (define syntax-literals-instance
@@ -319,11 +319,6 @@
   (make-instance 'syntax-literal-data #f
                  deserialize-syntax-id void
                  deserialized-syntax-vector-id (compiled-in-memory-syntax-literals cim)))
-
-(define (make-declaration-context-instance ns)
-  (make-instance 'declaration-context #f
-                 inspector-id (current-code-inspector)
-                 bulk-binding-registry-id (namespace-bulk-binding-registry ns)))
 
 (define empty-syntax-literals-data-instance
   (make-instance 'empty-stx-data #f
