@@ -1,5 +1,6 @@
 #lang racket/base
 (require "../common/phase.rkt"
+         "../common/performance.rkt"
          "../syntax/bulk-binding.rkt"
          "../syntax/module-binding.rkt"
          "../common/module-path.rkt"
@@ -378,83 +379,85 @@
                               #:skip-run? skip-run? 
                               #:otherwise-available? otherwise-available?
                               #:seen [seen #hasheq()])
-  ;; Nothing to do if we've run this phase already and made the
-  ;; instance sufficiently available:
-  (define m-ns (module-instance-namespace mi))
-  (define instance-phase (namespace-0-phase m-ns))
-  (define run-phase-level (phase- run-phase instance-phase))
-  (unless (and (or skip-run?
-                   (eq? 'started (hash-ref (module-instance-phase-level-to-state mi) run-phase-level #f)))
-               (or (not otherwise-available?)
-                   (module-instance-made-available? mi)))
-    ;; Something to do...
-    (define m (module-instance-module mi))
-    (define mpi (namespace-mpi m-ns))
-    (define phase-shift instance-phase) ; instance phase = phase shift
-    (define bulk-binding-registry (namespace-bulk-binding-registry m-ns))
-    
-    (when (hash-ref seen mi #f)
-      (error 'require "import cycle detected during module instantiation"))
-    
-    ;; If we haven't shifted required mpi's already, do that; ensure that
-    ;; each (potentially) shifted module path index is unresolved, so
-    ;; that resoling will trigger module loads
-    (unless (module-instance-shifted-requires mi)
-      (set-module-instance-shifted-requires!
-       mi
-       (for/list ([phase+mpis (in-list (module-requires m))])
-         (cons (car phase+mpis)
-               (for/list ([req-mpi (in-list (cdr phase+mpis))])
-                 (module-path-index-unresolve
-                  (module-path-index-shift req-mpi
-                                           (module-self m)
-                                           mpi)))))))
-    
-    ;; Recur for required modules:
-    (for ([phase+mpis (in-list (module-instance-shifted-requires mi))])
-      (define req-phase (car phase+mpis))
-      (for ([req-mpi (in-list (cdr phase+mpis))])
-        (namespace-module-instantiate! ns req-mpi (phase+ instance-phase req-phase)
-                                       #:run-phase run-phase
-                                       #:skip-run? skip-run?
-                                       #:otherwise-available? otherwise-available?
-                                       #:seen (hash-set seen mi #t))))
-    
-    ;; Run or make available phases of the module body:
-    (unless (label-phase? instance-phase)
-      (for ([phase-level (in-range (module-max-phase-level m) (sub1 (module-min-phase-level m)) -1)])
-        (define phase (phase+ phase-level phase-shift))
-        (cond
-         [(and (not skip-run?)
-               (eqv? phase run-phase))
-          ;; This is the phase to make sure that we've run
-          (unless (eq? 'started (hash-ref (module-instance-phase-level-to-state mi) phase-level #f))
-            (hash-set! (module-instance-phase-level-to-state mi) phase-level 'started)
-            (void (namespace->definitions m-ns phase-level))
-            (define p-ns (namespace->namespace-at-phase m-ns phase))
-            (define insp (module-inspector m))
-            (define data-box (module-instance-data-box mi))
-            (define prep (module-prepare-instance m))
-            (define go (module-instantiate-phase m))
-            (prep data-box p-ns phase-shift mpi bulk-binding-registry insp)
-            (go data-box p-ns phase-shift phase-level mpi bulk-binding-registry insp))]
-         [(and otherwise-available?
-               (not (negative? run-phase))
-               (not (hash-ref (module-instance-phase-level-to-state mi) phase-level #f)))
-          ;; This is a phase to merely make available
-          (hash-update! (namespace-available-module-instances ns)
-                        phase
-                        (lambda (l) (cons mi l))
-                        null)
-          (hash-set! (module-instance-phase-level-to-state mi) phase-level 'available)])))
+  (performance-region
+   ['eval 'requires]
+   ;; Nothing to do if we've run this phase already and made the
+   ;; instance sufficiently available:
+   (define m-ns (module-instance-namespace mi))
+   (define instance-phase (namespace-0-phase m-ns))
+   (define run-phase-level (phase- run-phase instance-phase))
+   (unless (and (or skip-run?
+                    (eq? 'started (hash-ref (module-instance-phase-level-to-state mi) run-phase-level #f)))
+                (or (not otherwise-available?)
+                    (module-instance-made-available? mi)))
+     ;; Something to do...
+     (define m (module-instance-module mi))
+     (define mpi (namespace-mpi m-ns))
+     (define phase-shift instance-phase) ; instance phase = phase shift
+     (define bulk-binding-registry (namespace-bulk-binding-registry m-ns))
+     
+     (when (hash-ref seen mi #f)
+       (error 'require "import cycle detected during module instantiation"))
+     
+     ;; If we haven't shifted required mpi's already, do that; ensure that
+     ;; each (potentially) shifted module path index is unresolved, so
+     ;; that resoling will trigger module loads
+     (unless (module-instance-shifted-requires mi)
+       (set-module-instance-shifted-requires!
+        mi
+        (for/list ([phase+mpis (in-list (module-requires m))])
+          (cons (car phase+mpis)
+                (for/list ([req-mpi (in-list (cdr phase+mpis))])
+                  (module-path-index-unresolve
+                   (module-path-index-shift req-mpi
+                                            (module-self m)
+                                            mpi)))))))
+     
+     ;; Recur for required modules:
+     (for ([phase+mpis (in-list (module-instance-shifted-requires mi))])
+       (define req-phase (car phase+mpis))
+       (for ([req-mpi (in-list (cdr phase+mpis))])
+         (namespace-module-instantiate! ns req-mpi (phase+ instance-phase req-phase)
+                                        #:run-phase run-phase
+                                        #:skip-run? skip-run?
+                                        #:otherwise-available? otherwise-available?
+                                        #:seen (hash-set seen mi #t))))
+     
+     ;; Run or make available phases of the module body:
+     (unless (label-phase? instance-phase)
+       (for ([phase-level (in-range (module-max-phase-level m) (sub1 (module-min-phase-level m)) -1)])
+         (define phase (phase+ phase-level phase-shift))
+         (cond
+          [(and (not skip-run?)
+                (eqv? phase run-phase))
+           ;; This is the phase to make sure that we've run
+           (unless (eq? 'started (hash-ref (module-instance-phase-level-to-state mi) phase-level #f))
+             (hash-set! (module-instance-phase-level-to-state mi) phase-level 'started)
+             (void (namespace->definitions m-ns phase-level))
+             (define p-ns (namespace->namespace-at-phase m-ns phase))
+             (define insp (module-inspector m))
+             (define data-box (module-instance-data-box mi))
+             (define prep (module-prepare-instance m))
+             (define go (module-instantiate-phase m))
+             (prep data-box p-ns phase-shift mpi bulk-binding-registry insp)
+             (go data-box p-ns phase-shift phase-level mpi bulk-binding-registry insp))]
+          [(and otherwise-available?
+                (not (negative? run-phase))
+                (not (hash-ref (module-instance-phase-level-to-state mi) phase-level #f)))
+           ;; This is a phase to merely make available
+           (hash-update! (namespace-available-module-instances ns)
+                         phase
+                         (lambda (l) (cons mi l))
+                         null)
+           (hash-set! (module-instance-phase-level-to-state mi) phase-level 'available)])))
 
-    (when otherwise-available?
-      (set-module-instance-made-available?! mi #t))
+     (when otherwise-available?
+       (set-module-instance-made-available?! mi #t))
 
-    (unless skip-run?
-      ;; In case there's no such phase for this module instance, claim 'started
-      ;; to short-circuit future attempts:
-      (hash-set! (module-instance-phase-level-to-state mi) run-phase-level 'started))))
+     (unless skip-run?
+       ;; In case there's no such phase for this module instance, claim 'started
+       ;; to short-circuit future attempts:
+       (hash-set! (module-instance-phase-level-to-state mi) run-phase-level 'started)))))
 
 (define (namespace-visit-available-modules! ns [run-phase (namespace-phase ns)])
   (namespace-run-available-modules! ns (add1 run-phase)))

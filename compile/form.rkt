@@ -1,5 +1,6 @@
 #lang racket/base
-(require "../syntax/syntax.rkt"
+(require "../common/performance.rkt"
+         "../syntax/syntax.rkt"
          "../syntax/scope.rkt"
          "../syntax/taint.rkt"
          "../syntax/property.rkt"
@@ -244,34 +245,36 @@
       ;; Compile the linklet with support for cross-module inlining, which
       ;; means that the set of imports can change:
       (define-values (linklet new-module-uses)
-        ((if to-source?
-             (lambda (l name keys getter) (values l keys))
-             compile-linklet)
-        `(linklet
-          ;; imports
-          (,@body-imports
-           ,@(link-info-imports li))
-          ;; exports
-          (,@(link-info-def-decls li)
-           ,@(for/list ([binding-sym (in-list (header-binding-syms-in-order
-                                               (hash-ref phase-to-header phase)))])
-               (define def-sym (hash-ref binding-sym-to-define-sym binding-sym))
-               `[,def-sym ,binding-sym]))
-          ;; body
-          ,@(reverse bodys)
-          ,@body-suffix-forms)
-        'module
-        ;; Support for cross-module optimization starts with a vector
-        ;; of keys for the linklet imports; we use `module-use` values
-        ;; as keys, plus #f for the boilerplate linklets
-        (list->vector (append (for/list ([i (in-list body-imports)]) #f)
-                              (link-info-link-module-uses li)))
-        ;; To complete cross-module support, map a key (which is a `module-use`)
-        ;; to a linklet and an optional vector of keys for that linklet's
-        ;; imports:
-        (make-module-use-to-linklet (compile-context-namespace cctx)
-                                    get-module-linklet-info
-                                    (link-info-link-module-uses li))))
+        (performance-region
+         ['compile 'linklet]
+         ((if to-source?
+              (lambda (l name keys getter) (values l keys))
+              compile-linklet)
+          `(linklet
+            ;; imports
+            (,@body-imports
+             ,@(link-info-imports li))
+            ;; exports
+            (,@(link-info-def-decls li)
+             ,@(for/list ([binding-sym (in-list (header-binding-syms-in-order
+                                                 (hash-ref phase-to-header phase)))])
+                 (define def-sym (hash-ref binding-sym-to-define-sym binding-sym))
+                 `[,def-sym ,binding-sym]))
+            ;; body
+            ,@(reverse bodys)
+            ,@body-suffix-forms)
+          'module
+          ;; Support for cross-module optimization starts with a vector
+          ;; of keys for the linklet imports; we use `module-use` values
+          ;; as keys, plus #f for the boilerplate linklets
+          (list->vector (append (for/list ([i (in-list body-imports)]) #f)
+                                (link-info-link-module-uses li)))
+          ;; To complete cross-module support, map a key (which is a `module-use`)
+          ;; to a linklet and an optional vector of keys for that linklet's
+          ;; imports:
+          (make-module-use-to-linklet (compile-context-namespace cctx)
+                                      get-module-linklet-info
+                                      (link-info-link-module-uses li)))))
       (values phase (cons linklet (list-tail (vector->list new-module-uses)
                                              (length body-imports))))))
   

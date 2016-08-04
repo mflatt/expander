@@ -1,5 +1,6 @@
 #lang racket/base
 (require "../common/set.rkt"
+         "../common/performance.rkt"
          "../syntax/syntax.rkt"
          "../syntax/scope.rkt"
          "../common/phase.rkt"
@@ -215,136 +216,138 @@
                           #:copy-variable-as-constant? [copy-variable-as-constant? #f]
                           #:skip-variable-phase-level [skip-variable-phase-level #f]
                           #:who who)
-  (define module-name (module-path-index-resolve mpi #t))
-  (define bind-in-stx (if (adjust-rename? adjust)
-                          (adjust-rename-to-id adjust)
-                          in-stx))
-  (define done-syms (and adjust (make-hash)))
-  (define m (namespace->module m-ns module-name))
-  (unless m (raise-unknown-module-error 'require module-name))
-  (define interned-mpi
-    (if requires+provides
-        (add-required-module! requires+provides mpi phase-shift
-                              (module-cross-phase-persistent? m))
-        mpi))
-  (when visit?
-    (namespace-module-visit! m-ns interned-mpi phase-shift #:visit-phase run-phase))
-  (when run?
-    (namespace-module-instantiate! m-ns interned-mpi phase-shift #:run-phase run-phase))
-  (when (not (or visit? run?))
-    ;; make the module available:
-    (namespace-module-make-available! m-ns interned-mpi phase-shift #:visit-phase run-phase))
-  (define can-bulk-bind? (and (or (not adjust)
-                                  (adjust-prefix? adjust)
-                                  (adjust-all-except? adjust))
-                              (not skip-variable-phase-level)))
-  (define bulk-prefix (cond
-                       [(adjust-prefix? adjust) (adjust-prefix-sym adjust)]
-                       [(adjust-all-except? adjust) (adjust-all-except-prefix-sym adjust)]
-                       [else #f]))
-  (define bulk-excepts (cond
-                        [(adjust-all-except? adjust) (adjust-all-except-syms adjust)]
-                        [else #hasheq()]))
-  (define update-nominals-box (and can-bulk-bind? (box null)))
-  (bind-all-provides!
-   m
-   bind-in-stx phase-shift m-ns interned-mpi
-   #:in orig-s
-   #:only (cond
-           [(adjust-only? adjust) (set->list (adjust-only-syms adjust))]
-           [(adjust-rename? adjust) (list (adjust-rename-from-sym adjust))]
-           [else #f])
-   #:just-meta just-meta
-   #:can-bulk? can-bulk-bind?
-   #:bulk-prefix bulk-prefix
-   #:bulk-excepts bulk-excepts
-   #:bulk-callback (and
-                    requires+provides
-                    can-bulk-bind?
-                    (lambda (provides provide-phase-level)
-                      (add-bulk-required-ids! requires+provides
-                                              bind-in-stx
-                                              (module-self m) mpi phase-shift
-                                              provides
-                                              provide-phase-level
-                                              #:prefix bulk-prefix
-                                              #:excepts bulk-excepts
-                                              #:symbols-accum (and (positive? (hash-count bulk-excepts))
-                                                                   done-syms)
-                                              #:can-be-shadowed? can-be-shadowed?
-                                              #:check-and-remove? (not initial-require?)
-                                              #:in orig-s
-                                              #:accum-update-nominals update-nominals-box
-                                              #:who who)))
-   #:filter (and
-             (or (not can-bulk-bind?)
-                 copy-variable-phase-level)
-             (lambda (binding as-transformer?)
-               (define sym (module-binding-nominal-sym binding))
-               (define provide-phase (module-binding-nominal-phase binding))
-               (define adjusted-sym
-                 (cond
-                  [(and skip-variable-phase-level
-                        (not as-transformer?)
-                        (equal? provide-phase skip-variable-phase-level))
-                   #f]
-                  [(not adjust) sym]
-                  [(adjust-only? adjust)
-                   (and (set-member? (adjust-only-syms adjust) sym)
-                        (hash-set! done-syms sym #t)
-                        sym)]
-                  [(adjust-prefix? adjust)
-                   (string->symbol
-                    (format "~a~a" (adjust-prefix-sym adjust) sym))]
-                  [(adjust-all-except? adjust)
-                   (and (not (and (set-member? (adjust-all-except-syms adjust) sym)
-                                  (hash-set! done-syms sym #t)))
-                        (string->symbol
-                         (format "~a~a" (adjust-all-except-prefix-sym adjust) sym)))]
-                  [(adjust-rename? adjust)
-                   (and (eq? sym (adjust-rename-from-sym adjust))
-                        (hash-set! done-syms sym #t)
-                        (adjust-rename-to-id adjust))]))
-               (when (and adjusted-sym requires+provides)
-                 (define s (datum->syntax bind-in-stx adjusted-sym))
-                 (define bind-phase (phase+ phase-shift provide-phase))
-                 (unless initial-require?
-                   (check-not-defined #:check-not-required? #t
-                                      requires+provides
-                                      s bind-phase
-                                      #:unless-matches binding
-                                      #:in orig-s
-                                      #:remove-shadowed!? #t
-                                      #:who who))
-                 (add-defined-or-required-id! requires+provides
-                                              s bind-phase binding
-                                              #:can-be-shadowed? can-be-shadowed?
-                                              #:as-transformer? as-transformer?))
-               (when (and adjusted-sym
-                          copy-variable-phase-level
-                          (not as-transformer?)
-                          (equal? provide-phase copy-variable-phase-level))
-                 (copy-namespace-value m-ns adjusted-sym binding copy-variable-phase-level phase-shift
-                                       copy-variable-as-constant?))
-               adjusted-sym)))
-  ;; Now that a bulk binding is in place, update to merge nominals:
-  (when update-nominals-box
-    (for ([update! (in-list (unbox update-nominals-box))])
-      (update!)))
-  ;; check that we covered all expected ids:
-  (define need-syms (cond
-                    [(adjust-only? adjust)
-                     (adjust-only-syms adjust)]
-                    [(adjust-all-except? adjust)
-                     (adjust-all-except-syms adjust)]
-                    [(adjust-rename? adjust)
-                     (set (adjust-rename-from-sym adjust))]
-                    [else #f]))
-  (when (and need-syms
-             (not (= (set-count need-syms) (hash-count done-syms))))
-    (for ([sym (in-set need-syms)])
-      (unless (hash-ref done-syms sym #f)
-        (raise-syntax-error who "not in nested spec" orig-s sym)))))
+  (performance-region
+   ['expand 'require]
+   (define module-name (module-path-index-resolve mpi #t))
+   (define bind-in-stx (if (adjust-rename? adjust)
+                           (adjust-rename-to-id adjust)
+                           in-stx))
+   (define done-syms (and adjust (make-hash)))
+   (define m (namespace->module m-ns module-name))
+   (unless m (raise-unknown-module-error 'require module-name))
+   (define interned-mpi
+     (if requires+provides
+         (add-required-module! requires+provides mpi phase-shift
+                               (module-cross-phase-persistent? m))
+         mpi))
+   (when visit?
+     (namespace-module-visit! m-ns interned-mpi phase-shift #:visit-phase run-phase))
+   (when run?
+     (namespace-module-instantiate! m-ns interned-mpi phase-shift #:run-phase run-phase))
+   (when (not (or visit? run?))
+     ;; make the module available:
+     (namespace-module-make-available! m-ns interned-mpi phase-shift #:visit-phase run-phase))
+   (define can-bulk-bind? (and (or (not adjust)
+                                   (adjust-prefix? adjust)
+                                   (adjust-all-except? adjust))
+                               (not skip-variable-phase-level)))
+   (define bulk-prefix (cond
+                        [(adjust-prefix? adjust) (adjust-prefix-sym adjust)]
+                        [(adjust-all-except? adjust) (adjust-all-except-prefix-sym adjust)]
+                        [else #f]))
+   (define bulk-excepts (cond
+                         [(adjust-all-except? adjust) (adjust-all-except-syms adjust)]
+                         [else #hasheq()]))
+   (define update-nominals-box (and can-bulk-bind? (box null)))
+   (bind-all-provides!
+    m
+    bind-in-stx phase-shift m-ns interned-mpi
+    #:in orig-s
+    #:only (cond
+            [(adjust-only? adjust) (set->list (adjust-only-syms adjust))]
+            [(adjust-rename? adjust) (list (adjust-rename-from-sym adjust))]
+            [else #f])
+    #:just-meta just-meta
+    #:can-bulk? can-bulk-bind?
+    #:bulk-prefix bulk-prefix
+    #:bulk-excepts bulk-excepts
+    #:bulk-callback (and
+                     requires+provides
+                     can-bulk-bind?
+                     (lambda (provides provide-phase-level)
+                       (add-bulk-required-ids! requires+provides
+                                               bind-in-stx
+                                               (module-self m) mpi phase-shift
+                                               provides
+                                               provide-phase-level
+                                               #:prefix bulk-prefix
+                                               #:excepts bulk-excepts
+                                               #:symbols-accum (and (positive? (hash-count bulk-excepts))
+                                                                    done-syms)
+                                               #:can-be-shadowed? can-be-shadowed?
+                                               #:check-and-remove? (not initial-require?)
+                                               #:in orig-s
+                                               #:accum-update-nominals update-nominals-box
+                                               #:who who)))
+    #:filter (and
+              (or (not can-bulk-bind?)
+                  copy-variable-phase-level)
+              (lambda (binding as-transformer?)
+                (define sym (module-binding-nominal-sym binding))
+                (define provide-phase (module-binding-nominal-phase binding))
+                (define adjusted-sym
+                  (cond
+                   [(and skip-variable-phase-level
+                         (not as-transformer?)
+                         (equal? provide-phase skip-variable-phase-level))
+                    #f]
+                   [(not adjust) sym]
+                   [(adjust-only? adjust)
+                    (and (set-member? (adjust-only-syms adjust) sym)
+                         (hash-set! done-syms sym #t)
+                         sym)]
+                   [(adjust-prefix? adjust)
+                    (string->symbol
+                     (format "~a~a" (adjust-prefix-sym adjust) sym))]
+                   [(adjust-all-except? adjust)
+                    (and (not (and (set-member? (adjust-all-except-syms adjust) sym)
+                                   (hash-set! done-syms sym #t)))
+                         (string->symbol
+                          (format "~a~a" (adjust-all-except-prefix-sym adjust) sym)))]
+                   [(adjust-rename? adjust)
+                    (and (eq? sym (adjust-rename-from-sym adjust))
+                         (hash-set! done-syms sym #t)
+                         (adjust-rename-to-id adjust))]))
+                (when (and adjusted-sym requires+provides)
+                  (define s (datum->syntax bind-in-stx adjusted-sym))
+                  (define bind-phase (phase+ phase-shift provide-phase))
+                  (unless initial-require?
+                    (check-not-defined #:check-not-required? #t
+                                       requires+provides
+                                       s bind-phase
+                                       #:unless-matches binding
+                                       #:in orig-s
+                                       #:remove-shadowed!? #t
+                                       #:who who))
+                  (add-defined-or-required-id! requires+provides
+                                               s bind-phase binding
+                                               #:can-be-shadowed? can-be-shadowed?
+                                               #:as-transformer? as-transformer?))
+                (when (and adjusted-sym
+                           copy-variable-phase-level
+                           (not as-transformer?)
+                           (equal? provide-phase copy-variable-phase-level))
+                  (copy-namespace-value m-ns adjusted-sym binding copy-variable-phase-level phase-shift
+                                        copy-variable-as-constant?))
+                adjusted-sym)))
+   ;; Now that a bulk binding is in place, update to merge nominals:
+   (when update-nominals-box
+     (for ([update! (in-list (unbox update-nominals-box))])
+       (update!)))
+   ;; check that we covered all expected ids:
+   (define need-syms (cond
+                      [(adjust-only? adjust)
+                       (adjust-only-syms adjust)]
+                      [(adjust-all-except? adjust)
+                       (adjust-all-except-syms adjust)]
+                      [(adjust-rename? adjust)
+                       (set (adjust-rename-from-sym adjust))]
+                      [else #f]))
+   (when (and need-syms
+              (not (= (set-count need-syms) (hash-count done-syms))))
+     (for ([sym (in-set need-syms)])
+       (unless (hash-ref done-syms sym #f)
+         (raise-syntax-error who "not in nested spec" orig-s sym))))))
 
 ;; ----------------------------------------
 

@@ -6,6 +6,7 @@
          "../namespace/namespace.rkt"
          "../expand/root-expand-context.rkt"
          "../compile/reserved-symbol.rkt"
+         "../common/performance.rkt"
          "compiled-in-memory.rkt"
          "context.rkt"
          "header.rkt"
@@ -39,100 +40,107 @@
                      #:serializable? [serializable? #t]
                      #:single-expression? [single-expression? #f]
                      #:to-source? [to-source? #f])
-  (define phase (compile-context-phase cctx))
+  (performance-region
+   ['compile (if single-expression? 'transformer 'top)]
 
-  (define mpis (make-module-path-index-table))
-  (define purely-functional? #t)
+   (define phase (compile-context-phase cctx))
 
-  ;; Compile the body forms, similar to compiling the body of a module
-  (define-values (body-linklets
-                  min-phase
-                  max-phase
-                  phase-to-link-module-uses
-                  phase-to-link-module-uses-expr
-                  phase-to-link-extra-inspectorsss
-                  syntax-literals
-                  no-root-context-pos)
-    (compile-forms (list s) cctx mpis
-                   #:body-imports (if single-expression?
-                                      `([]
-                                        [,syntax-literals-id]
-                                        [])
-                                      `([,top-level-bind!-id
-                                         ,top-level-require!-id]
-                                        [,mpi-vector-id
-                                         ,syntax-literals-id]
-                                        ,instance-imports))
-                   #:to-source? to-source?
-                   #:definition-callback (lambda () (set! purely-functional? #f))
-                   #:compiled-expression-callback
-                   (lambda (e expected-results phase required-reference?)
-                     (when (and purely-functional?
-                                (any-side-effects? e expected-results required-reference?))
-                       (set! purely-functional? #f)))
-                   #:other-form-callback (lambda (s cctx)
-                                           (set! purely-functional? #f)
-                                           (compile-top-level-require s cctx))))
+   (define mpis (make-module-path-index-table))
+   (define purely-functional? #t)
 
-  (define (add-metadata ht)
-    (let* ([ht (hash-set ht 'original-phase phase)]
-           [ht (hash-set ht 'max-phase max-phase)])
-      ht))
-  
-  (define bundle
-    ((if to-source? values hash->linklet-bundle)
-     (add-metadata
-      (cond
-       [serializable?
-        ;; To support seialization, construct a linklet that will
-        ;; deserialize module path indexes, syntax objects, etc.
-        (define syntax-literals-expr
-          (generate-eager-syntax-literals! 
-           syntax-literals
-           mpis
-           phase
-           (compile-context-self cctx)
-           (compile-context-namespace cctx)))
+   ;; Compile the body forms, similar to compiling the body of a module
+   (define-values (body-linklets
+                   min-phase
+                   max-phase
+                   phase-to-link-module-uses
+                   phase-to-link-module-uses-expr
+                   phase-to-link-extra-inspectorsss
+                   syntax-literals
+                   no-root-context-pos)
+     (compile-forms (list s) cctx mpis
+                    #:body-imports (if single-expression?
+                                       `([]
+                                         [,syntax-literals-id]
+                                         [])
+                                       `([,top-level-bind!-id
+                                          ,top-level-require!-id]
+                                         [,mpi-vector-id
+                                          ,syntax-literals-id]
+                                         ,instance-imports))
+                    #:to-source? to-source?
+                    #:definition-callback (lambda () (set! purely-functional? #f))
+                    #:compiled-expression-callback
+                    (lambda (e expected-results phase required-reference?)
+                      (when (and purely-functional?
+                                 (any-side-effects? e expected-results required-reference?))
+                        (set! purely-functional? #f)))
+                    #:other-form-callback (lambda (s cctx)
+                                            (set! purely-functional? #f)
+                                            (compile-top-level-require s cctx))))
 
-        (define link-linklet
-          ((if to-source? values compile-linklet)
-           `(linklet
-             ;; imports
-             (,deserialize-imports
-              ,eager-instance-imports)
-             ;; exports
-             (,mpi-vector-id
-              ,deserialized-syntax-vector-id
-              phase-to-link-modules
-              ,syntax-literals-id)
-             (define-values (,mpi-vector-id)
-               ,(generate-module-path-index-deserialize mpis))
-             (define-values (,deserialized-syntax-vector-id) 
-               (make-vector ,(add1 phase) #f))
-             (define-values (phase-to-link-modules) ,phase-to-link-module-uses-expr)
-             (define-values (,syntax-literals-id) ,syntax-literals-expr))))
-        
-        (hash-set body-linklets 'link link-linklet)]
-       [else
-        ;; Will combine the linking unit with non-serialized link info
-        body-linklets]))))
-  
-  (cond
-   [to-source?
-    (hasheq #f bundle)]
-   [else
-    ;; If the compiled code is executed directly, it must be in its
-    ;; original phase, and we'll share the original values
-    (compiled-in-memory (hash->linklet-directory (hasheq #f bundle))
-                        phase-to-link-module-uses
-                        (current-code-inspector)
-                        phase-to-link-extra-inspectorsss
-                        (mpis-as-vector mpis)
-                        (syntax-literals-as-vector syntax-literals)
-                        null
-                        null
-                        (extract-namespace-scopes (compile-context-namespace cctx))
-                        purely-functional?)]))
+   (define (add-metadata ht)
+     (let* ([ht (hash-set ht 'original-phase phase)]
+            [ht (hash-set ht 'max-phase max-phase)])
+       ht))
+   
+   (define bundle
+     ((if to-source? values hash->linklet-bundle)
+      (add-metadata
+       (cond
+        [serializable?
+         ;; To support seialization, construct a linklet that will
+         ;; deserialize module path indexes, syntax objects, etc.
+         (define syntax-literals-expr
+           (performance-region
+            ['compile 'top 'serialize]
+            (generate-eager-syntax-literals! 
+             syntax-literals
+             mpis
+             phase
+             (compile-context-self cctx)
+             (compile-context-namespace cctx))))
+
+         (define link-linklet
+           ((if to-source? values (lambda (s) (performance-region
+                                          ['compile 'linklet]
+                                          (compile-linklet s))))
+            `(linklet
+              ;; imports
+              (,deserialize-imports
+               ,eager-instance-imports)
+              ;; exports
+              (,mpi-vector-id
+               ,deserialized-syntax-vector-id
+               phase-to-link-modules
+               ,syntax-literals-id)
+              (define-values (,mpi-vector-id)
+                ,(generate-module-path-index-deserialize mpis))
+              (define-values (,deserialized-syntax-vector-id) 
+                (make-vector ,(add1 phase) #f))
+              (define-values (phase-to-link-modules) ,phase-to-link-module-uses-expr)
+              (define-values (,syntax-literals-id) ,syntax-literals-expr))))
+         
+         (hash-set body-linklets 'link link-linklet)]
+        [else
+         ;; Will combine the linking unit with non-serialized link info
+         body-linklets]))))
+   
+   (cond
+    [to-source?
+     (hasheq #f bundle)]
+    [else
+     ;; If the compiled code is executed directly, it must be in its
+     ;; original phase, and we'll share the original values
+     (compiled-in-memory (hash->linklet-directory (hasheq #f bundle))
+                         phase-to-link-module-uses
+                         (current-code-inspector)
+                         phase-to-link-extra-inspectorsss
+                         (mpis-as-vector mpis)
+                         (syntax-literals-as-vector syntax-literals)
+                         null
+                         null
+                         (extract-namespace-scopes (compile-context-namespace cctx))
+                         purely-functional?)])))
 
 ;; Callback for compiling a sequence of expressions: handle `require`
 ;; (which is handled separately for modules)

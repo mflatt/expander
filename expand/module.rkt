@@ -30,7 +30,8 @@
          "../eval/top.rkt"
          "../eval/module.rkt"
          "cross-phase.rkt"
-         "../syntax/debug.rkt")
+         "../syntax/debug.rkt"
+         "../common/performance.rkt")
 
 (add-core-form!
  'module
@@ -38,7 +39,9 @@
    (unless (eq? (expand-context-context ctx) 'top-level)
      (log-expand ctx 'prim-module)
      (raise-syntax-error #f "allowed only at the top level" s))
-   (expand-module s ctx #f)))
+   (performance-region
+    ['expand 'module]
+    (expand-module s ctx #f))))
 
 (add-core-form!
  'module*
@@ -402,7 +405,9 @@
                           #:s s))
    
    ;; Expand the body
-   (define expanded-mb (expand mb mb-ctx))
+   (define expanded-mb (performance-region
+                        ['expand 'module-begin]
+                        (expand mb mb-ctx)))
 
    ;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    ;; Assemble the `module` result
@@ -463,8 +468,10 @@
         ;; A single body form might be a macro that expands to
         ;; the primitive `#%module-begin` form:
         (define partly-expanded-body
-          (expand (add-enclosing-name-property (car bodys) module-name-sym)
-                  (make-mb-ctx)))
+          (performance-region
+           ['expand 'module-begin]
+           (expand (add-enclosing-name-property (car bodys) module-name-sym)
+                   (make-mb-ctx))))
         (cond
          [(eq? '#%module-begin (core-form-sym (syntax-disarm partly-expanded-body) phase))
           ;; Yes, it expanded to `#%module-begin`
@@ -492,8 +499,10 @@
   (log-expand mb-ctx 'tag mb)
   (when log-rename-one?
     (log-expand mb-ctx 'rename-one mb))
-  (define partly-expanded-mb (expand (add-enclosing-name-property mb module-name-sym)
-                                     mb-ctx))
+  (define partly-expanded-mb (performance-region
+                              ['expand 'module-begin]
+                              (expand (add-enclosing-name-property mb module-name-sym)
+                                      mb-ctx)))
   (unless (eq? '#%module-begin (core-form-sym (syntax-disarm partly-expanded-mb) phase))
     (raise-syntax-error #f "expansion of #%module-begin is not a #%plain-module-begin form" s
                         partly-expanded-mb))
@@ -582,7 +591,9 @@
        [else null])]
      [else
       (log-expand partial-body-ctx 'next)
-      (define exp-body (expand (car bodys) partial-body-ctx))
+      (define exp-body (performance-region
+                        ['expand 'form-in-module/1]
+                        (expand (car bodys) partial-body-ctx)))
       (define disarmed-exp-body (syntax-disarm exp-body))
       (define lifted-defns (get-and-clear-lifts! (expand-context-lifts partial-body-ctx)))
       (cond
@@ -775,15 +786,19 @@
         (case (core-form-sym disarmed-body phase)
           [(define-values)
            (define-match m disarmed-body '(define-values (id ...) rhs))
-           (define exp-rhs (expand (m 'rhs) (as-named-context (as-expression-context body-ctx)
-                                                              (m 'id))))
+           (define exp-rhs (performance-region
+                            ['expand 'form-in-module/2]
+                            (expand (m 'rhs) (as-named-context (as-expression-context body-ctx)
+                                                               (m 'id)))))
            (rebuild 
             (car bodys) disarmed-body
             `(,(m 'define-values) ,(m 'id) ,exp-rhs))]
           [(define-syntaxes #%require #%provide begin-for-syntax module module* #%declare)
            (car bodys)]
           [else
-           (expand (car bodys) (as-expression-context body-ctx))]))
+           (performance-region
+            ['expand 'form-in-module/2]
+            (expand (car bodys) (as-expression-context body-ctx)))]))
       (define lifted-defns
         ;; If there were any lifts, the right-hand sides need to be expanded
         (loop #f (get-and-clear-lifts! (expand-context-lifts body-ctx))))

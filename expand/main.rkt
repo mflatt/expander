@@ -31,7 +31,8 @@
          "lift-key.rkt"
          "../syntax/debug.rkt"
          "reference-record.rkt"
-         "log.rkt")
+         "log.rkt"
+         "../common/performance.rkt")
 
 (provide expand
          lookup
@@ -267,36 +268,39 @@
 ;; is the inspector of the module that defines `t`, which gives it
 ;; priviledge for `syntax-arm` and similar
 (define (apply-transformer t insp-of-t s id ctx binding)
-  (log-expand ctx 'enter-macro s)
-  (define disarmed-s (syntax-disarm s))
-  (define intro-scope (new-scope 'macro))
-  (define intro-s (add-scope disarmed-s intro-scope))
-  ;; In a definition context, we need use-site scopes
-  (define-values (use-s use-scopes) (maybe-add-use-site-scope intro-s ctx binding))
-  ;; Avoid accidental transfer of taint-controlling properties:
-  (define cleaned-s (syntax-remove-taint-dispatch-properties use-s))
-  ;; Prepare to accumulate definition contexts created by the transformer
-  (define def-ctx-scopes (box null))
-  
-  ;; Call the transformer; the current expansion context may be needed
-  ;; for `syntax-local-....` functions, and we may accumulate scopes from
-  ;; definition contexts created by the transformer
-  (define transformed-s
-    (apply-transformer-in-context t cleaned-s ctx insp-of-t
-                                  intro-scope use-scopes def-ctx-scopes
-                                  id))
-  
-  ;; Flip the introduction scope
-  (define result-s (flip-scope transformed-s intro-scope))
-  ;; In a definition context, we need to add the inside-edge scope to
-  ;; any expansion result
-  (define post-s (maybe-add-post-expansion-scope result-s ctx))
+  (performance-region
+   ['expand '_ 'macro]
+   
+   (log-expand ctx 'enter-macro s)
+   (define disarmed-s (syntax-disarm s))
+   (define intro-scope (new-scope 'macro))
+   (define intro-s (add-scope disarmed-s intro-scope))
+   ;; In a definition context, we need use-site scopes
+   (define-values (use-s use-scopes) (maybe-add-use-site-scope intro-s ctx binding))
+   ;; Avoid accidental transfer of taint-controlling properties:
+   (define cleaned-s (syntax-remove-taint-dispatch-properties use-s))
+   ;; Prepare to accumulate definition contexts created by the transformer
+   (define def-ctx-scopes (box null))
+   
+   ;; Call the transformer; the current expansion context may be needed
+   ;; for `syntax-local-....` functions, and we may accumulate scopes from
+   ;; definition contexts created by the transformer
+   (define transformed-s
+     (apply-transformer-in-context t cleaned-s ctx insp-of-t
+                                   intro-scope use-scopes def-ctx-scopes
+                                   id))
+   
+   ;; Flip the introduction scope
+   (define result-s (flip-scope transformed-s intro-scope))
+   ;; In a definition context, we need to add the inside-edge scope to
+   ;; any expansion result
+   (define post-s (maybe-add-post-expansion-scope result-s ctx))
    ;; Track expansion:
-  (define tracked-s (syntax-track-origin post-s cleaned-s id))
-  (define rearmed-s (taint-dispatch tracked-s (lambda (t-s) (syntax-rearm t-s s)) (expand-context-phase ctx)))
-  (log-expand ctx 'exit-macro rearmed-s)
-  (values rearmed-s
-          (accumulate-def-ctx-scopes ctx def-ctx-scopes)))
+   (define tracked-s (syntax-track-origin post-s cleaned-s id))
+   (define rearmed-s (taint-dispatch tracked-s (lambda (t-s) (syntax-rearm t-s s)) (expand-context-phase ctx)))
+   (log-expand ctx 'exit-macro rearmed-s)
+   (values rearmed-s
+           (accumulate-def-ctx-scopes ctx def-ctx-scopes))))
 
 ;; With all the pre-call scope work done and post-call scope work in
 ;; the continuation, actually call the transformer function in the
@@ -494,24 +498,27 @@
                             #:expand-lifts? [expand-lifts? #t]
                             #:lift-key [lift-key (generate-lift-key)]
                             #:always-wrap? [always-wrap? #f])
-  (define phase (add1 (expand-context-phase ctx)))
-  (define ns (namespace->namespace-at-phase (expand-context-namespace ctx)
-                                            phase))
-  (namespace-visit-available-modules! ns phase)
-  (define trans-ctx (struct-copy expand-context ctx
-                                 [context context]
-                                 [scopes null]
-                                 [phase phase]
-                                 [namespace ns]
-                                 [env empty-env]
-                                 [only-immediate? #f]
-                                 [def-ctx-scopes #f]
-                                 [post-expansion-scope #:parent root-expand-context #f]))
-  (expand/capture-lifts s trans-ctx
-                        #:expand-lifts? expand-lifts?
-                        #:begin-form? begin-form?
-                        #:lift-key lift-key
-                        #:always-wrap? always-wrap?))
+  (performance-region
+   ['expand 'transformer]
+   
+   (define phase (add1 (expand-context-phase ctx)))
+   (define ns (namespace->namespace-at-phase (expand-context-namespace ctx)
+                                             phase))
+   (namespace-visit-available-modules! ns phase)
+   (define trans-ctx (struct-copy expand-context ctx
+                                  [context context]
+                                  [scopes null]
+                                  [phase phase]
+                                  [namespace ns]
+                                  [env empty-env]
+                                  [only-immediate? #f]
+                                  [def-ctx-scopes #f]
+                                  [post-expansion-scope #:parent root-expand-context #f]))
+   (expand/capture-lifts s trans-ctx
+                         #:expand-lifts? expand-lifts?
+                         #:begin-form? begin-form?
+                         #:lift-key lift-key
+                         #:always-wrap? always-wrap?)))
 
 ;; Expand and evaluate `s` as a compile-time expression, ensuring that
 ;; the number of returned values matches the number of target

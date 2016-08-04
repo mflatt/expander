@@ -24,7 +24,8 @@
          "../expand/require.rkt"
          "../expand/require+provide.rkt"
          "reflect.rkt"
-         "../expand/log.rkt")
+         "../expand/log.rkt"
+         "../common/performance.rkt")
 
 (provide eval
          compile
@@ -256,21 +257,24 @@
 ;; ----------------------------------------
 
 (define (expand-capturing-lifts s ctx)
-  (define ns (expand-context-namespace ctx))
-  (namespace-visit-available-modules! ns)
-  
-  (define lift-ctx (make-lift-context (make-top-level-lift ctx)))
-  (define require-lift-ctx (make-require-lift-context
-                            (namespace-phase ns)
-                            (make-parse-top-lifted-require ns)))
-  (define exp-s
-    (expand-in-context s (struct-copy expand-context ctx
-                                      [lifts lift-ctx]
-                                      [module-lifts lift-ctx]
-                                      [require-lifts require-lift-ctx])))
-  (values (get-and-clear-require-lifts! require-lift-ctx)
-          (get-and-clear-lifts! lift-ctx)
-          exp-s))
+  (performance-region
+   ['expand 'top]
+   
+   (define ns (expand-context-namespace ctx))
+   (namespace-visit-available-modules! ns)
+   
+   (define lift-ctx (make-lift-context (make-top-level-lift ctx)))
+   (define require-lift-ctx (make-require-lift-context
+                             (namespace-phase ns)
+                             (make-parse-top-lifted-require ns)))
+   (define exp-s
+     (expand-in-context s (struct-copy expand-context ctx
+                                       [lifts lift-ctx]
+                                       [module-lifts lift-ctx]
+                                       [require-lifts require-lift-ctx])))
+   (values (get-and-clear-require-lifts! require-lift-ctx)
+           (get-and-clear-lifts! lift-ctx)
+           exp-s)))
 
 (define (make-parse-top-lifted-require ns)
   (lambda (s phase)

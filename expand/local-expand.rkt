@@ -10,7 +10,8 @@
          "definition-context.rkt"
          "already-expanded.rkt"
          "lift-key.rkt"
-         "log.rkt")
+         "log.rkt"
+         "../common/performance.rkt")
 
 (provide local-expand
          local-expand/capture-lifts
@@ -76,85 +77,88 @@
                          #:skip-log-exit? [skip-log-exit? #f]
                          #:local-keys [local-keys null]
                          #:local-values [local-values null])
-  (unless (syntax? s)
-    (raise-argument-error who "syntax?" s))
-  (unless (or (list? context)
-              (memq context (if as-transformer?
-                                '(expression top-level)
-                                '(expression top-level module module-begin))))
-    (raise-argument-error who
-                          (if as-transformer?
-                              "(or/c 'expression 'top-level list?)"
-                              "(or/c 'expression 'top-level 'module 'module-begin list?)")
-                          context))
-  (unless (or (not stop-ids)
-              (and (list? stop-ids)
-                   (andmap identifier? stop-ids)))
-    (raise-argument-error who "(or/c (listof identifier?) #f)" stop-ids))
-  (unless (or (not intdefs)
-              (internal-definition-context? intdefs)
-              (and (list? intdefs) (andmap internal-definition-context? intdefs)))
-    (raise-argument-error who
-                          "(or/c #f internal-definitionc-context? (listof internal-definitionc-context?))" 
-                          intdefs))
-  
-  (unless (list? local-keys)
-    (raise-argument-error who "list?" local-keys))
-  (unless (list? local-values)
-    (raise-argument-error who "list?" local-values))
-  (unless (= (length local-keys) (length local-values))
-    (raise-arguments-error who
-                           "different lengths for list of keys and values for extending the environment"
-                           "keys" local-keys
-                           "values" local-values))
+  (performance-region
+   ['expand 'local-expand]
+   
+   (unless (syntax? s)
+     (raise-argument-error who "syntax?" s))
+   (unless (or (list? context)
+               (memq context (if as-transformer?
+                                 '(expression top-level)
+                                 '(expression top-level module module-begin))))
+     (raise-argument-error who
+                           (if as-transformer?
+                               "(or/c 'expression 'top-level list?)"
+                               "(or/c 'expression 'top-level 'module 'module-begin list?)")
+                           context))
+   (unless (or (not stop-ids)
+               (and (list? stop-ids)
+                    (andmap identifier? stop-ids)))
+     (raise-argument-error who "(or/c (listof identifier?) #f)" stop-ids))
+   (unless (or (not intdefs)
+               (internal-definition-context? intdefs)
+               (and (list? intdefs) (andmap internal-definition-context? intdefs)))
+     (raise-argument-error who
+                           "(or/c #f internal-definitionc-context? (listof internal-definitionc-context?))" 
+                           intdefs))
+   
+   (unless (list? local-keys)
+     (raise-argument-error who "list?" local-keys))
+   (unless (list? local-values)
+     (raise-argument-error who "list?" local-values))
+   (unless (= (length local-keys) (length local-values))
+     (raise-arguments-error who
+                            "different lengths for list of keys and values for extending the environment"
+                            "keys" local-keys
+                            "values" local-values))
 
-  (define ctx (get-current-expand-context who))
-  (define phase (if as-transformer?
-                    (add1 (expand-context-phase ctx))
-                    (expand-context-phase ctx)))
-  (define base-local-ctx (make-local-expand-context ctx
-                                                    #:context context
-                                                    #:phase phase
-                                                    #:intdefs intdefs
-                                                    #:stop-ids stop-ids))
-  (define local-ctx (struct-copy expand-context base-local-ctx
-                                 [user-env (for/fold ([user-env (expand-context-user-env base-local-ctx)]) ([key (in-list local-keys)]
-                                                                                                            [value (in-list local-values)])
-                                             (hash-set user-env key value))]))
+   (define ctx (get-current-expand-context who))
+   (define phase (if as-transformer?
+                     (add1 (expand-context-phase ctx))
+                     (expand-context-phase ctx)))
+   (define base-local-ctx (make-local-expand-context ctx
+                                                     #:context context
+                                                     #:phase phase
+                                                     #:intdefs intdefs
+                                                     #:stop-ids stop-ids))
+   (define local-ctx (struct-copy expand-context base-local-ctx
+                                  [user-env (for/fold ([user-env (expand-context-user-env base-local-ctx)]) ([key (in-list local-keys)]
+                                                                                                             [value (in-list local-values)])
+                                              (hash-set user-env key value))]))
 
-  (define input-s (add-intdef-scopes (flip-introduction-scopes s ctx) intdefs))
+   (define input-s (add-intdef-scopes (flip-introduction-scopes s ctx) intdefs))
 
-  (log-expand local-ctx 'enter-local)
-  (when as-transformer? (log-expand local-ctx 'phase-up))
-  (log-expand* local-ctx ['local-pre input-s] ['start-expand])
-  
-  (define output-s (cond
-                    [(and as-transformer? capture-lifts?)
-                     (expand-transformer input-s local-ctx
-                                         #:context context
-                                         #:expand-lifts? #f
-                                         #:begin-form? #t
-                                         #:lift-key lift-key
-                                         #:always-wrap? #t)]
-                    [as-transformer?
-                     (expand-transformer input-s local-ctx
-                                         #:context context
-                                         #:expand-lifts? #f
-                                         #:begin-form? (eq? 'top-level context)
-                                         #:lift-key lift-key)]
-                    [capture-lifts?
-                     (expand/capture-lifts input-s local-ctx
-                                           #:begin-form? #t
-                                           #:lift-key lift-key
-                                           #:always-wrap? #t)]
-                    [else
-                     (expand input-s local-ctx)]))
-  
-  (log-expand local-ctx 'local-post output-s)
-  
-  (define result-s (flip-introduction-scopes output-s ctx))
-  
-  (unless skip-log-exit?
-    (log-expand local-ctx 'exit-local result-s))
-  
-  result-s)
+   (log-expand local-ctx 'enter-local)
+   (when as-transformer? (log-expand local-ctx 'phase-up))
+   (log-expand* local-ctx ['local-pre input-s] ['start-expand])
+   
+   (define output-s (cond
+                     [(and as-transformer? capture-lifts?)
+                      (expand-transformer input-s local-ctx
+                                          #:context context
+                                          #:expand-lifts? #f
+                                          #:begin-form? #t
+                                          #:lift-key lift-key
+                                          #:always-wrap? #t)]
+                     [as-transformer?
+                      (expand-transformer input-s local-ctx
+                                          #:context context
+                                          #:expand-lifts? #f
+                                          #:begin-form? (eq? 'top-level context)
+                                          #:lift-key lift-key)]
+                     [capture-lifts?
+                      (expand/capture-lifts input-s local-ctx
+                                            #:begin-form? #t
+                                            #:lift-key lift-key
+                                            #:always-wrap? #t)]
+                     [else
+                      (expand input-s local-ctx)]))
+   
+   (log-expand local-ctx 'local-post output-s)
+   
+   (define result-s (flip-introduction-scopes output-s ctx))
+   
+   (unless skip-log-exit?
+     (log-expand local-ctx 'exit-local result-s))
+   
+   result-s))
