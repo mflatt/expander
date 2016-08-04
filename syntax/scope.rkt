@@ -221,7 +221,7 @@
                           (lambda () (shifted-multi-scope phase multi-scope))))]
    [else
     ;; `equal?`-hashed by shifted-to-label-phase
-    (or (hash-ref (multi-scope-label-shifted multi-scope) phase #f)
+    (or (hash-ref (unbox (multi-scope-label-shifted multi-scope)) phase #f)
         (transaction-loop (multi-scope-label-shifted multi-scope)
                           phase
                           (lambda () (shifted-multi-scope phase multi-scope))))]))
