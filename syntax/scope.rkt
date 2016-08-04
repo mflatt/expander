@@ -132,8 +132,8 @@
 (struct multi-scope (id       ; identity
                      name     ; for debugging
                      scopes   ; phase -> representative-scope
-                     shifted  ; interned shifted-multi-scopes for non-label phases
-                     label-shifted) ; interned shifted-multi-scopes for label phases
+                     shifted  ; box of table: interned shifted-multi-scopes for non-label phases
+                     label-shifted) ; box of table: interned shifted-multi-scopes for label phases
         #:property prop:serialize
         (lambda (ms ser-push! state)
           (ser-push! 'tag '#:multi-scope)
@@ -144,7 +144,7 @@
           (reach (multi-scope-scopes ms))))
 
 (define (deserialize-multi-scope name scopes)
-  (multi-scope (new-deserialize-scope-id!) name scopes (make-hasheqv) (make-hash)))
+  (multi-scope (new-deserialize-scope-id!) name scopes (box (hasheqv)) (box (hash))))
 
 (struct representative-scope scope (owner   ; a multi-scope for which this one is a phase-specific identity
                                     phase)  ; phase of this scope
@@ -204,19 +204,27 @@
   (intern-shifted-multi-scope phase multi-scope))
 
 (define (intern-shifted-multi-scope phase multi-scope)
+  (define (transaction-loop boxed-table key make)
+    (or (hash-ref (unbox boxed-table) phase #f)
+        (let* ([val (make)]
+               [current (unbox boxed-table)]
+               [next (hash-set current key val)])
+          (if (box-cas! boxed-table current next)
+              val
+              (transaction-loop boxed-table key make)))))
   (cond
    [(phase? phase)
     ;; `eqv?`-hashed by phase
-    (or (hash-ref (multi-scope-shifted multi-scope) phase #f)
-        (let ([sms (shifted-multi-scope phase multi-scope)])
-          (hash-set! (multi-scope-shifted multi-scope) phase sms)
-          sms))]
+    (or (hash-ref (unbox (multi-scope-shifted multi-scope)) phase #f)
+        (transaction-loop (multi-scope-shifted multi-scope)
+                          phase
+                          (lambda () (shifted-multi-scope phase multi-scope))))]
    [else
     ;; `equal?`-hashed by shifted-to-label-phase
     (or (hash-ref (multi-scope-label-shifted multi-scope) phase #f)
-        (let ([sms (shifted-multi-scope phase multi-scope)])
-          (hash-set! (multi-scope-label-shifted multi-scope) phase sms)
-          sms))]))
+        (transaction-loop (multi-scope-label-shifted multi-scope)
+                          phase
+                          (lambda () (shifted-multi-scope phase multi-scope))))]))
 
 ;; A `shifted-to-label-phase` record in the `phase` field of a
 ;; `shifted-multi-scope` makes the shift reversible; when we're
@@ -244,7 +252,7 @@
   (scope (new-scope-id!) kind empty-binding-table))
 
 (define (new-multi-scope [name #f])
-  (intern-shifted-multi-scope 0 (multi-scope (new-scope-id!) name (make-hasheqv) (make-hasheqv) (make-hash))))
+  (intern-shifted-multi-scope 0 (multi-scope (new-scope-id!) name (make-hasheqv) (box (hasheqv)) (box (hash)))))
 
 (define (multi-scope-to-scope-at-phase ms phase)
   ;; Get the identity of `ms` at phase`

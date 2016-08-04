@@ -1,7 +1,8 @@
 #lang racket/base
 (require "../compile/serialize-property.rkt"
          "contract.rkt"
-         "parse-module-path.rkt")
+         "parse-module-path.rkt"
+         "intern.rkt")
 
 (provide module-path?
          
@@ -83,7 +84,7 @@
       (car name)
       name))
 
-(define resolved-module-paths (make-weak-hash))
+(define resolved-module-paths (make-weak-intern-table))
 
 (define (make-resolved-module-path p)
   (unless (or (symbol? p)
@@ -103,13 +104,7 @@
                            "                    (and/c path? complete-path?))\n"
                            "              (non-empty-listof symbol?)))")
                           p))
-  ;; FIXME: make atomic
-  (define rp (resolved-module-path p))
-  (or (let ([wb (hash-ref resolved-module-paths rp #f)])
-        (and wb (weak-box-value wb)))
-      (begin
-        (hash-set! resolved-module-paths rp (make-weak-box rp))
-        rp)))
+  (weak-intern! resolved-module-paths (resolved-module-path p)))
 
 (define (resolved-module-path->module-path r)
   (define name (resolved-module-path-name r))
