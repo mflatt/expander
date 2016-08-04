@@ -149,8 +149,11 @@
                             [phase phase]
                             [just-once? #f]))
    
-   ;; Add the module's scope to the bodies
-   (define bodys (map apply-module-scopes (m 'body)))
+   ;; Add the module's scope to the body forms; use `disarmed-s` and
+   ;; re-match to extract the body forms, because that improves sharing
+   (define bodys (let ([scoped-s (apply-module-scopes disarmed-s)])
+                   (define-match m scoped-s '(_ _ _ body ...))
+                   (m 'body)))
    
    ;; To keep track of all requires and provides
    (define requires+provides (make-requires+provides self))
@@ -517,39 +520,41 @@
                                   init-ctx keep-enclosing-scope-at-phase
                                   self enclosing-self enclosing-mod)
   (lambda (s)
-    (define s-without-enclosing
-      (if keep-enclosing-scope-at-phase
-          ;; Keep enclosing module scopes for `(module* _ #f ....)`
-          s
-          ;; Remove the scopes of the top level or a module outside of
-          ;; this module, as well as any relevant use-site scopes
-          (remove-use-site-scopes
-           (for/fold ([s s]) ([sc (in-list (root-expand-context-module-scopes init-ctx))])
-             (remove-scope s sc))
-           init-ctx)))
-    ;; Add outside- and inside-edge scopes
-    (define s-with-edges
-      (add-scope (add-scope s-without-enclosing
-                            outside-scope)
-                 inside-scope))
-    (define s-with-suitable-enclosing
-      (cond
-       [keep-enclosing-scope-at-phase
-        ;; Shift any references to the enclosing module to be relative to the
-        ;; submodule
-        (syntax-module-path-index-shift
-         s-with-edges
-         enclosing-self
-         enclosing-mod)]
-       [else s-with-edges]))
-    ;; In case we're expanding syntax that was previously expanded,
-    ;; shift the generic "self" to the "self" for the current expansion:
-    (syntax-module-path-index-shift
-     s-with-suitable-enclosing
-     (make-generic-self-module-path-index self)
-     self
-     ;; Also preserve the expansion-time code inspector
-     (current-code-inspector))))
+    (performance-region
+     ['expand 'module 'scopes]
+     (define s-without-enclosing
+       (if keep-enclosing-scope-at-phase
+           ;; Keep enclosing module scopes for `(module* _ #f ....)`
+           s
+           ;; Remove the scopes of the top level or a module outside of
+           ;; this module, as well as any relevant use-site scopes
+           (remove-use-site-scopes
+            (for/fold ([s s]) ([sc (in-list (root-expand-context-module-scopes init-ctx))])
+              (remove-scope s sc))
+            init-ctx)))
+     ;; Add outside- and inside-edge scopes
+     (define s-with-edges
+       (add-scope (add-scope s-without-enclosing
+                             outside-scope)
+                  inside-scope))
+     (define s-with-suitable-enclosing
+       (cond
+        [keep-enclosing-scope-at-phase
+         ;; Shift any references to the enclosing module to be relative to the
+         ;; submodule
+         (syntax-module-path-index-shift
+          s-with-edges
+          enclosing-self
+          enclosing-mod)]
+        [else s-with-edges]))
+     ;; In case we're expanding syntax that was previously expanded,
+     ;; shift the generic "self" to the "self" for the current expansion:
+     (syntax-module-path-index-shift
+      s-with-suitable-enclosing
+      (make-generic-self-module-path-index self)
+      self
+      ;; Also preserve the expansion-time code inspector
+      (current-code-inspector)))))
 
 ;; ----------------------------------------
 
