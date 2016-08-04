@@ -22,7 +22,8 @@
 
 (provide eval-module
          compiled-module->declaration-instance
-         compiled-module->h+declaration-instance)
+         compiled-module->h+declaration-instance
+         compiled-module->h)
 
 (define (eval-module c
                      #:namespace [ns (current-namespace)]
@@ -266,12 +267,7 @@
 ;;
 ;;   h - hash from the module's linklet bundle
 ;;
-;;  data-instance - provides data, either extracted from
-;;  compiled-in-memory or instantiated from the bundle
-;;
-;;  declaration-instance - provides metadata, extracted from the
-;;  bundle and linked with `data-instance`
-(define (compiled-module->dh+h+data-instance+declaration-instance c)
+(define (compiled-module->dh+h c)
   (define ld/h (if (compiled-in-memory? c)
                    (compiled-in-memory-linklet-directory c)
                    c))
@@ -285,6 +281,23 @@
   (define h (linklet-bundle->hash (if dh
                                       (hash-ref dh #f)
                                       ld/h)))
+  
+  (values dh h))
+
+(define (compiled-module->h c)
+  (define-values (dh h)
+    (compiled-module->dh+h c))
+  h)
+
+;; Additionally returns:
+;;
+;;  data-instance - provides data, either extracted from
+;;  compiled-in-memory or instantiated from the bundle
+;;
+;;  declaration-instance - provides metadata, extracted from the
+;;  bundle and linked with `data-instance`
+(define (compiled-module->dh+h+data-instance+declaration-instance c)
+  (define-values (dh h) (compiled-module->dh+h c))
 
   (define data-instance
     (if (compiled-in-memory? c)

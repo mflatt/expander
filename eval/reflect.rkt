@@ -137,8 +137,8 @@
 
 (define (module-compiled-language-info c)
   (check 'module-compiled-language-info compiled-module-expression? c)  
-  (define inst (compiled-module->declaration-instance c))
-  (instance-variable-value inst 'language-info))
+  (define h (compiled-module->h c))
+  (hash-ref h 'language-info #f))
 
 (define (module-compiled-imports c)
   (check 'module-compiled-imports compiled-module-expression? c)
@@ -166,8 +166,8 @@
 
 (define (module-compiled-cross-phase-persistent? c)
   (check 'module-compiled-cross-phase-persistent?  compiled-module-expression? c)
-  (define inst (compiled-module->declaration-instance c))
-  (instance-variable-value inst 'cross-phase-persistent?))
+  (define h (compiled-module->h c))
+  (hash-ref h 'cross-phase-persistent? #f))
 
 ;; ----------------------------------------
 
