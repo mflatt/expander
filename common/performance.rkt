@@ -125,7 +125,7 @@
                                                         (make-string (+ (- label-max-len (string-length (format "~a" name)) (string-length indent))
                                                                         (- value-max-len (whole-len (format "~a" (stat-msecs v)))))
                                                                      #\space)
-                                                        (regexp-replace #rx"[.](..?).*" (format "~a" (stat-msecs v)) ".\\1")
+                                                        (regexp-replace #rx"[.](..).*" (format "~a00" (stat-msecs v)) ".\\1")
                                                         (make-string (- count-max-len (string-length (format "~a" (stat-count v))))
                                                                      #\space)
                                                         (stat-count v)))
