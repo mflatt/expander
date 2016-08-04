@@ -9,7 +9,6 @@
          "../common/phase.rkt"
          "../syntax/track.rkt"
          "../syntax/error.rkt"
-         "../syntax/inspector.rkt"
          "../namespace/namespace.rkt"
          "../namespace/module.rkt"
          "../syntax/binding.rkt"
@@ -545,13 +544,12 @@
        [else s-with-edges]))
     ;; In case we're expanding syntax that was previously expanded,
     ;; shift the generic "self" to the "self" for the current expansion:
-    (define s-shifted
-      (syntax-module-path-index-shift
-       s-with-suitable-enclosing
-       (make-generic-self-module-path-index self)
-       self))
-    ;; Preserve the expansion-time code inspector
-    (syntax-set-inspector s-shifted (current-code-inspector))))
+    (syntax-module-path-index-shift
+     s-with-suitable-enclosing
+     (make-generic-self-module-path-index self)
+     self
+     ;; Also preserve the expansion-time code inspector
+     (current-code-inspector))))
 
 ;; ----------------------------------------
 
@@ -851,40 +849,42 @@
                           #:phase phase
                           #:self self
                           #:ctx ctx)
-  (let loop ([bodys expression-expanded-bodys] [phase phase])
-    (cond
-     [(null? bodys) null]
-     [else
-      (define disarmed-body (syntax-disarm (car bodys)))
-      (case (core-form-sym disarmed-body phase)
-        [(#%provide)
-         (log-expand ctx 'enter-prim (car bodys))
-         (log-expand ctx 'enter-prim-provide)
-         (define-match m disarmed-body '(#%provide spec ...))
-         (define-values (track-stxes specs)
-           (parse-and-expand-provides! (m 'spec) (car bodys)
-                                       requires+provides self
-                                       phase (struct-copy expand-context ctx
-                                                          [context 'top-level]
-                                                          [phase phase]
-                                                          [namespace (namespace->namespace-at-phase m-ns phase)]
-                                                          [requires+provides requires+provides]
-                                                          [declared-submodule-names declared-submodule-names])))
-         (log-expand ctx 'exit-prim)
-         (cons (syntax-track-origin*
-                track-stxes
-                (rebuild
-                 (car bodys) disarmed-body
-                 `(,(m '#%provide) ,@specs)))
-               (loop (cdr bodys) phase))]
-        [(begin-for-syntax)
-         (define-match m disarmed-body '(begin-for-syntax e ...))
-         (define nested-bodys (loop (m 'e) (add1 phase)))
-         (cons (rebuild (car bodys) disarmed-body `(,(m 'begin-for-syntax) ,@nested-bodys))
-               (loop (cdr bodys) phase))]
-        [else
-         (cons (car bodys)
-               (loop (cdr bodys) phase))])])))
+  (performance-region
+   ['expand 'provide]
+   (let loop ([bodys expression-expanded-bodys] [phase phase])
+     (cond
+      [(null? bodys) null]
+      [else
+       (define disarmed-body (syntax-disarm (car bodys)))
+       (case (core-form-sym disarmed-body phase)
+         [(#%provide)
+          (log-expand ctx 'enter-prim (car bodys))
+          (log-expand ctx 'enter-prim-provide)
+          (define-match m disarmed-body '(#%provide spec ...))
+          (define-values (track-stxes specs)
+            (parse-and-expand-provides! (m 'spec) (car bodys)
+                                        requires+provides self
+                                        phase (struct-copy expand-context ctx
+                                                           [context 'top-level]
+                                                           [phase phase]
+                                                           [namespace (namespace->namespace-at-phase m-ns phase)]
+                                                           [requires+provides requires+provides]
+                                                           [declared-submodule-names declared-submodule-names])))
+          (log-expand ctx 'exit-prim)
+          (cons (syntax-track-origin*
+                 track-stxes
+                 (rebuild
+                  (car bodys) disarmed-body
+                  `(,(m '#%provide) ,@specs)))
+                (loop (cdr bodys) phase))]
+         [(begin-for-syntax)
+          (define-match m disarmed-body '(begin-for-syntax e ...))
+          (define nested-bodys (loop (m 'e) (add1 phase)))
+          (cons (rebuild (car bodys) disarmed-body `(,(m 'begin-for-syntax) ,@nested-bodys))
+                (loop (cdr bodys) phase))]
+         [else
+          (cons (car bodys)
+                (loop (cdr bodys) phase))])]))))
 
 ;; ----------------------------------------
 

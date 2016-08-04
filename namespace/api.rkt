@@ -3,7 +3,6 @@
          (only-in "../syntax/scope.rkt" add-scopes push-scope syntax-scope-set)
          (only-in "../syntax/fallback.rkt" fallback-first)
          (only-in "../syntax/binding.rkt" resolve+shift syntax-transfer-shifts)
-         "../syntax/inspector.rkt"
          "../syntax/module-binding.rkt"
          "../syntax/api.rkt"
          "../syntax/error.rkt"
@@ -65,12 +64,11 @@
                                             #:unless (equal? sc post-scope))
                                    sc))
   (define (add-ns-scopes s)
-    (syntax-set-inspector
-     (syntax-transfer-shifts (add-scopes (push-scope s post-scope)
-                                         other-namespace-scopes)
-                             (root-expand-context-all-scopes-stx root-ctx))
-     (or (namespace-declaration-inspector ns)
-         (current-code-inspector))))
+    (syntax-transfer-shifts (add-scopes (push-scope s post-scope)
+                                        other-namespace-scopes)
+                            (root-expand-context-all-scopes-stx root-ctx)
+                            (or (namespace-declaration-inspector ns)
+                                (current-code-inspector))))
   (define maybe-module-id
     (and (pair? (syntax-e s))
          (identifier? (car (syntax-e s)))

@@ -128,20 +128,24 @@
 ;; syntax literals in a module to match the module's declaration-time
 ;; inspector.
 (define (syntax-module-path-index-shift s from-mpi to-mpi [inspector #f])
-  (if (eq? from-mpi to-mpi)
-      s
-      (let ([shift (cons from-mpi to-mpi)])
-        (define-memo-lite (add-shift shifts)
-          (cons shift shifts))
-        (syntax-map s
-                    (lambda (tail? d) d)
-                    (lambda (s d)
-                      (struct-copy syntax s
-                                   [content d]
-                                   [mpi-shifts (add-shift (syntax-mpi-shifts s))]
-                                   [inspector (or inspector
-                                                  (syntax-inspector s))]))
-                    syntax-e/no-taint))))
+  (cond
+   [(eq? from-mpi to-mpi)
+    (if inspector
+        (syntax-set-inspector s inspector)
+        s)]
+   [else
+    (let ([shift (cons from-mpi to-mpi)])
+      (define-memo-lite (add-shift shifts)
+        (cons shift shifts))
+      (syntax-map s
+                  (lambda (tail? d) d)
+                  (lambda (s d)
+                    (struct-copy syntax s
+                                 [content d]
+                                 [mpi-shifts (add-shift (syntax-mpi-shifts s))]
+                                 [inspector (or (syntax-inspector s)
+                                                inspector)]))
+                  syntax-e/no-taint))]))
 
 ;; Use `resolve` instead of `resolve+shift` when the module of a
 ;; module binding is relevant or when `free-identifier=?` equivalences
@@ -233,9 +237,25 @@
                                                       (binding-module-path-index-shift b from-mpi to-mpi)))]
    [else b]))
 
-(define (syntax-transfer-shifts to-s from-s)
-  (for/fold ([s to-s]) ([shift (in-list (reverse (syntax-mpi-shifts from-s)))])
-    (syntax-module-path-index-shift s (car shift) (cdr shift))))
+(define (syntax-transfer-shifts to-s from-s [inspector #f])
+  (define shifts (syntax-mpi-shifts from-s))
+  (cond
+   [(and (null? shifts) inspector)
+    (syntax-set-inspector to-s inspector)]
+   [else
+    (for/fold ([s to-s]) ([shift (in-list (reverse shifts))]
+                          [i (in-naturals)])
+      (syntax-module-path-index-shift s (car shift) (cdr shift) (and (zero? i) inspector)))]))
+
+(define (syntax-set-inspector s insp)
+  (syntax-map s
+              (lambda (tail? d) d)
+              (lambda (s d)
+                (struct-copy syntax s
+                             [content d]
+                             [inspector (or (syntax-inspector s)
+                                            insp)]))
+              syntax-content))
 
 ;; ----------------------------------------
 

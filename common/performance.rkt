@@ -26,6 +26,9 @@
 ;; The key '_ as a path element is special: it is replaced
 ;; by the correspondig element of the enclosing region's
 ;; path (if any).
+;;
+;; Beware that `body ...` is not in tail position when
+;; performance measurement is enabled.
 
 ;; ----------------------------------------
 ;; Re-export this submodule to enable performance measurements
@@ -109,7 +112,7 @@
                                                  count-len
                                                  (+ 2 indent))]))))
                               (log-performance-info "REGION   ~a   MSECS~aCOUNT"
-                                                    (make-string (- (+ label-max-len value-max-len) 10)
+                                                    (make-string (max 0 (- (+ label-max-len value-max-len) 10))
                                                                  #\space)
                                                     (make-string count-max-len
                                                                  #\space))
