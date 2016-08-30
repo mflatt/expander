@@ -36,6 +36,7 @@
                                 (car (cdr (syntax-e b))))
                               (syntax-e (car (cdr (syntax-e stx))))))))])
     ,e))
+
 (compile+eval-expression
  (add-let
   '(lambda (x) 
@@ -82,7 +83,7 @@
 "distinct generated variables via introduction scope"
 ;; Essentially the same as
 ;;   (define-syntax-rule (gen2 _ x1 x2 v1 v2)
-;;    (let ([x1 v1]
+;;     (let ([x1 v1]
 ;;           [v2 v2])
 ;;       (list x1 x2)))
 ;;   (define-syntax-rule (gen1 next . rest)

@@ -5,9 +5,12 @@ Relative to the "micro" expander:
 
  * strips away some module and abstraction boundaries
 
+ * simplifies `datum->syntax` to always create syntax with an empty
+   scope set
+
 ----------------------------------------
 
-Roadmap to the main pieces:
+Roadmap:
 
  main.rkt - the whole expander and compiler
 

@@ -10,51 +10,46 @@
 
 ;; ----------------------------------------
 
-(struct syntax (e        ; datum and nested syntax objects
-                scopes)  ; scopes that apply at all phases
+(struct syntax (e        ; a non-pair atom or a list of syntax
+                scopes)  ; a set of scopes
         #:transparent)
 
 (define (identifier? s)
   (and (syntax? s) (symbol? (syntax-e s))))
 
-;; Discard scopes:
+(define (bound-identifier=? a b)
+  (and (eq? (syntax-e a) (syntax-e b))
+       (equal? (syntax-scopes a) (syntax-scopes b))))
+
+;; Discard scopes --- immediate and nested:
 (define (syntax->datum s)
-  (let loop ([s (syntax-e s)])
+  (let ([e (syntax-e s)])
     (cond
-     [(syntax? s) (loop (syntax-e s))]
-     [(pair? s) (cons (loop (car s))
-                      (loop (cdr s)))]
-     [else s])))
+     [(list? e) (map syntax->datum e)]
+     [else e])))
 
-;; Coerce to syntax, adding an empty scope set:
-(define (datum->syntax s)
+;; Coerce to syntax with an empty scope set, leaving
+;; existing syntax as-is
+(define (datum->syntax v)
   (cond
-   [(syntax? s) s]
-   [(list? s) (syntax (map datum->syntax s)
+   [(syntax? v) v]
+   [(list? v) (syntax (map datum->syntax v)
                       (seteq))]
-   [(pair? s) (syntax (cons (datum->syntax (car s))
-                            (datum->syntax (cdr s)))
-                      (seteq))]
-   [else (syntax s (seteq))]))
-
-;; Define a matcher using "match.rkt":
-(define match-syntax
-  (make-match-syntax syntax? identifier? syntax-e))
+   [else (syntax v (seteq))]))
 
 ;; ----------------------------------------
 
 ;; A scope's identity is based on `eq?`
 (struct scope ())
 
-;; Add or flip a scope --- recurs to nested syntax
-(define (apply-scope s sc op)
+;; Add or flip a scope everywehere (i.e., including nested syntax)
+(define (apply-scope s/e sc op)
   (cond
-   [(syntax? s) (struct-copy syntax s
-                             [e (apply-scope (syntax-e s) sc op)]
-                             [scopes (op (syntax-scopes s) sc)])]
-   [(pair? s) (cons (apply-scope (car s) sc op)
-                    (apply-scope (cdr s) sc op))]
-   [else s]))
+   [(syntax? s/e) (struct-copy syntax s/e
+                               [e (apply-scope (syntax-e s/e) sc op)]
+                               [scopes (op (syntax-scopes s/e) sc)])]
+   [(list? s/e) (map (lambda (s) (apply-scope s sc op)) s/e)]
+   [else s/e]))
 
 (define (add-scope s sc)
   (apply-scope s sc set-add))
@@ -69,45 +64,52 @@
 
 ;; ----------------------------------------
 
+;; A binding is either a gensym for a local variable or a
+;; symbol for a core form or primitive
+
 ;; Global table of bindings
 (define all-bindings (make-hash))
 
 (define (add-binding! id binding)
   (hash-set! all-bindings id binding))
 
+;; Finds the binding for a given identifier; returns #f if the
+;; identifier is unbound
 (define (resolve id)
-  (define candidate-ids
-    (for/list ([(c-id) (in-hash-keys all-bindings)]
-               #:when (and (eq? (syntax-e c-id) (syntax-e id))
-                           (subset? (syntax-scopes c-id) (syntax-scopes id))))
-      c-id))
-  (define max-candidate-id
-    (and (pair? candidate-ids)
-         (car
-          (sort candidate-ids >
-                #:key (lambda (c-id) (set-count (syntax-scopes c-id)))))))
+  (define candidate-ids (find-all-matching-bindings id))
   (cond
-   [max-candidate-id
-    (for ([c-id (in-list candidate-ids)])
-      (unless (subset? (syntax-scopes c-id)
-                       (syntax-scopes max-candidate-id))
-        (error "ambiguous:" id)))
+   [(pair? candidate-ids)
+    (define max-candidate-id
+      (argmax (lambda (c-id) (set-count (syntax-scopes c-id)))
+              candidate-ids))
+    (check-unambiguous max-candidate-id candidate-ids id)
     (hash-ref all-bindings max-candidate-id)]
    [else #f]))
 
-;; ----------------------------------------
+;; Find all candidiate bindings for `id` as the ones with
+;; a subset of the scopes of `id`
+(define (find-all-matching-bindings id)
+  (for/list ([(c-id) (in-hash-keys all-bindings)]
+             #:when (and (eq? (syntax-e c-id) (syntax-e id))
+                         (subset? (syntax-scopes c-id) (syntax-scopes id))))
+    c-id))
 
-;; A binding is either a gensym for a local variable or a
-;; symbol for a core form or primitive
+;; Check that the binding with the biggest scope set is a superset
+;; of all the others
+(define (check-unambiguous max-candidate-id candidate-ids error-id)
+  (for ([c-id (in-list candidate-ids)])
+    (unless (subset? (syntax-scopes c-id)
+                     (syntax-scopes max-candidate-id))
+      (error "ambiguous:" error-id))))
 
 (define (free-identifier=? a b)
   (eq? (resolve a) (resolve b)))
 
 ;; ----------------------------------------
 
-;; An expansion environment maps keys to a generated symbol
-;; for a variable or a procedure for a macro:
-(define empty-env #hasheq())
+;; An expansion environment maps a local-binding gensym to a procedure
+;; for a macro or the constant `variable` for a run-time variable
+(define empty-env (hasheq))
 (define variable (gensym 'variable))
 
 (define (env-extend env key val)
@@ -117,7 +119,8 @@
 (define (env-lookup env binding)
   (hash-ref env binding missing))
 
-;; Helper for registering a local binding in a set of scopes:
+;; Helper for registering a local binding in a set of scopes,
+;; returns the gensym created to represent the binding
 (define (add-local-binding! id)
   (define key (gensym (syntax-e id)))
   (add-binding! id key)
@@ -136,55 +139,29 @@
 (for ([sym (in-set (set-union core-forms core-primitives))])
   (add-binding! (syntax sym (seteq core-scope)) sym))
 
+;; The `namespace-syntax-introduce` function adds the core scope to a
+;; syntax object; it needs to be used, for example, on a just-created
+;; syntax object to make `lambda` refer to the core lambda form
+
+(define (namespace-syntax-introduce s)
+  (add-scope s core-scope))
 
 ;; ----------------------------------------
 
+;; Define a matcher on syntax using "match.rkt":
+(define match-syntax
+  (make-match-syntax syntax? identifier? syntax-e))
+
+;; ----------------------------------------
+
+;; Main expander entry point and loop:
 (define (expand s [env empty-env])
   (cond
    [(identifier? s)
-    ;; An identifier by itself
-    (define binding (resolve s))
-    (cond
-     [(set-member? core-forms binding)
-      (error "bad syntax:" s)]
-     [(set-member? core-primitives binding)
-      s]
-     [else
-      (define v (env-lookup env binding))
-      (cond
-       [(eq? v missing)
-        (error "out of context:" s)]
-       [(eq? v variable)
-        s]
-       [(procedure? v)
-        ;; apply a macro, then recur:
-        (expand (v s) env)]
-       [else
-        ;; compile-time value that's not a procedure
-        (error "illegal use of syntax:" s)])])]
+    (expand-identifier s env)]
    [(and (pair? (syntax-e s))
          (identifier? (car (syntax-e s))))
-    ;; An "application" form that starts with an identifier
-    (define id (car (syntax-e s)))
-    (define binding (resolve id))
-    (case binding
-      [(lambda)
-       (expand-lambda s env)]
-      [(let-syntax)
-       (expand-let-syntax s env)]
-      [(#%app)
-       (define m (match-syntax '(#%app e ...)))
-       (expand-app (syntax (m 'e) (seteq)) env)]
-      [(quote quote-syntax)
-       s]
-      [else
-       (define v (env-lookup env binding))
-       (cond
-        [(procedure? v)
-         ;; Apply transformer, then recur
-         (expand (apply-transformer v s) env)]
-        [else
-         (expand-app s env)])])]
+    (expand-id-application-form s env)]
    [(or (pair? (syntax-e s))
         (null? (syntax-e s)))
     ;; An application form that doesn't start with an identifier
@@ -195,6 +172,51 @@
     (syntax (list (syntax 'quote (seteq core-scope))
                   s)
             (seteq))]))
+
+;; An identifier by itself:
+(define (expand-identifier s env)
+  (define binding (resolve s))
+  (cond
+   [(set-member? core-forms binding)
+    (error "bad syntax:" s)]
+   [(set-member? core-primitives binding)
+    s]
+   [else
+    (define v (env-lookup env binding))
+    (cond
+     [(eq? v missing)
+      (error "out of context:" s)]
+     [(eq? v variable)
+      s]
+     [(procedure? v)
+      ;; Apply a macro, then recur:
+      (expand (apply-transformer v s) env)]
+     [else
+      ;; Compile-time value that's not a procedure
+      (error "illegal use of syntax:" s)])]))
+
+;; An "application" form that starts with an identifier
+(define (expand-id-application-form s env)
+  (define id (car (syntax-e s)))
+  (define binding (resolve id))
+  (case binding
+    [(lambda)
+     (expand-lambda s env)]
+    [(let-syntax)
+     (expand-let-syntax s env)]
+    [(#%app)
+     (define m (match-syntax '(#%app e ...)))
+     (expand-app (syntax (m 'e) (seteq)) env)]
+    [(quote quote-syntax)
+     s]
+    [else
+     (define v (env-lookup env binding))
+     (cond
+      [(procedure? v)
+       ;; Apply transformer, then recur
+       (expand (apply-transformer v s) env)]
+      [else
+       (expand-app s env)])]))
 
 ;; Given a macro transformer `t`, apply it --- adding appropriate
 ;; scopes to represent the expansion step
@@ -262,14 +284,14 @@
 
 ;; ----------------------------------------
 
-;; Expand and evaluate `s` as a compile-time expression
+;; Expand and evaluate `rhs` as a compile-time expression
 (define (eval-for-syntax-binding rhs env)
   (eval-compiled (compile (expand rhs empty-env))))
 
 ;; ----------------------------------------
 
-;; Convert an expanded syntax object to an expression that is represented
-;; by a plain S-expression.
+;; Convert an expanded syntax object to an expression that is
+;; represented by a plain S-expression.
 (define (compile s)
   (cond
    [(pair? (syntax-e s))
@@ -299,15 +321,13 @@
    [else
     (error "bad syntax after expansion:" s)]))
 
+;; Using the host Racket system: create a fresh namespace for
+;; evaluating expressions that have been `expand`ed and `compile`d,
+;; and install the expander's `datum->syntax` and `syntax-e`
+;; to replace the host primitives
 (define namespace (make-base-namespace))
 (namespace-set-variable-value! 'datum->syntax datum->syntax #t namespace)
 (namespace-set-variable-value! 'syntax-e syntax-e #t namespace)
 
 (define (eval-compiled s)
   (eval s namespace))
-
-;; ----------------------------------------
-
-(define (namespace-syntax-introduce s)
-  ;; The only initial bindings are in the core scope
-  (add-scope s core-scope))
