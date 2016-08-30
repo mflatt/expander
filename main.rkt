@@ -94,6 +94,13 @@
 ;; A scope is an empty record, and its identity is based on `eq?`
 (struct scope ())
 
+(module+ test
+  (define sc1 (scope))
+  (define sc2 (scope))
+  
+  (check-equal? (eq? sc1 sc2) #f)
+  (check-equal? (eq? sc1 sc1) #t))
+
 ;; Add or flip a scope everywhere (i.e., including nested syntax)
 (define (apply-scope s sc op)
   (cond
@@ -115,9 +122,6 @@
       (set-add s e)))
 
 (module+ test
-  (define sc1 (scope))
-  (define sc2 (scope))
-  
   (check-equal? (add-scope (syntax 'x (seteq)) sc1)
                 (syntax 'x (seteq sc1)))
   (check-equal? (add-scope (datum->syntax '(x (y))) sc1)
@@ -147,19 +151,38 @@
   (hash-set! all-bindings id binding))
 
 (module+ test
-  (define loc1 (gensym 'loc))
-  (define loc2 (gensym 'loc))
+  (define loc/a (gensym 'a))
+  ;; Simulates
+  ;;   (let ([a 1])
+  ;;     (let ([z 2])
+  ;;       ....))
+  ;; where `a` is bound only once.
+
+  (define loc/b-out (gensym 'b))
+  (define loc/b-in (gensym 'b))
+  ;; Simulates
+  ;;   (let ([b 1])
+  ;;     (let ([b 2])
+  ;;       ....))
+  ;; where the inner `b` shadows the outer `b`
+  
+  (define loc/c1 (gensym 'c))
+  (define loc/c2 (gensym 'c))
+  ;; Simulates
+  ;;    (list (let ([c 1]) ...)
+  ;;          (let ([c 2]) ...)))
+  ;; where the `c`s have non-overlaping binding scopes
   
   ;; Same binding in  sc1  or  sc1 + sc2:
-  (add-binding! (syntax 'test-a (seteq sc1)) loc1)
+  (add-binding! (syntax 'a (seteq sc1)) loc/a)
 
   ;; Shadowing in sc1 + sc2:
-  (add-binding! (syntax 'test-b (seteq sc1)) loc1)
-  (add-binding! (syntax 'test-b (seteq sc1 sc2)) loc2)
-
+  (add-binding! (syntax 'b (seteq sc1)) loc/b-out)
+  (add-binding! (syntax 'b (seteq sc1 sc2)) loc/b-in)
+  
   ;; Ambiguous in sc1 + sc2:
-  (add-binding! (syntax 'test-c (seteq sc1)) loc1)
-  (add-binding! (syntax 'test-c (seteq sc2)) loc2))
+  (add-binding! (syntax 'c (seteq sc1)) loc/c1)
+  (add-binding! (syntax 'c (seteq sc2)) loc/c2))
 
 ;; Finds the binding for a given identifier; returns #f if the
 ;; identifier is unbound
@@ -175,26 +198,26 @@
    [else #f]))
 
 (module+ test
-  (check-equal? (resolve (syntax 'test-a (seteq sc1)))
-                loc1)
-  (check-equal? (resolve (syntax 'test-a (seteq sc1 sc2)))
-                loc1)
-  (check-equal? (resolve (syntax 'test-a (seteq sc2)))
+  (check-equal? (resolve (syntax 'a (seteq sc1)))
+                loc/a)
+  (check-equal? (resolve (syntax 'a (seteq sc1 sc2)))
+                loc/a)
+  (check-equal? (resolve (syntax 'a (seteq sc2)))
                 #f)
 
-  (check-equal? (resolve (syntax 'test-b (seteq sc1)))
-                loc1)
-  (check-equal? (resolve (syntax 'test-b (seteq sc1 sc2)))
-                loc2)
-  (check-equal? (resolve (syntax 'test-b (seteq sc2)))
+  (check-equal? (resolve (syntax 'b (seteq sc1)))
+                loc/b-out)
+  (check-equal? (resolve (syntax 'b (seteq sc1 sc2)))
+                loc/b-in)
+  (check-equal? (resolve (syntax 'b (seteq sc2)))
                 #f)
 
-  (check-equal? (resolve (syntax 'test-c (seteq sc1)))
-                loc1)
+  (check-equal? (resolve (syntax 'c (seteq sc1)))
+                loc/c1)
   (check-exn (make-exn:fail? "ambiguous")
-             (lambda () (resolve (syntax 'test-c (seteq sc1 sc2)))))
-  (check-equal? (resolve (syntax 'test-c (seteq sc2)))
-                loc2))
+             (lambda () (resolve (syntax 'c (seteq sc1 sc2)))))
+  (check-equal? (resolve (syntax 'c (seteq sc2)))
+                loc/c2))
 
 ;; Find all candidiate bindings for `id` as the ones with
 ;; a subset of the scopes of `id`
@@ -205,18 +228,18 @@
     c-id))
 
 (module+ test
-  (check-equal? (find-all-matching-bindings (syntax 'test-a (seteq sc1)))
-                (list (syntax 'test-a (seteq sc1))))
-  (check-equal? (find-all-matching-bindings (syntax 'test-a (seteq sc2)))
+  (check-equal? (find-all-matching-bindings (syntax 'a (seteq sc1)))
+                (list (syntax 'a (seteq sc1))))
+  (check-equal? (find-all-matching-bindings (syntax 'a (seteq sc2)))
                 (list))
   
-  (check-equal? (list->set (find-all-matching-bindings (syntax 'test-b (seteq sc1 sc2))))
-                (set (syntax 'test-b (seteq sc1))
-                     (syntax 'test-b (seteq sc1 sc2))))
+  (check-equal? (list->set (find-all-matching-bindings (syntax 'b (seteq sc1 sc2))))
+                (set (syntax 'b (seteq sc1))
+                     (syntax 'b (seteq sc1 sc2))))
   
-  (check-equal? (list->set (find-all-matching-bindings (syntax 'test-c (seteq sc1 sc2))))
-                (set (syntax 'test-c (seteq sc1))
-                     (syntax 'test-c (seteq sc2)))))
+  (check-equal? (list->set (find-all-matching-bindings (syntax 'c (seteq sc1 sc2))))
+                (set (syntax 'c (seteq sc1))
+                     (syntax 'c (seteq sc2)))))
 
 ;; Check that the binding with the biggest scope set is a superset
 ;; of all the others
@@ -227,28 +250,28 @@
       (error "ambiguous:" error-id))))
 
 (module+ test
-  (check-equal? (check-unambiguous (syntax 'test-b (seteq sc1 sc2))
-                                   (list (syntax 'test-b (seteq sc1))
-                                         (syntax 'test-b (seteq sc1 sc2)))
-                                   (syntax 'test-b (seteq sc1 sc2)))
+  (check-equal? (check-unambiguous (syntax 'b (seteq sc1 sc2))
+                                   (list (syntax 'b (seteq sc1))
+                                         (syntax 'b (seteq sc1 sc2)))
+                                   (syntax 'b (seteq sc1 sc2)))
                 (void))
   (check-exn (make-exn:fail? "ambiguous")
              (lambda ()
-               (check-unambiguous (syntax 'test-c (seteq sc2))
-                                  (list (syntax 'test-c (seteq sc1))
-                                        (syntax 'test-c (seteq sc2)))
-                                  (syntax 'test-c (seteq sc1 sc2))))))
+               (check-unambiguous (syntax 'c (seteq sc2))
+                                  (list (syntax 'c (seteq sc1))
+                                        (syntax 'c (seteq sc2)))
+                                  (syntax 'c (seteq sc1 sc2))))))
   
 ;; Determine whether two identifiers have the same binding
 (define (free-identifier=? a b)
   (eq? (resolve a) (resolve b)))
 
 (module+ test
-  (check-equal? (free-identifier=? (syntax 'test-c (seteq sc2))
-                                   (syntax 'test-b (seteq sc1 sc2)))
+  (check-equal? (free-identifier=? (syntax 'a (seteq sc1))
+                                   (syntax 'a (seteq sc1 sc2)))
                 #t)
-  (check-equal? (free-identifier=? (syntax 'test-a (seteq sc1))
-                                   (syntax 'test-b (seteq sc1 sc2)))
+  (check-equal? (free-identifier=? (syntax 'b (seteq sc1))
+                                   (syntax 'b (seteq sc1 sc2)))
                 #f))               
 
 ;; ----------------------------------------
@@ -270,10 +293,10 @@
   (hash-ref env binding missing))
 
 (module+ test
-  (check-equal? (env-lookup empty-env loc1)
+  (check-equal? (env-lookup empty-env loc/a)
                 missing)
-  (check-equal? (env-lookup (env-extend empty-env loc1 'variable)
-                            loc1)
+  (check-equal? (env-lookup (env-extend empty-env loc/a 'variable)
+                            loc/a)
                 'variable))
 
 ;; Helper for registering a local binding in a set of scopes,
@@ -284,9 +307,9 @@
   key)
 
 (module+ test
-  (define loc3 (add-local-binding! (syntax 'test-d (seteq sc1 sc2))))
-  (check-equal? (resolve (syntax 'test-d (seteq sc1 sc2)))
-                loc3))
+  (define loc/d (add-local-binding! (syntax 'd (seteq sc1 sc2))))
+  (check-equal? (resolve (syntax 'd (seteq sc1 sc2)))
+                loc/d))
 
 ;; ----------------------------------------
 ;; Core syntax and primitives
@@ -359,14 +382,14 @@
                 (syntax 'cons (seteq core-scope)))
   
   ;; A locally-bound variable expands to itself:
-  (check-equal? (expand (syntax 'test-a (seteq sc1)) ; bound to `loc1` above
-                        (env-extend empty-env loc1 variable))
-                (syntax 'test-a (seteq sc1)))
+  (check-equal? (expand (syntax 'a (seteq sc1)) ; bound to `loc1` above
+                        (env-extend empty-env loc/a variable))
+                (syntax 'a (seteq sc1)))
   
   ;; A free variable triggers an error:
   (check-exn (make-exn:fail? "free variable")
              (lambda ()
-               (expand (syntax 'test-a (seteq))
+               (expand (syntax 'a (seteq))
                        empty-env)))
   
   ;; A number expands to a `quote` form:
@@ -376,11 +399,11 @@
   
   ;; Application of a locally-bound variable to a number expands to an
   ;; `#%app` form:
-  (check-equal? (expand (list (syntax 'test-a (seteq sc1))
+  (check-equal? (expand (list (syntax 'a (seteq sc1))
                               1)
-                        (env-extend empty-env loc1 variable))
+                        (env-extend empty-env loc/a variable))
                 (list (syntax '#%app (seteq core-scope))
-                      (syntax 'test-a (seteq sc1))
+                      (syntax 'a (seteq sc1))
                       (list (syntax 'quote (seteq core-scope))
                             1)))
 
@@ -396,13 +419,13 @@
   
   ;; A locally-bound macro expands by applying the macro:
   (check-equal? (syntax->datum
-                 (expand (syntax 'test-a (seteq sc1))
-                         (env-extend empty-env loc1 (lambda (s) (datum->syntax 1)))))
+                 (expand (syntax 'a (seteq sc1))
+                         (env-extend empty-env loc/a (lambda (s) (datum->syntax 1)))))
                 '(quote 1))
   (check-equal? (syntax->datum
-                 (expand (let ([s (datum->syntax '(test-a (lambda (x) x)))])
+                 (expand (let ([s (datum->syntax '(a (lambda (x) x)))])
                            (add-scope (add-scope s sc1) core-scope))
-                         (env-extend empty-env loc1 (lambda (s) (list-ref s 1)))))
+                         (env-extend empty-env loc/a (lambda (s) (list-ref s 1)))))
                 '(lambda (x) x)))
 
 ;; Main expander entry point and loop:
