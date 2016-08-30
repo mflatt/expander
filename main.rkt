@@ -31,7 +31,7 @@
   (check-equal? (identifier? (syntax 1 (seteq)))
                 #f))
 
-;; If identifiers as `bound-identier=?`, they are fully
+;; If identifiers are `bound-identier=?`, they are fully
 ;; interchangable: same symbol and same scopes
 (define (bound-identifier=? a b)
   (and (eq? (syntax-e a) (syntax-e b))
@@ -100,9 +100,8 @@
 ;; Add or flip a scope everywhere (i.e., including nested syntax)
 (define (apply-scope s/e sc op)
   (cond
-   [(syntax? s/e) (struct-copy syntax s/e
-                               [e (apply-scope (syntax-e s/e) sc op)]
-                               [scopes (op (syntax-scopes s/e) sc)])]
+   [(syntax? s/e) (syntax (apply-scope (syntax-e s/e) sc op)
+                          (op (syntax-scopes s/e) sc))]
    [(list? s/e) (map (lambda (s) (apply-scope s sc op)) s/e)]
    [else s/e]))
 
