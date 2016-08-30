@@ -31,14 +31,14 @@
   (and (syntax? s) (symbol? (syntax-e s))))
 
 (define (syntax->datum s)
-  (let loop ([s (syntax-e s)])
+  (let loop ([s/e (syntax-e s)])
     (cond
-     [(syntax? s) (loop (syntax-e s))]
-     [(pair? s) (cons (loop (car s))
-                      (loop (cdr s)))]
-     [else s])))
+     [(syntax? s/e) (loop (syntax-e s/e))]
+     [(pair? s/e) (cons (loop (car s/e))
+                        (loop (cdr s/e)))]
+     [else s/e])))
 
-(define (datum->syntax stx-c s [stx-l #f] [stx-p #f])
+(define (datum->syntax stx-c v [stx-l #f] [stx-p #f])
   (define (wrap e)
     (syntax e
             (if stx-c
@@ -47,12 +47,12 @@
             (and stx-l (syntax-srcloc stx-l))
             (if stx-p (syntax-props stx-p) empty-props)))
   (cond
-   [(syntax? s) s]
-   [(list? s) (wrap (for/list ([e (in-list s)])
-                      (datum->syntax stx-c e stx-l stx-p)))]
-   [(pair? s) (wrap (cons (datum->syntax stx-c (car s) stx-l stx-p)
-                          (datum->syntax stx-c (cdr s) stx-l stx-p)))]
-   [else (wrap s)]))
+   [(syntax? v) v]
+   [(list? v) (wrap (for/list ([elem-v (in-list v)])
+                      (datum->syntax stx-c elem-v stx-l stx-p)))]
+   [(pair? v) (wrap (cons (datum->syntax stx-c (car v) stx-l stx-p)
+                          (datum->syntax stx-c (cdr v) stx-l stx-p)))]
+   [else (wrap v)]))
 
 (define syntax-property
   (case-lambda

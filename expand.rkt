@@ -26,33 +26,10 @@
 (define (expand s ctx)
   (cond
    [(identifier? s)
-    (define binding (resolve s))
-    (cond
-     [(not binding)
-      ;; The implicit `#%top` form handles unbound identifiers
-      (expand-implicit '#%top s ctx)]
-     [else
-      ;; Variable or form as identifier macro
-      (dispatch (lookup binding ctx s) s ctx)])]
+    (expand-identifier s ctx)]
    [(and (pair? (syntax-e s))
          (identifier? (car (syntax-e s))))
-    ;; An "application" form that starts with an identifier
-    (define id (car (syntax-e s)))
-    (define binding (resolve id))
-    (cond
-     [(not binding)
-      ;; The `#%app` binding might do something with unbound ids
-      (expand-implicit '#%app s ctx)]
-     [else
-      ;; Find out whether it's bound as a variable, syntax, or core form
-      (define t (lookup binding ctx id))
-      (cond
-       [(variable? t)
-        ;; Not as syntax or core form, so use implicit `#%app`
-        (expand-implicit '#%app s ctx)]
-       [else
-        ;; Syntax or core form as "application"
-        (dispatch t s ctx)])])]
+    (expand-id-application-form s ctx)]
    [(or (pair? (syntax-e s))
         (null? (syntax-e s)))
     ;; An "application" form that doesn't start with an identifier, so
@@ -63,6 +40,36 @@
     ;; implicit `#%datum` form
     (expand-implicit '#%datum s ctx)]))
 
+;; An identifier by itself:
+(define (expand-identifier s ctx)
+  (define binding (resolve s))
+  (cond
+   [(not binding)
+    ;; The implicit `#%top` form handles unbound identifiers
+    (expand-implicit '#%top s ctx)]
+   [else
+    ;; Variable or form as identifier macro
+    (dispatch (lookup binding ctx s) s ctx)]))
+
+;; An "application" form that starts with an identifier
+(define (expand-id-application-form s ctx)
+  (define id (car (syntax-e s)))
+  (define binding (resolve id))
+  (cond
+   [(not binding)
+    ;; The `#%app` binding might do something with unbound ids
+    (expand-implicit '#%app s ctx)]
+   [else
+    ;; Find out whether it's bound as a variable, syntax, or core form
+    (define t (lookup binding ctx id))
+    (cond
+     [(variable? t)
+      ;; Not as syntax or core form, so use implicit `#%app`
+      (expand-implicit '#%app s ctx)]
+     [else
+      ;; Syntax or core form as "application"
+      (dispatch t s ctx)])]))
+  
 ;; Handle an implicit: `#%app`, `#%top`, or `#%datum`
 (define (expand-implicit sym s ctx)
   (define id (datum->syntax s sym))

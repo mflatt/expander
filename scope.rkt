@@ -1,5 +1,6 @@
 #lang racket/base
 (require racket/set
+         racket/list
          "syntax.rkt")
 
 (provide new-scope
@@ -46,14 +47,14 @@
   ((scope-id sc1) . > . (scope-id sc2)))
 
 ;; Add, remove, or flip a scope --- recurs to nested syntax
-(define (apply-scope s sc op)
+(define (apply-scope s/e sc op)
   (cond
-   [(syntax? s) (struct-copy syntax s
-                             [e (apply-scope (syntax-e s) sc op)]
-                             [scopes (op (syntax-scopes s) sc)])]
-   [(pair? s) (cons (apply-scope (car s) sc op)
-                    (apply-scope (cdr s) sc op))]
-   [else s]))
+   [(syntax? s/e) (struct-copy syntax s/e
+                               [e (apply-scope (syntax-e s/e) sc op)]
+                               [scopes (op (syntax-scopes s/e) sc)])]
+   [(pair? s/e) (cons (apply-scope (car s/e) sc op)
+                      (apply-scope (cdr s/e) sc op))]
+   [else s/e]))
 
 (define (add-scope s sc)
   (apply-scope s sc set-add))
@@ -96,30 +97,33 @@
   (unless (identifier? s)
     (raise-argument-error 'resolve "identifier?" s))
   (define scopes (syntax-scopes s))
-  (define sym (syntax-e s))
-  (define candidates
-    (for*/list ([sc (in-set scopes)]
-                [bindings (in-value (hash-ref (scope-bindings sc) sym #f))]
-                #:when bindings
-                [(b-scopes binding) (in-hash bindings)]
-                #:when (subset? b-scopes scopes))
-      (cons b-scopes binding)))
-  (define max-candidate
-    (and (pair? candidates)
-         (for/fold ([max-c (car candidates)]) ([c (in-list (cdr candidates))])
-           (if ((set-count (car c)) . > . (set-count (car max-c)))
-               c
-               max-c))))
+  (define candidates (find-all-matching-bindings s scopes))
   (cond
-   [max-candidate
-    (for ([c (in-list candidates)])
-      (unless (subset? (car c) (car max-candidate))
-        (error "ambiguous:" s scopes)))
+   [(pair? candidates)
+    (define max-candidate
+      (argmax (lambda (c) (set-count (car c)))
+              candidates))
+    (check-unambiguous max-candidate candidates s scopes)
     (and (or (not exactly?)
              (equal? (set-count scopes)
                      (set-count (car max-candidate))))
          (cdr max-candidate))]
    [else #f]))
+
+;; Returns a list of `(cons scope-set binding)`
+(define (find-all-matching-bindings s scopes)
+  (define sym (syntax-e s))
+  (for*/list ([sc (in-set scopes)]
+              [bindings (in-value (hash-ref (scope-bindings sc) sym #f))]
+              #:when bindings
+              [(b-scopes binding) (in-hash bindings)]
+              #:when (subset? b-scopes scopes))
+    (cons b-scopes binding)))
+
+(define (check-unambiguous max-candidate candidates s scopes)
+  (for ([c (in-list candidates)])
+    (unless (subset? (car c) (car max-candidate))
+      (error "ambiguous:" s scopes))))
 
 ;; ----------------------------------------
 

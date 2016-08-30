@@ -11,6 +11,8 @@ Relative to the "demi" expander:
 
 Relative to the "micro" expander:
 
+ * more flexible nested syntax: can include (non-list) pairs of syntax
+
  * more efficient scope and binding representation
 
  * generalized to multiple-value binding forms
