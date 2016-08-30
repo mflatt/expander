@@ -1,5 +1,6 @@
 #lang racket/base
 (require racket/set
+         racket/list
          "syntax.rkt"
          "phase.rkt")
 
@@ -187,30 +188,33 @@
   (unless (phase? phase)
     (raise-argument-error 'resolve "phase?" phase))
   (define scopes (syntax-scope-set s phase))
-  (define sym (syntax-e s))
-  (define candidates
-    (for*/list ([sc (in-set scopes)]
-                [bindings (in-value (hash-ref (scope-bindings sc) sym #f))]
-                #:when bindings
-                [(b-scopes binding) (in-hash bindings)]
-                #:when (subset? b-scopes scopes))
-      (cons b-scopes binding)))
-  (define max-candidate
-    (and (pair? candidates)
-         (for/fold ([max-c (car candidates)]) ([c (in-list (cdr candidates))])
-           (if ((set-count (car c)) . > . (set-count (car max-c)))
-               c
-               max-c))))
+  (define candidates (find-all-matching-bindings s scopes))
   (cond
-   [max-candidate
-    (for ([c (in-list candidates)])
-      (unless (subset? (car c) (car max-candidate))
-        (error "ambiguous:" s scopes)))
+   [(pair? candidates)
+    (define max-candidate
+      (argmax (lambda (c) (set-count (car c)))
+              candidates))
+    (check-unambiguous max-candidate candidates s scopes)
     (and (or (not exactly?)
              (equal? (set-count scopes)
                      (set-count (car max-candidate))))
          (cdr max-candidate))]
    [else #f]))
+
+;; Returns a list of `(cons scope-set binding)`
+(define (find-all-matching-bindings s scopes)
+  (define sym (syntax-e s))
+  (for*/list ([sc (in-set scopes)]
+              [bindings (in-value (hash-ref (scope-bindings sc) sym #f))]
+              #:when bindings
+              [(b-scopes binding) (in-hash bindings)]
+              #:when (subset? b-scopes scopes))
+    (cons b-scopes binding)))
+
+(define (check-unambiguous max-candidate candidates s scopes)
+  (for ([c (in-list candidates)])
+    (unless (subset? (car c) (car max-candidate))
+      (error "ambiguous:" s scopes))))
 
 ;; ----------------------------------------
 
