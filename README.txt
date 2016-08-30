@@ -5,6 +5,8 @@ Relative to the "micro" expander:
 
  * strips away some module and abstraction boundaries
 
+ * use syntax objects only for identifiers
+
  * simplifies `datum->syntax` to always create syntax with an empty
    scope set
 

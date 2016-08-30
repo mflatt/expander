@@ -18,20 +18,19 @@
 ;; ----------------------------------------
 ;; Syntax objects
 
-(struct syntax (e        ; a non-pair atom or a list of syntax
+(struct syntax (e        ; a symbol
                 scopes)  ; a set of scopes
         #:transparent)
 
+;; For now, all syntax object are identifiers:
 (define (identifier? s)
-  (and (syntax? s) (symbol? (syntax-e s))))
+  (syntax? s))
 
 (module+ test
   (check-equal? (identifier? (syntax 'x (seteq)))
-                #t)
-  (check-equal? (identifier? (syntax 1 (seteq)))
-                #f))
+                #t))
 
-;; If identifiers are `bound-identier=?`, they are fully
+;; If identifiers are `bound-identifier=?`, they are fully
 ;; interchangable: same symbol and same scopes
 (define (bound-identifier=? a b)
   (and (eq? (syntax-e a) (syntax-e b))
@@ -53,35 +52,33 @@
 (define (datum->syntax v)
   (cond
    [(syntax? v) v]
-   [(list? v) (syntax (map datum->syntax v)
-                      (seteq))]
-   [else (syntax v (seteq))]))
+   [(symbol? v) (syntax v (seteq))]
+   [(list? v) (map datum->syntax v)]
+   [else v]))
 
 (module+ test
-  (check-equal? (datum->syntax 1)
-                (syntax 1 (seteq)))
   (check-equal? (datum->syntax 'a)
                 (syntax 'a (seteq)))
+  (check-equal? (datum->syntax 1)
+                1)
   (check-equal? (datum->syntax '(a b c))
-                (syntax (list (syntax 'a (seteq))
-                              (syntax 'b (seteq))
-                              (syntax 'c (seteq)))
-                        (seteq)))
+                (list (syntax 'a (seteq))
+                      (syntax 'b (seteq))
+                      (syntax 'c (seteq))))
   (check-equal? (datum->syntax (list 'a
                                      (syntax 'b (seteq))
                                      'c))
-                (syntax (list (syntax 'a (seteq))
-                              (syntax 'b (seteq))
-                              (syntax 'c (seteq)))
-                        (seteq))))
+                (list (syntax 'a (seteq))
+                      (syntax 'b (seteq))
+                      (syntax 'c (seteq)))))
 
 ;; The `syntax->datum` function discards scopes --- immediate and
 ;; nested --- to produce a plain S-expression:
 (define (syntax->datum s)
-  (let ([e (syntax-e s)])
-    (cond
-     [(list? e) (map syntax->datum e)]
-     [else e])))
+  (cond
+   [(syntax? s) (syntax-e s)]
+   [(list? s) (map syntax->datum s)]
+   [else s]))
 
 (module+ test
   (check-equal? (syntax->datum (datum->syntax 1))
@@ -98,12 +95,13 @@
 (struct scope ())
 
 ;; Add or flip a scope everywhere (i.e., including nested syntax)
-(define (apply-scope s/e sc op)
+(define (apply-scope s sc op)
   (cond
-   [(syntax? s/e) (syntax (apply-scope (syntax-e s/e) sc op)
-                          (op (syntax-scopes s/e) sc))]
-   [(list? s/e) (map (lambda (s) (apply-scope s sc op)) s/e)]
-   [else s/e]))
+   [(syntax? s) (syntax (syntax-e s)
+                        (op (syntax-scopes s) sc))]
+   [(list? s) (for/list ([e (in-list s)])
+                (apply-scope e sc op))]
+   [else s]))
 
 (define (add-scope s sc)
   (apply-scope s sc set-add))
@@ -123,10 +121,8 @@
   (check-equal? (add-scope (syntax 'x (seteq)) sc1)
                 (syntax 'x (seteq sc1)))
   (check-equal? (add-scope (datum->syntax '(x (y))) sc1)
-                (syntax (list (syntax 'x (seteq sc1))
-                              (syntax (list (syntax 'y (seteq sc1)))
-                                      (seteq sc1)))
-                        (seteq sc1)))
+                (list (syntax 'x (seteq sc1))
+                      (list (syntax 'y (seteq sc1)))))
   
   (check-equal? (add-scope (add-scope (syntax 'x (seteq)) sc1) sc2)
                 (syntax 'x (seteq sc1 sc2)))
@@ -203,7 +199,7 @@
 ;; Find all candidiate bindings for `id` as the ones with
 ;; a subset of the scopes of `id`
 (define (find-all-matching-bindings id)
-  (for/list ([(c-id) (in-hash-keys all-bindings)]
+  (for/list ([c-id (in-hash-keys all-bindings)]
              #:when (and (eq? (syntax-e c-id) (syntax-e id))
                          (subset? (syntax-scopes c-id) (syntax-scopes id))))
     c-id))
@@ -375,35 +371,28 @@
   
   ;; A number expands to a `quote` form:
   (check-equal? (expand (datum->syntax 1) empty-env)
-                (syntax (list (syntax 'quote (seteq core-scope))
-                              (syntax 1 (seteq)))
-                        (seteq)))
+                (list (syntax 'quote (seteq core-scope))
+                      1))
   
   ;; Application of a locally-bound variable to a number expands to an
   ;; `#%app` form:
-  (check-equal? (expand (syntax (list (syntax 'test-a (seteq sc1))
-                                      (syntax 1 (seteq)))
-                                (seteq))
+  (check-equal? (expand (list (syntax 'test-a (seteq sc1))
+                              1)
                         (env-extend empty-env loc1 variable))
-                (syntax (list (syntax '#%app (seteq core-scope))
-                              (syntax 'test-a (seteq sc1))
-                              (syntax (list (syntax 'quote (seteq core-scope))
-                                            (syntax 1 (seteq)))
-                                      (seteq)))
-                        (seteq)))
+                (list (syntax '#%app (seteq core-scope))
+                      (syntax 'test-a (seteq sc1))
+                      (list (syntax 'quote (seteq core-scope))
+                            1)))
 
   ;; Application of a number to a number expands to an `#%app` form
   ;; (but will be a run-time error if evaluated):
   (check-equal? (expand (datum->syntax '(0 1))
                         empty-env)
-                (syntax (list (syntax '#%app (seteq core-scope))
-                              (syntax (list (syntax 'quote (seteq core-scope))
-                                            (syntax 0 (seteq)))
-                                      (seteq))
-                              (syntax (list (syntax 'quote (seteq core-scope))
-                                            (syntax 1 (seteq)))
-                                      (seteq)))
-                        (seteq)))
+                (list (syntax '#%app (seteq core-scope))
+                      (list (syntax 'quote (seteq core-scope))
+                            0)
+                      (list (syntax 'quote (seteq core-scope))
+                            1)))
   
   ;; A locally-bound macro expands by applying the macro:
   (check-equal? (syntax->datum
@@ -413,7 +402,7 @@
   (check-equal? (syntax->datum
                  (expand (let ([s (datum->syntax '(test-a (lambda (x) x)))])
                            (add-scope (add-scope s sc1) core-scope))
-                         (env-extend empty-env loc1 (lambda (s) (list-ref (syntax-e s) 1)))))
+                         (env-extend empty-env loc1 (lambda (s) (list-ref s 1)))))
                 '(lambda (x) x)))
 
 ;; Main expander entry point and loop:
@@ -421,19 +410,18 @@
   (cond
    [(identifier? s)
     (expand-identifier s env)]
-   [(and (pair? (syntax-e s))
-         (identifier? (car (syntax-e s))))
+   [(and (pair? s)
+         (identifier? (car s)))
     (expand-id-application-form s env)]
-   [(or (pair? (syntax-e s))
-        (null? (syntax-e s)))
+   [(or (pair? s)
+        (null? s))
     ;; An application form that doesn't start with an identifier
     (expand-app s env)]
    [else
     ;; Anything other than an identifier or parens is implicitly quoted,
     ;; so build a `quote` form
-    (syntax (list (syntax 'quote (seteq core-scope))
-                  s)
-            (seteq))]))
+    (list (syntax 'quote (seteq core-scope))
+          s)]))
 
 ;; An identifier by itself:
 (define (expand-identifier s env)
@@ -461,7 +449,7 @@
 
 ;; An "application" form that starts with an identifier
 (define (expand-id-application-form s env)
-  (define id (car (syntax-e s)))
+  (define id (car s))
   (define binding (resolve id))
   (case binding
     [(lambda)
@@ -470,7 +458,7 @@
      (expand-let-syntax s env)]
     [(#%app)
      (define m (match-syntax s '(#%app e ...)))
-     (expand-app (syntax (m 'e) (seteq)) env)]
+     (expand-app (m 'e) env)]
     [(quote quote-syntax)
      s]
     [else
@@ -499,18 +487,16 @@
     (apply-transformer
      (lambda (s)
        ;; This transformer converts `(_ f)` to `(f x)`
-       (syntax (list (list-ref (syntax-e s) 1)
-                     (syntax 'x (seteq)))
-               (seteq)))
-     (syntax (list (syntax 'm (seteq))
-                   (syntax 'f (seteq sc1)))
-             (seteq))))
+       (list (list-ref s 1)
+             (syntax 'x (seteq))))
+     (list (syntax 'm (seteq))
+           (syntax 'f (seteq sc1)))))
   (check-equal? (syntax->datum transformed-s)
                 '(f x))
-  (check-equal? (list-ref (syntax-e transformed-s) 0)
+  (check-equal? (list-ref transformed-s 0)
                 (syntax 'f (seteq sc1)))
   (check-equal? (set-count (syntax-scopes
-                            (list-ref (syntax-e transformed-s) 1)))
+                            (list-ref transformed-s 1)))
                 1))
 
 ;; ----------------------------------------
@@ -530,8 +516,7 @@
   ;; Expand the function body:
   (define exp-body (expand (add-scope (m 'body) sc)
                            body-env))
-  (syntax (list (m 'lambda) (syntax ids (seteq)) exp-body)
-          (seteq)))
+  (list (m 'lambda) ids exp-body))
 
 (define (expand-let-syntax s env)
   (define m (match-syntax s '(let-syntax ([trans-id trans-rhs]
@@ -559,12 +544,10 @@
 (define (expand-app s env)
   (define m (match-syntax s '(rator rand ...)))
   ;; Add `#%app` to make the application form explicit
-  (syntax
-   (list* (syntax '#%app (seteq core-scope))
-          (expand (m 'rator) env)
-          (for/list ([e (in-list (m 'rand))])
-            (expand e env)))
-   (seteq)))
+  (list* (syntax '#%app (seteq core-scope))
+         (expand (m 'rator) env)
+         (for/list ([e (in-list (m 'rand))])
+           (expand e env))))
 
 ;; ----------------------------------------
 
@@ -592,8 +575,8 @@
 ;; represented by a plain S-expression.
 (define (compile s)
   (cond
-   [(pair? (syntax-e s))
-    (define core-sym (resolve (car (syntax-e s))))
+   [(pair? s)
+    (define core-sym (resolve (car s)))
     (case core-sym
       [(#f)
        (error "not a core form:" s)]
