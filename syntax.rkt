@@ -4,6 +4,7 @@
  (struct-out syntax) ; includes `syntax?` and `syntax-e`
  empty-syntax
  identifier?
+ bound-identifier=?
  
  syntax->datum
  datum->syntax)
@@ -20,23 +21,23 @@
 (define (identifier? s)
   (and (syntax? s) (symbol? (syntax-e s))))
 
-(define (syntax->datum s)
-  (let loop ([s (syntax-e s)])
-    (cond
-     [(syntax? s) (loop (syntax-e s))]
-     [(pair? s) (cons (loop (car s))
-                      (loop (cdr s)))]
-     [else s])))
+(define (bound-identifier=? a b)
+  (and (eq? (syntax-e a) (syntax-e b))
+       (equal? (syntax-scopes a) (syntax-scopes b))))
 
-(define (datum->syntax stx-c s)
+(define (syntax->datum s)
+  (let ([e (syntax-e s)])
+    (cond
+     [(list? e) (map syntax->datum e)]
+     [else e])))
+
+(define (datum->syntax stx-c v)
   (define (wrap e)
     (syntax e (if stx-c
                   (syntax-scopes stx-c)
                   empty-scopes)))
   (cond
-   [(syntax? s) s]
-   [(list? s) (wrap (for/list ([e (in-list s)])
-                      (datum->syntax stx-c e)))]
-   [(pair? s) (wrap (cons (datum->syntax stx-c (car s))
-                          (datum->syntax stx-c (cdr s))))]
-   [else (wrap s)]))
+   [(syntax? v) v]
+   [(list? v) (wrap (map (lambda (elem-v) (datum->syntax stx-c elem-v))
+                         v))]
+   [else (wrap v)]))

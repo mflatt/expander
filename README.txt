@@ -3,9 +3,14 @@ of set-of-scopes expansion.
 
 Relative to the "pico" expander:
 
- * split into modules and uses more abstraction
+ * split into modules and use more abstraction
+
+ * normalized `datum->syntax` to accept an existing syntax object that
+   supplies the scope set for new syntax
 
 Relative to the "mini" expander:
+
+ * simplified nested syntax: only lists of syntax
 
  * simpler scope and binding representation
 

@@ -15,31 +15,14 @@
 
 ;; ----------------------------------------
 
+;; Main expander loop:
 (define (expand s env)
   (cond
    [(identifier? s)
-    (define binding (resolve s))
-    (cond
-     [(not binding)
-      (error "unbound identifier:" s)]
-     [else
-      ;; Variable or form as identifier macro
-      (dispatch (lookup binding env s) s env)])]
+    (expand-identifier s env)]
    [(and (pair? (syntax-e s))
          (identifier? (car (syntax-e s))))
-    ;; An "application" form that starts with an identifier
-    (define id (car (syntax-e s)))
-    (define binding (resolve id))
-    (define t (if binding
-                  (lookup binding env id)
-                  missing))
-    ;; Find out whether it's bound as a variable, syntax, or core form
-    (cond
-     [(or (variable? t) (missing? t))
-      (expand-app s env)]
-     [else
-      ;; Syntax or core form as "application"
-      (dispatch t s env)])]
+    (expand-id-application-form s env)]
    [(or (pair? (syntax-e s))
         (null? (syntax-e s)))
     ;; An "application" form that doesn't start with an identifier
@@ -47,6 +30,31 @@
    [else
     ;; Anything other than an identifier or parens is implicitly quoted
     (rebuild s (list (datum->syntax core-stx 'quote) s))]))
+
+;; An identifier by itself:
+(define (expand-identifier s env)
+  (define binding (resolve s))
+  (cond
+   [(not binding)
+    (error "unbound identifier:" s)]
+   [else
+    ;; Variable or form as identifier macro
+    (dispatch (lookup binding env s) s env)]))
+
+;; An "application" form that starts with an identifier
+(define (expand-id-application-form s env)
+  (define id (car (syntax-e s)))
+  (define binding (resolve id))
+  (define t (if binding
+                (lookup binding env id)
+                missing))
+  ;; Find out whether it's bound as a variable, syntax, or core form
+  (cond
+   [(or (variable? t) (missing? t))
+    (expand-app s env)]
+   [else
+    ;; Syntax or core form as "application"
+    (dispatch t s env)]))
 
 ;; Expand `s` given that the value `t` of the relevant binding,
 ;; where `t` is either a core form, a macro transformer, some

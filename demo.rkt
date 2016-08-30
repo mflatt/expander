@@ -37,6 +37,7 @@
                                 (car (cdr (syntax-e b))))
                               (syntax-e (car (cdr (syntax-e stx))))))))])
     ,e))
+
 (compile+eval-expression
  (add-let
   '(lambda (x) 
@@ -125,4 +126,3 @@
                           '(let-syntax ([v 1])
                             v))))
   (error "shouldn't get here"))
-

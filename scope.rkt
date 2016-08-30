@@ -1,5 +1,6 @@
 #lang racket/base
 (require racket/set
+         racket/list
          "syntax.rkt")
 
 (provide new-scope
@@ -10,22 +11,20 @@
          resolve)
 
 ;; A scope represents a distinct "dimension" of binding.
+;; Scope identity is `eq?` identity.
 
 (struct scope ())
 
-(define (new-scope)
-  ;; scope identity is `eq?` identity
-  (scope))
+(define (new-scope) (scope))
 
-;; Add or flip a scope --- recurs to nested syntax
-(define (apply-scope s sc op)
+;; Add or flip a scope everywehere (i.e., including nested syntax)
+(define (apply-scope s/e sc op)
   (cond
-   [(syntax? s) (struct-copy syntax s
-                             [e (apply-scope (syntax-e s) sc op)]
-                             [scopes (op (syntax-scopes s) sc)])]
-   [(pair? s) (cons (apply-scope (car s) sc op)
-                    (apply-scope (cdr s) sc op))]
-   [else s]))
+   [(syntax? s/e) (struct-copy syntax s/e
+                               [e (apply-scope (syntax-e s/e) sc op)]
+                               [scopes (op (syntax-scopes s/e) sc)])]
+   [(list? s/e) (map (lambda (s) (apply-scope s sc op)) s/e)]
+   [else s/e]))
 
 (define (add-scope s sc)
   (apply-scope s sc set-add))
@@ -49,24 +48,32 @@
     (raise-argument-error 'resolve "identifier?" id))
   (hash-set! all-bindings id binding))
 
+;; Finds the binding for a given identifier; returns #f if the
+;; identifier is unbound
 (define (resolve id)
-  (unless (identifier? id)
-    (raise-argument-error 'resolve "identifier?" id))
-  (define candidate-ids
-    (for/list ([(c-id) (in-hash-keys all-bindings)]
-               #:when (and (eq? (syntax-e c-id) (syntax-e id))
-                           (subset? (syntax-scopes c-id) (syntax-scopes id))))
-      c-id))
-  (define max-candidate-id
-    (and (pair? candidate-ids)
-         (car
-          (sort candidate-ids >
-                #:key (lambda (c-id) (set-count (syntax-scopes c-id)))))))
+  (define candidate-ids (find-all-matching-bindings id))
   (cond
-   [max-candidate-id
-    (for ([c-id (in-list candidate-ids)])
-      (unless (subset? (syntax-scopes c-id)
-                       (syntax-scopes max-candidate-id))
-        (error "ambiguous:" id)))
+   [(pair? candidate-ids)
+    (define max-candidate-id
+      (argmax (lambda (c-id) (set-count (syntax-scopes c-id)))
+              candidate-ids))
+    (check-unambiguous max-candidate-id candidate-ids id)
     (hash-ref all-bindings max-candidate-id)]
    [else #f]))
+
+;; Find all candidiate bindings for `id` as the ones with
+;; a subset of the scopes of `id`
+(define (find-all-matching-bindings id)
+  (for/list ([(c-id) (in-hash-keys all-bindings)]
+             #:when (and (eq? (syntax-e c-id) (syntax-e id))
+                         (subset? (syntax-scopes c-id) (syntax-scopes id))))
+    c-id))
+
+;; Check that the binding with the biggest scope set is a superset
+;; of all the others
+(define (check-unambiguous max-candidate-id candidate-ids error-id)
+  (for ([c-id (in-list candidate-ids)])
+    (unless (subset? (syntax-scopes c-id)
+                     (syntax-scopes max-candidate-id))
+      (error "ambiguous:" error-id))))
+
