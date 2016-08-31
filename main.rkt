@@ -102,19 +102,19 @@
   (check-equal? (eq? sc1 sc1) #t))
 
 ;; Add or flip a scope everywhere (i.e., including nested syntax)
-(define (apply-scope s sc op)
+(define (adjust-scope s sc op)
   (cond
    [(syntax? s) (syntax (syntax-e s)
                         (op (syntax-scopes s) sc))]
-   [(list? s) (for/list ([e (in-list s)])
-                (apply-scope e sc op))]
+   [(list? s) (map (lambda (e) (adjust-scope e sc op))
+                   s)]
    [else s]))
 
 (define (add-scope s sc)
-  (apply-scope s sc set-add))
+  (adjust-scope s sc set-add))
 
 (define (flip-scope s sc)
-  (apply-scope s sc set-flip))
+  (adjust-scope s sc set-flip))
 
 (define (set-flip s e)
   (if (set-member? s e)
@@ -156,7 +156,7 @@
   ;;   (let ([a 1])
   ;;     (let ([z 2])
   ;;       ....))
-  ;; where `a` is bound only once.
+  ;; where `a` is bound only once
 
   (define loc/b-out (gensym 'b))
   (define loc/b-in (gensym 'b))
@@ -190,11 +190,11 @@
   (define candidate-ids (find-all-matching-bindings id))
   (cond
    [(pair? candidate-ids)
-    (define max-candidate-id
-      (argmax (lambda (c-id) (set-count (syntax-scopes c-id)))
+    (define max-id
+      (argmax (compose set-count syntax-scopes)
               candidate-ids))
-    (check-unambiguous max-candidate-id candidate-ids id)
-    (hash-ref all-bindings max-candidate-id)]
+    (check-unambiguous max-id candidate-ids)
+    (hash-ref all-bindings max-id)]
    [else #f]))
 
 (module+ test
@@ -243,24 +243,22 @@
 
 ;; Check that the binding with the biggest scope set is a superset
 ;; of all the others
-(define (check-unambiguous max-candidate-id candidate-ids error-id)
+(define (check-unambiguous max-id candidate-ids)
   (for ([c-id (in-list candidate-ids)])
     (unless (subset? (syntax-scopes c-id)
-                     (syntax-scopes max-candidate-id))
-      (error "ambiguous:" error-id))))
+                     (syntax-scopes max-id))
+      (error "ambiguous:" max-id))))
 
 (module+ test
   (check-equal? (check-unambiguous (syntax 'b (seteq sc1 sc2))
                                    (list (syntax 'b (seteq sc1))
-                                         (syntax 'b (seteq sc1 sc2)))
-                                   (syntax 'b (seteq sc1 sc2)))
+                                         (syntax 'b (seteq sc1 sc2))))
                 (void))
   (check-exn (make-exn:fail? "ambiguous")
              (lambda ()
                (check-unambiguous (syntax 'c (seteq sc2))
                                   (list (syntax 'c (seteq sc1))
-                                        (syntax 'c (seteq sc2)))
-                                  (syntax 'c (seteq sc1 sc2))))))
+                                        (syntax 'c (seteq sc2)))))))
   
 ;; Determine whether two identifiers have the same binding
 (define (free-identifier=? a b)
@@ -273,6 +271,31 @@
   (check-equal? (free-identifier=? (syntax 'b (seteq sc1))
                                    (syntax 'b (seteq sc1 sc2)))
                 #f))               
+
+;; ----------------------------------------
+;; Core syntax and primitives
+
+;; Accumulate all core bindings in `core-scope`
+(define core-scope (scope))
+
+(define core-forms (seteq 'lambda 'let-syntax '#%app 'quote 'quote-syntax))
+(define core-primitives (seteq 'datum->syntax 'syntax-e 'list 'cons 'car 'cdr 'map))
+
+;; Bind core forms and primitives:
+(for ([sym (in-set (set-union core-forms core-primitives))])
+  (add-binding! (syntax sym (seteq core-scope)) sym))
+
+;; The `namespace-syntax-introduce` function adds the core scope to a
+;; syntax object; it needs to be used, for example, on a just-created
+;; syntax object to make `lambda` refer to the core lambda form
+(define (namespace-syntax-introduce s)
+  (add-scope s core-scope))
+
+(module+ test
+  (check-equal? (resolve (datum->syntax 'lambda))
+                #f)
+  (check-equal? (resolve (namespace-syntax-introduce (datum->syntax 'lambda)))
+                'lambda)) ; i.e., the core `lambda` form
 
 ;; ----------------------------------------
 ;; Compile-time environment
@@ -312,32 +335,6 @@
                 loc/d))
 
 ;; ----------------------------------------
-;; Core syntax and primitives
-
-;; Accumulate all core bindings in `core-scope`, so we can
-;; easily generate a reference to a core form using `core-stx`:
-(define core-scope (scope))
-
-(define core-forms (seteq 'lambda 'let-syntax '#%app 'quote 'quote-syntax))
-(define core-primitives (seteq 'datum->syntax 'syntax-e 'list 'cons 'car 'cdr 'map))
-
-;; Bind core forms and primitives:
-(for ([sym (in-set (set-union core-forms core-primitives))])
-  (add-binding! (syntax sym (seteq core-scope)) sym))
-
-;; The `namespace-syntax-introduce` function adds the core scope to a
-;; syntax object; it needs to be used, for example, on a just-created
-;; syntax object to make `lambda` refer to the core lambda form
-(define (namespace-syntax-introduce s)
-  (add-scope s core-scope))
-
-(module+ test
-  (check-equal? (resolve (datum->syntax 'lambda))
-                #f)
-  (check-equal? (resolve (namespace-syntax-introduce (datum->syntax 'lambda)))
-                'lambda)) ; i.e., the core `lambda` form
-
-;; ----------------------------------------
 ;; Pattern matching
 
 ;; We use a simple form pattern matching in the implementation of the
@@ -363,16 +360,20 @@
                       (syntax 'c (seteq)))))
 
 ;; ----------------------------------------
-;; The expander
+;; Expansion Dispatch
 
 (module+ test
   ;; Examples to demonstrate `expand`
   
+  ;; A number expands to a `quote` form:
+  (check-equal? (expand (datum->syntax 1) empty-env)
+                (list (syntax 'quote (seteq core-scope))
+                      1))
+  
   ;; A `(lambda (x) x)` form expands to itself, as long as it has the scope
-  ;; used to binds all core-forms:
+  ;; used to bind all core-forms:
   (check-equal? (syntax->datum
-                 (expand (namespace-syntax-introduce
-                          (datum->syntax '(lambda (x) x)))
+                 (expand (add-scope (datum->syntax '(lambda (x) x)) core-scope)
                          empty-env))
                 '(lambda (x) x))
   
@@ -391,11 +392,6 @@
              (lambda ()
                (expand (syntax 'a (seteq))
                        empty-env)))
-  
-  ;; A number expands to a `quote` form:
-  (check-equal? (expand (datum->syntax 1) empty-env)
-                (list (syntax 'quote (seteq core-scope))
-                      1))
   
   ;; Application of a locally-bound variable to a number expands to an
   ;; `#%app` form:
@@ -432,9 +428,11 @@
 (define (expand s [env empty-env])
   (cond
    [(identifier? s)
+    ;; An identifier by itself
     (expand-identifier s env)]
    [(and (pair? s)
          (identifier? (car s)))
+    ;; An "application" of an identifier; maybe a form or macro
     (expand-id-application-form s env)]
    [(or (pair? s)
         (null? s))
@@ -452,10 +450,10 @@
   (cond
    [(not binding)
     (error "free variable:" s)]
-   [(set-member? core-forms binding)
-    (error "bad syntax:" s)]
    [(set-member? core-primitives binding)
     s]
+   [(set-member? core-forms binding)
+    (error "bad syntax:" s)]
    [else
     (define v (env-lookup env binding))
     (cond
@@ -528,14 +526,14 @@
   (define m (match-syntax s '(lambda (id ...) body)))
   (define sc (scope))
   ;; Add the new scope to each binding identifier:
-  (define ids (for/list ([id (in-list (m 'id))])
-                (add-scope id sc)))
+  (define ids (map (lambda (id) (add-scope id sc))
+                   (m 'id)))
   ;; Bind each argument and generate a corresponding key for the
   ;; expand-time environment:
-  (define keys (for/list ([id (in-list ids)])
-                 (add-local-binding! id)))
-  (define body-env (for/fold ([env env]) ([key (in-list keys)])
-                     (env-extend env key variable)))
+  (define bindings (map add-local-binding! ids))
+  (define body-env (foldl (lambda (binding env)
+                            (env-extend env binding variable))
+                          env bindings))
   ;; Expand the function body:
   (define exp-body (expand (add-scope (m 'body) sc)
                            body-env))
@@ -547,19 +545,18 @@
                               body)))
   (define sc (scope))
   ;; Add the new scope to each binding identifier:
-  (define trans-ids (for/list ([id (in-list (m 'trans-id))])
-                      (add-scope id sc)))
+  (define trans-ids (map (lambda (id) (add-scope id sc))
+                         (m 'trans-id)))
   ;; Bind each left-hand identifier and generate a corresponding key
   ;; for the expand-time environment:
-  (define trans-keys (for/list ([id (in-list trans-ids)])
-                       (add-local-binding! id)))
+  (define bindings (map add-local-binding! trans-ids))
   ;; Evaluate compile-time expressions:
-  (define trans-vals (for/list ([rhs (in-list (m 'trans-rhs))])
-                       (eval-for-syntax-binding rhs env)))
+  (define trans-vals (map eval-for-syntax-binding
+                          (m 'trans-rhs)))
   ;; Fill expansion-time environment:
-  (define body-env (for/fold ([env env]) ([key (in-list trans-keys)]
-                                          [val (in-list trans-vals)])
-                     (env-extend env key val)))
+  (define body-env (foldl (lambda (binding val env)
+                            (env-extend env binding val))
+                          env bindings trans-vals))
   ;; Expand body
   (expand (add-scope (m 'body) sc) body-env))
 
@@ -569,26 +566,24 @@
   ;; Add `#%app` to make the application form explicit
   (list* (syntax '#%app (seteq core-scope))
          (expand (m 'rator) env)
-         (for/list ([e (in-list (m 'rand))])
-           (expand e env))))
+         (map (lambda (rand) (expand rand env))
+              (m 'rand))))
 
 ;; ----------------------------------------
 
 ;; Expand and evaluate `rhs` as a compile-time expression
-(define (eval-for-syntax-binding rhs env)
+(define (eval-for-syntax-binding rhs)
   (eval-compiled (compile (expand rhs empty-env))))
 
 (module+ test
   (check-equal? (eval-for-syntax-binding (add-scope (datum->syntax
                                                      '(car (list 1 2)))
-                                                    core-scope)
-                                         empty-env)
+                                                    core-scope))
                 1)
   
   (check-equal? ((eval-for-syntax-binding (add-scope (datum->syntax
                                                       '(lambda (x) (syntax-e x)))
-                                                     core-scope)
-                                          empty-env)
+                                                     core-scope))
                  (syntax 'x (seteq)))
                 'x))
 
@@ -601,8 +596,6 @@
    [(pair? s)
     (define core-sym (resolve (car s)))
     (case core-sym
-      [(#f)
-       (error "not a core form:" s)]
       [(lambda)
        (define m (match-syntax s '(lambda (id ...) body)))
        `(lambda ,(map resolve (m 'id)) ,(compile (m 'body)))]
