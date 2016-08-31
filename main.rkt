@@ -335,31 +335,6 @@
                 loc/d))
 
 ;; ----------------------------------------
-;; Pattern matching
-
-;; We use a simple form pattern matching in the implementation of the
-;; expander (but it's just internal; we don't provide any
-;; pattern-matching facilities to programs that use the xpander).
-
-;; Define a matcher on syntax using "match.rkt":
-(define match-syntax
-  (make-match-syntax syntax? identifier? syntax-e))
-
-(module+ test
-  (define (get-head s)
-    (define m (match-syntax s '(a b ...)))
-    (m 'a))
-  (define (get-tail s)
-    (define m (match-syntax s '(a b ...)))
-    (m 'b))
-  
-  (check-equal? (get-head (datum->syntax '(a b c)))
-                (syntax 'a (seteq)))
-  (check-equal? (get-tail (datum->syntax '(a b c)))
-                (list (syntax 'b (seteq))
-                      (syntax 'c (seteq)))))
-
-;; ----------------------------------------
 ;; Expansion Dispatch
 
 (module+ test
@@ -478,8 +453,8 @@
     [(let-syntax)
      (expand-let-syntax s env)]
     [(#%app)
-     (define m (match-syntax s '(#%app e ...)))
-     (expand-app (m 'e) env)]
+     (match-define (list app-id es ...) s)
+     (expand-app es env)]
     [(quote quote-syntax)
      s]
     [else
@@ -523,11 +498,11 @@
 ;; ----------------------------------------
 
 (define (expand-lambda s env)
-  (define m (match-syntax s '(lambda (id ...) body)))
+  (match-define `(,lambda-id (,arg-ids ...) ,body) s)
   (define sc (scope))
   ;; Add the new scope to each binding identifier:
   (define ids (map (lambda (id) (add-scope id sc))
-                   (m 'id)))
+                   arg-ids))
   ;; Bind each argument and generate a corresponding key for the
   ;; expand-time environment:
   (define bindings (map add-local-binding! ids))
@@ -535,39 +510,40 @@
                             (env-extend env binding variable))
                           env bindings))
   ;; Expand the function body:
-  (define exp-body (expand (add-scope (m 'body) sc)
+  (define exp-body (expand (add-scope body sc)
                            body-env))
-  (list (m 'lambda) ids exp-body))
+  (list lambda-id ids exp-body))
 
 (define (expand-let-syntax s env)
-  (define m (match-syntax s '(let-syntax ([trans-id trans-rhs]
-                                          ...)
-                              body)))
+  (match-define `(,let-syntax-id ([,trans-ids ,trans-rhss]
+                                  ...)
+                      ,body)
+                s)
   (define sc (scope))
   ;; Add the new scope to each binding identifier:
-  (define trans-ids (map (lambda (id) (add-scope id sc))
-                         (m 'trans-id)))
+  (define ids (map (lambda (id) (add-scope id sc))
+                   trans-ids))
   ;; Bind each left-hand identifier and generate a corresponding key
   ;; for the expand-time environment:
   (define bindings (map add-local-binding! trans-ids))
   ;; Evaluate compile-time expressions:
   (define trans-vals (map eval-for-syntax-binding
-                          (m 'trans-rhs)))
+                          trans-rhss))
   ;; Fill expansion-time environment:
   (define body-env (foldl (lambda (binding val env)
                             (env-extend env binding val))
                           env bindings trans-vals))
   ;; Expand body
-  (expand (add-scope (m 'body) sc) body-env))
+  (expand (add-scope body sc) body-env))
 
 ;; Expand an application (i.e., a function call)
 (define (expand-app s env)
-  (define m (match-syntax s '(rator rand ...)))
+  (match-define `(,rator ,rands ...) s)
   ;; Add `#%app` to make the application form explicit
   (list* (syntax '#%app (seteq core-scope))
-         (expand (m 'rator) env)
+         (expand rator env)
          (map (lambda (rand) (expand rand env))
-              (m 'rand))))
+              rands)))
 
 ;; ----------------------------------------
 
@@ -597,20 +573,19 @@
     (define core-sym (resolve (car s)))
     (case core-sym
       [(lambda)
-       (define m (match-syntax s '(lambda (id ...) body)))
-       `(lambda ,(map resolve (m 'id)) ,(compile (m 'body)))]
+       (match-define `(,lambda-id (,ids ...) ,body) s)
+       `(lambda ,(map resolve ids) ,(compile body))]
       [(#%app)
-       (define m (match-syntax s '(#%app . rest)))
-       (for/list ([s (in-list (m 'rest))])
-         (compile s))]
+       (match-define `(,app-id ,rator ,rands ...) s)
+       (cons (compile rator) (map compile rands))]
       [(quote)
-       (define m (match-syntax s '(quote datum)))
+       (match-define `(,quote-id ,datum) s)
        ;; Strip away scopes:
-       `(quote ,(syntax->datum (m 'datum)))]
+       `(quote ,(syntax->datum datum))]
       [(quote-syntax)
-       (define m (match-syntax s '(quote datum)))
+       (match-define `(,quote-syntax-id ,datum) s)
        ;; Preserve the complete syntax object:
-       `(quote ,(m 'datum))]
+       `(quote ,datum)]
       [else
        (error "unrecognized core form:" core-sym)])]
    [(identifier? s)

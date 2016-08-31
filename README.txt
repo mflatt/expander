@@ -16,6 +16,4 @@ Roadmap:
 
  main.rkt - the whole expander and compiler
 
- match.rkt - support library for simple pattern matching
-
  demo.rkt - exercises the expander and compiler
