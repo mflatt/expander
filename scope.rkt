@@ -47,20 +47,20 @@
   ((scope-id sc1) . > . (scope-id sc2)))
 
 ;; Add, remove, or flip a scope --- recurs to nested syntax
-(define (apply-scope s/e sc op)
+(define (adjust-scope s/e sc op)
   (cond
    [(syntax? s/e) (struct-copy syntax s/e
-                               [e (apply-scope (syntax-e s/e) sc op)]
+                               [e (adjust-scope (syntax-e s/e) sc op)]
                                [scopes (op (syntax-scopes s/e) sc)])]
-   [(pair? s/e) (cons (apply-scope (car s/e) sc op)
-                      (apply-scope (cdr s/e) sc op))]
+   [(pair? s/e) (cons (adjust-scope (car s/e) sc op)
+                      (adjust-scope (cdr s/e) sc op))]
    [else s/e]))
 
 (define (add-scope s sc)
-  (apply-scope s sc set-add))
+  (adjust-scope s sc set-add))
 
 (define (remove-scope s sc)
-  (apply-scope s sc set-remove))
+  (adjust-scope s sc set-remove))
 
 (define (remove-scopes s scs)
   (for/fold ([s s]) ([sc (in-list scs)])
@@ -72,7 +72,7 @@
       (set-add s e)))
 
 (define (flip-scope s sc)
-  (apply-scope s sc set-flip))
+  (adjust-scope s sc set-flip))
 
 ;; ----------------------------------------
 
