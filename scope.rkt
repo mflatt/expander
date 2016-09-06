@@ -82,10 +82,10 @@
 
 ;; FIXME: Adding, removing, or flipping a scope currently recurs
 ;; through a syntax object eagerly, but it should be lazy
-(define (apply-scope s sc op)
+(define (adjust-scope s sc op)
   (cond
    [(syntax? s) (struct-copy syntax s
-                             [e (apply-scope (syntax-e s) sc op)]
+                             [e (adjust-scope (syntax-e s) sc op)]
                              [scopes
                               (if (shifted-multi-scope? sc)
                                   (syntax-scopes s)
@@ -94,8 +94,8 @@
                               (if (shifted-multi-scope? sc)
                                   (op (syntax-shifted-multi-scopes s) sc)
                                   (syntax-shifted-multi-scopes s))])]
-   [(pair? s) (cons (apply-scope (car s) sc op)
-                    (apply-scope (cdr s) sc op))]
+   [(pair? s) (cons (adjust-scope (car s) sc op)
+                    (adjust-scope (cdr s) sc op))]
    [else s]))
 
 ;; When a representative-scope is manipulated, we want to
@@ -108,14 +108,14 @@
       sc))
 
 (define (add-scope s sc)
-  (apply-scope s (generalize-scope sc) set-add))
+  (adjust-scope s (generalize-scope sc) set-add))
 
 (define (add-scopes s scs)
   (for/fold ([s s]) ([sc (in-list scs)])
     (add-scope s sc)))
 
 (define (remove-scope s sc)
-  (apply-scope s (generalize-scope sc) set-remove))
+  (adjust-scope s (generalize-scope sc) set-remove))
 
 (define (remove-scopes s scs)
   (for/fold ([s s]) ([sc (in-list scs)])
@@ -127,7 +127,7 @@
       (set-add s e)))
 
 (define (flip-scope s sc)
-  (apply-scope s (generalize-scope sc) set-flip))
+  (adjust-scope s (generalize-scope sc) set-flip))
 
 ;; To shift a syntax's phase, we only have to shift the phase
 ;; of any phase-specific scopes. The bindings attached to a
