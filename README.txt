@@ -7,14 +7,25 @@ Relative to the full expander:
 
  * disallows mutual reference across `begin-for-syntax`es
 
- * disallows shadoing of a module's initial require
+ * disallows shadowing of a module's initial require
 
- * omit cross-phase persistent modules
+ * internal definition contexts and `letrec-syntaxes+values`
+   expand to one `letrec-values` form, instead of nested
+   `let-values` and `letrec-values` forms
 
- * no rename transformers, syntax taints, `local-expand`,
-   `syntax-local-....`, source locations, module path indices
+ * no rename transformers, `set!` transformers, syntax taints,
+   `local-expand`, `syntax-local-....`, source locations,
+   or module path indices
 
  * non-lazy representations of syntax and module instances
+
+ * omits cross-phase persistent modules
+
+ * fewer representation optimizations (e.g., no bulk
+   representation of `require`s)
+
+ * simpler compilation approach (i.e., not linklets) and no
+   support for bytecode marshaling
 
 Relative to the "mini" expander:
 
