@@ -10,6 +10,10 @@ Relative to the "micro" expander:
  * simplifies `datum->syntax` to always create syntax with an empty
    scope set
 
+ * macros can be used only in application position
+
+ * omits `#%app`
+
 ----------------------------------------
 
 Roadmap:

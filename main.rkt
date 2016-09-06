@@ -1,5 +1,4 @@
 #lang racket
-(require "match.rkt")
 
 (provide expand
          compile
@@ -278,8 +277,9 @@
 ;; Accumulate all core bindings in `core-scope`
 (define core-scope (scope))
 
-(define core-forms (seteq 'lambda 'let-syntax '#%app 'quote 'quote-syntax))
-(define core-primitives (seteq 'datum->syntax 'syntax-e 'list 'cons 'car 'cdr 'map))
+(define core-forms (seteq 'lambda 'let-syntax 'quote 'quote-syntax))
+(define core-primitives (seteq 'datum->syntax 'syntax->datum 'syntax-e
+                               'list 'cons 'car 'cdr 'map))
 
 ;; Bind core forms and primitives:
 (for ([sym (in-set (set-union core-forms core-primitives))])
@@ -339,7 +339,17 @@
 
 (module+ test
   ;; Examples to demonstrate `expand`
-  
+
+  ;; Binding and using a macro:
+  (check-equal? (syntax->datum
+                 (expand (add-scope
+                          (datum->syntax
+                           '(let-syntax ([one (lambda (stx)
+                                                (quote-syntax 1))])
+                             (one)))
+                          core-scope)))
+                '(quote 1))
+
   ;; A number expands to a `quote` form:
   (check-equal? (expand (datum->syntax 1) empty-env)
                 (list (syntax 'quote (seteq core-scope))
@@ -368,29 +378,27 @@
                (expand (syntax 'a (seteq))
                        empty-env)))
   
-  ;; Application of a locally-bound variable to a number expands to an
-  ;; `#%app` form:
+  ;; Application of a locally-bound variable to a number quotes the
+  ;; number argument expression:
   (check-equal? (expand (list (syntax 'a (seteq sc1))
                               1)
                         (env-extend empty-env loc/a variable))
-                (list (syntax '#%app (seteq core-scope))
-                      (syntax 'a (seteq sc1))
+                (list (syntax 'a (seteq sc1))
                       (list (syntax 'quote (seteq core-scope))
                             1)))
 
-  ;; Application of a number to a number expands to an `#%app` form
+  ;; Application of a number to a number expands to an application
   ;; (but will be a run-time error if evaluated):
   (check-equal? (expand (datum->syntax '(0 1))
                         empty-env)
-                (list (syntax '#%app (seteq core-scope))
-                      (list (syntax 'quote (seteq core-scope))
+                (list (list (syntax 'quote (seteq core-scope))
                             0)
                       (list (syntax 'quote (seteq core-scope))
                             1)))
   
   ;; A locally-bound macro expands by applying the macro:
   (check-equal? (syntax->datum
-                 (expand (syntax 'a (seteq sc1))
+                 (expand (list (syntax 'a (seteq sc1)))
                          (env-extend empty-env loc/a (lambda (s) (datum->syntax 1)))))
                 '(quote 1))
   (check-equal? (syntax->datum
@@ -437,8 +445,7 @@
      [(eq? v variable)
       s]
      [(procedure? v)
-      ;; Apply a macro, then recur:
-      (expand (apply-transformer v s) env)]
+      (error "bad syntax:" s)]
      [else
       ;; Compile-time value that's not a procedure
       (error "illegal use of syntax:" s)])]))
@@ -452,9 +459,6 @@
      (expand-lambda s env)]
     [(let-syntax)
      (expand-let-syntax s env)]
-    [(#%app)
-     (match-define (list app-id es ...) s)
-     (expand-app es env)]
     [(quote quote-syntax)
      s]
     [else
@@ -515,8 +519,7 @@
   (list lambda-id ids exp-body))
 
 (define (expand-let-syntax s env)
-  (match-define `(,let-syntax-id ([,trans-ids ,trans-rhss]
-                                  ...)
+  (match-define `(,let-syntax-id ([,trans-ids ,trans-rhss] ...)
                       ,body)
                 s)
   (define sc (scope))
@@ -539,9 +542,7 @@
 ;; Expand an application (i.e., a function call)
 (define (expand-app s env)
   (match-define `(,rator ,rands ...) s)
-  ;; Add `#%app` to make the application form explicit
-  (list* (syntax '#%app (seteq core-scope))
-         (expand rator env)
+  (list* (expand rator env)
          (map (lambda (rand) (expand rand env))
               rands)))
 
@@ -570,14 +571,12 @@
 (define (compile s)
   (cond
    [(pair? s)
-    (define core-sym (resolve (car s)))
+    (define core-sym (and (identifier? (car s))
+                          (resolve (car s))))
     (case core-sym
       [(lambda)
        (match-define `(,lambda-id (,ids ...) ,body) s)
        `(lambda ,(map resolve ids) ,(compile body))]
-      [(#%app)
-       (match-define `(,app-id ,rator ,rands ...) s)
-       (cons (compile rator) (map compile rands))]
       [(quote)
        (match-define `(,quote-id ,datum) s)
        ;; Strip away scopes:
@@ -587,7 +586,8 @@
        ;; Preserve the complete syntax object:
        `(quote ,datum)]
       [else
-       (error "unrecognized core form:" core-sym)])]
+       (match-define `(,rator ,rands ...) s)
+       (cons (compile rator) (map compile rands))])]
    [(identifier? s)
     (resolve s)]
    [else
@@ -599,6 +599,7 @@
 ;; to replace the host primitives
 (define namespace (make-base-namespace))
 (namespace-set-variable-value! 'datum->syntax datum->syntax #t namespace)
+(namespace-set-variable-value! 'syntax->datum syntax->datum #t namespace)
 (namespace-set-variable-value! 'syntax-e syntax-e #t namespace)
 
 (define (eval-compiled s)

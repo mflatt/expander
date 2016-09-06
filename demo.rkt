@@ -44,7 +44,7 @@
 (compile+eval-expression
  '(lambda (x)
    (let-syntax ([y (lambda (stx) (quote-syntax 7))])
-     y)))
+     (y))))
 
 (compile+eval-expression
  (add-let
