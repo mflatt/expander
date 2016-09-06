@@ -3,10 +3,18 @@ of set-of-scopes expansion.
 
 Relative to the "pico" expander:
 
- * split into modules and use more abstraction
+ * split into modules and uses more abstraction
+
+ * uses syntax objects for list forms as well as identifiers (and
+   uses a custom matcher for syntax internally)
 
  * normalized `datum->syntax` to accept an existing syntax object that
    supplies the scope set for new syntax
+
+ * identifier macros are allowed (i.e., not constrained to application
+   positions)
+
+ * adds `#%app` and expands every application to an `#%app` form
 
 Relative to the "mini" expander:
 
@@ -22,7 +30,7 @@ Relative to the "mini" expander:
 
  * adds various Racket forms, such as `case-lambda`
 
- * omits implicit forms, such as `#%app`
+ * omits binding resolution of implicit forms, such as `#%app`
 
  * no namespace layer (just table of core bindings)
 
@@ -33,6 +41,8 @@ Relative to the "mini" expander:
 Roadmap to the main pieces:
 
  syntax.rkt - syntax-object structure
+ 
+ match.rkt - support library for simple pattern matching
 
  scope.rkt - scope sets and binding
 

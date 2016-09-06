@@ -18,16 +18,16 @@
 (define (new-scope) (scope))
 
 ;; Add or flip a scope everywehere (i.e., including nested syntax)
-(define (apply-scope s/e sc op)
+(define (adjust-scope s/e sc op)
   (cond
    [(syntax? s/e) (struct-copy syntax s/e
-                               [e (apply-scope (syntax-e s/e) sc op)]
+                               [e (adjust-scope (syntax-e s/e) sc op)]
                                [scopes (op (syntax-scopes s/e) sc)])]
-   [(list? s/e) (map (lambda (s) (apply-scope s sc op)) s/e)]
+   [(list? s/e) (map (lambda (s) (adjust-scope s sc op)) s/e)]
    [else s/e]))
 
 (define (add-scope s sc)
-  (apply-scope s sc set-add))
+  (adjust-scope s sc set-add))
 
 (define (set-flip s e)
   (if (set-member? s e)
@@ -35,7 +35,7 @@
       (set-add s e)))
 
 (define (flip-scope s sc)
-  (apply-scope s sc set-flip))
+  (adjust-scope s sc set-flip))
 
 ;; ----------------------------------------
 
