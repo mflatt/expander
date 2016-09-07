@@ -10,6 +10,18 @@ Relative to the "micro" expander:
  * simplifies `datum->syntax` to always create syntax with an empty
    scope set
 
+Relative to the "pico" expander:
+
+ * multi-argument functions and multi-binding `let-syntax`
+
+ * add `bound-identifier=?` and `free-identifier=?`
+
+ * add implicit quoting
+
+ * accomodate non-function compile-time bindings
+
+ * rename `introduce` to `namespace-syntax-introduce
+
 ----------------------------------------
 
 Roadmap:

@@ -599,6 +599,7 @@
 ;; to replace the host primitives
 (define namespace (make-base-namespace))
 (namespace-set-variable-value! 'datum->syntax datum->syntax #t namespace)
+(namespace-set-variable-value! 'syntax->datum syntax->datum #t namespace)
 (namespace-set-variable-value! 'syntax-e syntax-e #t namespace)
 
 (define (eval-compiled s)
