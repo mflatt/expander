@@ -5,7 +5,7 @@
          (rename-out [eval-compiled eval])
 
          datum->syntax
-         namespace-syntax-introduce)
+         introduce)
 
 ;; We include tests to serve as examples of various functions work
 (module+ test
@@ -28,23 +28,6 @@
 (module+ test
   (check-equal? (identifier? (syntax 'x (seteq)))
                 #t))
-
-;; If identifiers are `bound-identifier=?`, they are fully
-;; interchangable: same symbol and same scopes
-(define (bound-identifier=? a b)
-  (and (eq? (syntax-e a) (syntax-e b))
-       (equal? (syntax-scopes a) (syntax-scopes b))))
-
-(module+ test
-  (check-equal? (bound-identifier=? (syntax 'a (seteq))
-                                    (syntax 'a (seteq)))
-                #t)
-  (check-equal? (bound-identifier=? (syntax 'a (seteq))
-                                    (syntax 'b (seteq)))
-                #f)
-  (check-equal? (bound-identifier=? (syntax 'a (seteq))
-                                    (syntax 'a (seteq (scope))))
-                #f))
 
 ;; The `datum->syntax` function coerces to syntax with an empty scope
 ;; set, leaving existing syntax as-is
@@ -259,18 +242,6 @@
                                   (list (syntax 'c (seteq sc1))
                                         (syntax 'c (seteq sc2)))))))
   
-;; Determine whether two identifiers have the same binding
-(define (free-identifier=? a b)
-  (eq? (resolve a) (resolve b)))
-
-(module+ test
-  (check-equal? (free-identifier=? (syntax 'a (seteq sc1))
-                                   (syntax 'a (seteq sc1 sc2)))
-                #t)
-  (check-equal? (free-identifier=? (syntax 'b (seteq sc1))
-                                   (syntax 'b (seteq sc1 sc2)))
-                #f))               
-
 ;; ----------------------------------------
 ;; Core syntax and primitives
 
@@ -285,16 +256,16 @@
 (for ([sym (in-set (set-union core-forms core-primitives))])
   (add-binding! (syntax sym (seteq core-scope)) sym))
 
-;; The `namespace-syntax-introduce` function adds the core scope to a
+;; The `introduce` function adds the core scope to a
 ;; syntax object; it needs to be used, for example, on a just-created
 ;; syntax object to make `lambda` refer to the core lambda form
-(define (namespace-syntax-introduce s)
+(define (introduce s)
   (add-scope s core-scope))
 
 (module+ test
   (check-equal? (resolve (datum->syntax 'lambda))
                 #f)
-  (check-equal? (resolve (namespace-syntax-introduce (datum->syntax 'lambda)))
+  (check-equal? (resolve (introduce (datum->syntax 'lambda)))
                 'lambda)) ; i.e., the core `lambda` form
 
 ;; ----------------------------------------
@@ -305,19 +276,17 @@
 (define empty-env (hasheq))
 (define variable (gensym 'variable))
 
-;; The `env-lookup` function reports the constant `missing` if
-;; a value is not found for a key
-(define missing (gensym 'missing))
-
 (define (env-extend env key val)
   (hash-set env key val))
 
+;; The `env-lookup` function reports #f if
+;; a value is not found for a key
 (define (env-lookup env binding)
-  (hash-ref env binding missing))
+  (hash-ref env binding #f))
 
 (module+ test
   (check-equal? (env-lookup empty-env loc/a)
-                missing)
+                #f)
   (check-equal? (env-lookup (env-extend empty-env loc/a 'variable)
                             loc/a)
                 'variable))
@@ -345,15 +314,10 @@
                  (expand (add-scope
                           (datum->syntax
                            '(let-syntax ([one (lambda (stx)
-                                                (quote-syntax 1))])
+                                                (quote-syntax '1))])
                              (one)))
                           core-scope)))
                 '(quote 1))
-
-  ;; A number expands to a `quote` form:
-  (check-equal? (expand (datum->syntax 1) empty-env)
-                (list (syntax 'quote (seteq core-scope))
-                      1))
   
   ;; A `(lambda (x) x)` form expands to itself, as long as it has the scope
   ;; used to bind all core-forms:
@@ -381,7 +345,7 @@
   ;; Application of a locally-bound variable to a number quotes the
   ;; number argument expression:
   (check-equal? (expand (list (syntax 'a (seteq sc1))
-                              1)
+                              (list (syntax 'quote (seteq core-scope)) 1))
                         (env-extend empty-env loc/a variable))
                 (list (syntax 'a (seteq sc1))
                       (list (syntax 'quote (seteq core-scope))
@@ -389,7 +353,8 @@
 
   ;; Application of a number to a number expands to an application
   ;; (but will be a run-time error if evaluated):
-  (check-equal? (expand (datum->syntax '(0 1))
+  (check-equal? (expand (introduce
+                         (datum->syntax '('0 '1)))
                         empty-env)
                 (list (list (syntax 'quote (seteq core-scope))
                             0)
@@ -399,7 +364,8 @@
   ;; A locally-bound macro expands by applying the macro:
   (check-equal? (syntax->datum
                  (expand (list (syntax 'a (seteq sc1)))
-                         (env-extend empty-env loc/a (lambda (s) (datum->syntax 1)))))
+                         (env-extend empty-env loc/a (lambda (s) (list (syntax 'quote (seteq core-scope))
+                                                                  1)))))
                 '(quote 1))
   (check-equal? (syntax->datum
                  (expand (let ([s (datum->syntax '(a (lambda (x) x)))])
@@ -422,10 +388,7 @@
     ;; An application form that doesn't start with an identifier
     (expand-app s env)]
    [else
-    ;; Anything other than an identifier or parens is implicitly quoted,
-    ;; so build a `quote` form
-    (list (syntax 'quote (seteq core-scope))
-          s)]))
+    (error "bad syntax:" s)]))
 
 ;; An identifier by itself:
 (define (expand-identifier s env)
@@ -440,15 +403,12 @@
    [else
     (define v (env-lookup env binding))
     (cond
-     [(eq? v missing)
-      (error "out of context:" s)]
      [(eq? v variable)
       s]
-     [(procedure? v)
-      (error "bad syntax:" s)]
+     [(not v)
+      (error "out of context:" s)]
      [else
-      ;; Compile-time value that's not a procedure
-      (error "illegal use of syntax:" s)])]))
+      (error "bad syntax:" s)])]))
 
 ;; An "application" form that starts with an identifier
 (define (expand-id-application-form s env)
@@ -502,49 +462,38 @@
 ;; ----------------------------------------
 
 (define (expand-lambda s env)
-  (match-define `(,lambda-id (,arg-ids ...) ,body) s)
+  (match-define `(,lambda-id (,arg-id) ,body) s)
   (define sc (scope))
-  ;; Add the new scope to each binding identifier:
-  (define ids (map (lambda (id) (add-scope id sc))
-                   arg-ids))
-  ;; Bind each argument and generate a corresponding key for the
+  ;; Add the new scope to the binding identifier:
+  (define id (add-scope arg-id sc))
+  ;; Bind the argument and generate a corresponding key for the
   ;; expand-time environment:
-  (define bindings (map add-local-binding! ids))
-  (define body-env (foldl (lambda (binding env)
-                            (env-extend env binding variable))
-                          env bindings))
+  (define binding (add-local-binding! id))
+  (define body-env (env-extend env binding variable))
   ;; Expand the function body:
-  (define exp-body (expand (add-scope body sc)
-                           body-env))
-  (list lambda-id ids exp-body))
+  (define exp-body (expand (add-scope body sc) body-env))
+  (list lambda-id (list id) exp-body))
 
 (define (expand-let-syntax s env)
-  (match-define `(,let-syntax-id ([,trans-ids ,trans-rhss] ...)
-                      ,body)
+  (match-define `(,let-syntax-id ([,lhs-id ,rhs])
+                    ,body)
                 s)
   (define sc (scope))
   ;; Add the new scope to each binding identifier:
-  (define ids (map (lambda (id) (add-scope id sc))
-                   trans-ids))
-  ;; Bind each left-hand identifier and generate a corresponding key
+  (define id (add-scope lhs-id sc))
+  ;; Bind the left-hand identifier and generate a corresponding key
   ;; for the expand-time environment:
-  (define bindings (map add-local-binding! trans-ids))
+  (define binding (add-local-binding! id))
   ;; Evaluate compile-time expressions:
-  (define trans-vals (map eval-for-syntax-binding
-                          trans-rhss))
+  (define rhs-val (eval-for-syntax-binding rhs))
   ;; Fill expansion-time environment:
-  (define body-env (foldl (lambda (binding val env)
-                            (env-extend env binding val))
-                          env bindings trans-vals))
+  (define body-env (env-extend env binding rhs-val))
   ;; Expand body
   (expand (add-scope body sc) body-env))
 
 ;; Expand an application (i.e., a function call)
 (define (expand-app s env)
-  (match-define `(,rator ,rands ...) s)
-  (list* (expand rator env)
-         (map (lambda (rand) (expand rand env))
-              rands)))
+  (map (lambda (sub-s) (expand sub-s env)) s))
 
 ;; ----------------------------------------
 
@@ -554,7 +503,7 @@
 
 (module+ test
   (check-equal? (eval-for-syntax-binding (add-scope (datum->syntax
-                                                     '(car (list 1 2)))
+                                                     '(car (list '1 '2)))
                                                     core-scope))
                 1)
   
@@ -575,8 +524,8 @@
                           (resolve (car s))))
     (case core-sym
       [(lambda)
-       (match-define `(,lambda-id (,ids ...) ,body) s)
-       `(lambda ,(map resolve ids) ,(compile body))]
+       (match-define `(,lambda-id (,id) ,body) s)
+       `(lambda (,(resolve id)) ,(compile body))]
       [(quote)
        (match-define `(,quote-id ,datum) s)
        ;; Strip away scopes:
@@ -586,8 +535,8 @@
        ;; Preserve the complete syntax object:
        `(quote ,datum)]
       [else
-       (match-define `(,rator ,rands ...) s)
-       (cons (compile rator) (map compile rands))])]
+       ;; Application:
+       (map compile s)])]
    [(identifier? s)
     (resolve s)]
    [else

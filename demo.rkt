@@ -4,7 +4,7 @@
 ;; ----------------------------------------
 
 (define (expand-expression e)
-  (expand (namespace-syntax-introduce (datum->syntax e))))
+  (expand (introduce (datum->syntax e))))
 
 (define (compile+eval-expression e)
   (define c
@@ -43,17 +43,17 @@
 
 (compile+eval-expression
  '(lambda (x)
-   (let-syntax ([y (lambda (stx) (quote-syntax 7))])
+   (let-syntax ([y (lambda (stx) (quote-syntax '7))])
      (y))))
 
 (compile+eval-expression
  (add-let
-  '(let ([z 9])
+  '(let ([z '9])
     (let-syntax ([m (lambda (stx) (car (cdr stx)))])
-      (let ([x 5]
-            [y (lambda (z) z)])
-        (let ([z 10])
-          (list z (m 10))))))))
+      (let ([x '5])
+        (let ([y (lambda (z) z)])
+          (let ([z '10])
+            (list z (m '10)))))))))
 
 "expansion not captured"
 (eval-expression
@@ -81,9 +81,9 @@
 "distinct generated variables via introduction scope"
 ;; Essentially the same as
 ;;   (define-syntax-rule (gen2 _ x1 x2 v1 v2)
-;;     (let ([x1 v1]
-;;           [v2 v2])
-;;       (list x1 x2)))
+;;     (let ([x1 v1])
+;;       (let ([v2 v2])
+;;         (list x1 x2)))))
 ;;   (define-syntax-rule (gen1 next . rest)
 ;;     (next gen2 x . rest)) ; <- `x` twice in final expansion
 ;;   (gen1 gen1 1 2)
@@ -96,27 +96,17 @@
                         (datum->syntax
                          (list (quote-syntax let)
                                (list (list (car (cdr (cdr stx)))
-                                           (car (cdr (cdr (cdr (cdr stx))))))
-                                     (list (car (cdr (cdr (cdr stx))))
-                                           (car (cdr (cdr (cdr (cdr (cdr stx))))))))
-                               (list (quote-syntax list)
-                                     (car (cdr (cdr stx)))
-                                     (car (cdr (cdr (cdr stx))))))))])
+                                           (car (cdr (cdr (cdr (cdr stx)))))))
+                               (list (quote-syntax let)
+                                     (list (list (car (cdr (cdr (cdr stx))))
+                                                 (car (cdr (cdr (cdr (cdr (cdr stx))))))))
+                                     (list (quote-syntax list)
+                                           (car (cdr (cdr stx)))
+                                           (car (cdr (cdr (cdr stx)))))))))])
     (let-syntax ([gen1 (lambda (stx)
                          (datum->syntax
                           (cons (car (cdr stx))
                                 (cons (quote-syntax gen2)
                                       (cons (quote-syntax x)
                                             (cdr (cdr stx)))))))])
-      (gen1 gen1 1 2)))))
-
-"non-transformer binding misuse"
-(with-handlers ([exn:fail? (lambda (exn)
-                             (unless (regexp-match? #rx"illegal use of syntax"
-                                                    (exn-message exn))
-                               (error "wrong error"))
-                             'illegal-use)])
-  (expand (namespace-syntax-introduce
-           (datum->syntax '(let-syntax ([v 1])
-                            v))))
-  (error "shouldn't get here"))
+      (gen1 gen1 '1 '2)))))

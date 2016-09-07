@@ -1,18 +1,17 @@
 This simplified variant of the Racket expander demonstrates the basics
 of set-of-scopes expansion in as few lines as reasonable.
 
-Relative to the "micro" expander:
+Relative to the "nano" expander:
 
- * strips away some module and abstraction boundaries
+ * single-argument functions and single-binding `let-syntax`
 
- * use syntax objects only for identifiers
+ * omits `bound-identifier=?` and `free-identifier=?`
 
- * simplifies `datum->syntax` to always create syntax with an empty
-   scope set
+ * no implicit quoting
 
- * macros can be used only in application position
+ * assume compile-time binding to a macro function
 
- * omits `#%app`
+ * `namespace-syntax-introduce` is called just `introduce`
 
 ----------------------------------------
 
