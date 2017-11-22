@@ -1,11 +1,12 @@
-This branch is a placeholder for the full implementation of Racket's
-macro expander. The full implementation is currently at
+See the "pico" through "demi" branches for simplified versions
+of Racket's macro expander.
 
- Repo:         https://github.com/mflatt/racket
- Branch:       linklet
- Subdirectory: pkgs/expander
+This master branch is a placeholder for the full implementation of
+Racket's macro expander. The full implementation is currently at
+
+ Repo:         https://github.com/racket/racket7
+ Subdirectory: racket/src/expander
 
 In other words, the code is here:
 
- https://github.com/mflatt/racket/tree/linklet/pkgs/expander
-
+ https://github.com/racket/racket7/tree/master/racket/src/expander
