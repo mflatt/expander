@@ -280,7 +280,7 @@
       (datum->syntax
        #f
        `(,(datum->syntax s-core-stx 'begin)
-         ,@(for/list ([body (in-list done-bodys)])
+         ,@(for/list ([body (in-list (reverse done-bodys))])
              (expand body finish-ctx)))
        s)]))
   (cond
