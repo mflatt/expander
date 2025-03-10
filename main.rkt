@@ -1,5 +1,4 @@
 #lang racket
-(require "match.rkt")
 
 (provide expand
          compile
